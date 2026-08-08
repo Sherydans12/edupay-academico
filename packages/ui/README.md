@@ -1,5 +1,9 @@
 # @edupay/ui
 
-Tenant-neutral UI package boundary. It is intentionally empty during platform
-bootstrap; design tokens and reusable components belong to a later approved
-frontend/design-system phase.
+Tenant-neutral semantic design tokens and accessible React primitives for
+EduPay Académico. Components consume semantic CSS custom properties and never
+branch on tenant names. Import `@edupay/ui/styles.css` once at the application
+root, then apply a safe default or configured tenant theme with `TenantTheme`.
+
+The first configured tenant theme is `colegio-conquistadores`; the default theme
+remains available whenever configuration is absent or invalid.

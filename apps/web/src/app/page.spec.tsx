@@ -1,17 +1,17 @@
-import { render, screen } from '@testing-library/react';
+import { vi } from 'vitest';
 import { describe, expect, it } from 'vitest';
 
 import HomePage from './page';
 
-describe('HomePage', () => {
-  it('renders the technical bootstrap placeholder', () => {
-    render(<HomePage />);
+vi.mock('next/navigation', () => ({
+  redirect: vi.fn(),
+}));
 
-    expect(
-      screen.getByRole('heading', { name: 'EduPay Academico' }),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/web application foundation is running/i),
-    ).toBeTruthy();
+describe('HomePage', () => {
+  it('routes the entry point to the student demonstration workspace', async () => {
+    HomePage();
+
+    const { redirect } = await import('next/navigation');
+    expect(redirect).toHaveBeenCalledWith('/estudiante');
   });
 });

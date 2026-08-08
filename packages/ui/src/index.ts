@@ -1,2 +1,3 @@
-// The package boundary is reserved for reviewed, tenant-neutral UI primitives.
-export {};
+export * from './components';
+export * from './interactive';
+export * from './theme';
