@@ -17,6 +17,8 @@ describe('validateEnvironment', () => {
     expect(validateEnvironment(validEnvironment)).toMatchObject({
       API_PORT: 3001,
       IDENTITY_AUDIENCE: 'edupay-academico-api',
+      IDENTITY_CLOCK_SKEW_SECONDS: 30,
+      IDENTITY_JWT_ALGORITHMS: ['RS256'],
       NODE_ENV: 'test',
     });
   });
@@ -34,5 +36,20 @@ describe('validateEnvironment', () => {
     expect(() =>
       validateEnvironment({ ...validEnvironment, NODE_ENV: 'production' }),
     ).toThrow(/must use HTTPS in production/);
+  });
+
+  it('rejects symmetric, unsigned, and excessive clock-skew configuration', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        IDENTITY_JWT_ALGORITHMS: 'HS256,none',
+      }),
+    ).toThrow(/approved asymmetric algorithms/);
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        IDENTITY_CLOCK_SKEW_SECONDS: '121',
+      }),
+    ).toThrow(/<=120/);
   });
 });

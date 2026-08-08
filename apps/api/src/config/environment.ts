@@ -1,5 +1,43 @@
 import { z } from 'zod';
 
+const asymmetricJwtAlgorithms = [
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512',
+  'EdDSA',
+] as const;
+
+const jwtAlgorithms = z
+  .string()
+  .default('RS256')
+  .transform((value, context) => {
+    const algorithms = [
+      ...new Set(value.split(',').map((item) => item.trim())),
+    ].filter((item) => item.length > 0);
+    const invalid = algorithms.filter(
+      (algorithm) =>
+        !asymmetricJwtAlgorithms.includes(
+          algorithm as (typeof asymmetricJwtAlgorithms)[number],
+        ),
+    );
+
+    if (algorithms.length === 0 || invalid.length > 0) {
+      context.addIssue({
+        code: 'custom',
+        message: `must contain only approved asymmetric algorithms: ${asymmetricJwtAlgorithms.join(', ')}`,
+      });
+      return z.NEVER;
+    }
+
+    return algorithms as (typeof asymmetricJwtAlgorithms)[number][];
+  });
+
 const postgresUrl = z.string().refine(
   (value) => {
     try {
@@ -23,6 +61,31 @@ const environmentSchema = z
     IDENTITY_ISSUER: z.string().url(),
     IDENTITY_AUDIENCE: z.string().min(1),
     IDENTITY_JWKS_URI: z.string().url(),
+    IDENTITY_JWT_ALGORITHMS: jwtAlgorithms,
+    IDENTITY_CLOCK_SKEW_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(120)
+      .default(30),
+    IDENTITY_JWKS_CACHE_MAX_AGE_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(3_600_000)
+      .default(300_000),
+    IDENTITY_JWKS_COOLDOWN_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(300_000)
+      .default(30_000),
+    IDENTITY_JWKS_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(30_000)
+      .default(5_000),
   })
   .superRefine((environment, context) => {
     if (environment.NODE_ENV !== 'production') {

@@ -1,7 +1,8 @@
 # EduPay Academico
 
 EduPay Academico is a multi-tenant academic service. This repository contains
-the approved platform bootstrap only; product and academic capabilities are
+the approved platform bootstrap and the Phase 1 Identity-consumer and
+tenant-authorization foundation. Product and academic capabilities are
 introduced in later governed phases.
 
 The architecture and implementation constraints in [AGENTS.md](AGENTS.md) and
@@ -81,9 +82,12 @@ this placeholder boundary.
 ## Configuration and trust boundaries
 
 The API validates database and EduPay Identity consumer settings at startup. In
-production, Identity issuer and JWKS URLs must use HTTPS. The current Identity
-package is only a port/type seam: it does not accept credentials, mint tokens,
-implement password authentication, or trust a client-provided `tenantId`.
+production, Identity issuer and JWKS URLs must use HTTPS. The API validates
+asymmetric access JWTs through configured JWKS, creates immutable trusted
+principal and tenant contexts, and applies centralized capability/resource
+policies. It does not accept credentials, mint tokens, implement password
+authentication, or trust a client-provided `tenantId`. See the
+[foundation implementation note](docs/governance/tenancy-authorization-foundation.md).
 
 Never commit `.env` files, provider credentials, access/refresh tokens, private
 keys, or real student data. EduPay Identity and EduPay Academico remain separate

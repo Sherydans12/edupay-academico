@@ -34,7 +34,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
   private errorCode(status: number): string {
     const codes: Partial<Record<number, string>> = {
       [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
-      [HttpStatus.UNAUTHORIZED]: 'UNAUTHORIZED',
+      [HttpStatus.UNAUTHORIZED]: 'TOKEN_INVALID',
       [HttpStatus.FORBIDDEN]: 'FORBIDDEN',
       [HttpStatus.NOT_FOUND]: 'NOT_FOUND',
       [HttpStatus.CONFLICT]: 'CONFLICT',
