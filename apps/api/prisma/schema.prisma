@@ -40,6 +40,26 @@ enum RelationshipStatus {
   INACTIVE
 }
 
+enum LearningUnitStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum LearningItemType {
+  MATERIAL
+  ASSIGNMENT
+  ASSESSMENT
+  ANNOUNCEMENT
+}
+
+enum LearningItemPublicationStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
 model Tenant {
   id        String   @id @db.VarChar(128)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -54,6 +74,8 @@ model Tenant {
   courseEnrollments         CourseEnrollment[]
   studentSubjectEnrollments StudentSubjectEnrollment[]
   courseSubjectTeachers     CourseSubjectTeacher[]
+  learningUnits             LearningUnit[]
+  learningItems             LearningItem[]
 
   @@map("tenants")
 }
@@ -183,6 +205,8 @@ model CourseSubject {
   subject            Subject                    @relation(fields: [tenantId, subjectId], references: [tenantId, id], onDelete: Restrict)
   directEnrollments  StudentSubjectEnrollment[]
   teacherAssignments CourseSubjectTeacher[]
+  learningUnits      LearningUnit[]
+  learningItems      LearningItem[]
 
   @@id([tenantId, id])
   @@index([tenantId, courseId, status, sortOrder])
@@ -245,4 +269,59 @@ model CourseSubjectTeacher {
   @@index([tenantId, teacherId, status, courseSubjectId])
   @@index([tenantId, courseSubjectId, status, teacherId])
   @@map("course_subject_teachers")
+}
+
+model LearningUnit {
+  id              String            @default(uuid()) @db.Uuid
+  tenantId        String            @map("tenant_id") @db.VarChar(128)
+  courseSubjectId String            @map("course_subject_id") @db.Uuid
+  title           String            @db.VarChar(160)
+  description     String?           @db.Text
+  sortOrder       Int               @default(0) @map("sort_order")
+  startAt         DateTime?         @map("start_at") @db.Timestamptz(3)
+  endAt           DateTime?         @map("end_at") @db.Timestamptz(3)
+  status          LearningUnitStatus @default(DRAFT)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  courseSubject CourseSubject @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
+  items        LearningItem[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, id, courseSubjectId], map: "learning_units_tenant_id_id_course_subject_id_key")
+  @@index([tenantId, courseSubjectId, status, sortOrder, id])
+  @@map("learning_units")
+}
+
+model LearningItem {
+  id                        String                       @default(uuid()) @db.Uuid
+  tenantId                  String                       @map("tenant_id") @db.VarChar(128)
+  courseSubjectId           String                       @map("course_subject_id") @db.Uuid
+  learningUnitId            String                       @map("learning_unit_id") @db.Uuid
+  type                      LearningItemType
+  title                     String                       @db.VarChar(160)
+  description               String?                      @db.Text
+  content                   String?                      @db.Text
+  instructions              String?                      @db.Text
+  body                      String?                      @db.Text
+  sortOrder                 Int                          @default(0) @map("sort_order")
+  publicationStatus         LearningItemPublicationStatus @default(DRAFT) @map("publication_status")
+  publishAt                 DateTime?                    @map("publish_at") @db.Timestamptz(3)
+  publishedAt               DateTime?                    @map("published_at") @db.Timestamptz(3)
+  publishedByIdentityUserId String?                      @map("published_by_identity_user_id") @db.VarChar(128)
+  dueAt                     DateTime?                    @map("due_at") @db.Timestamptz(3)
+  createdByIdentityUserId   String                       @map("created_by_identity_user_id") @db.VarChar(128)
+  updatedByIdentityUserId   String?                      @map("updated_by_identity_user_id") @db.VarChar(128)
+  createdAt                 DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  courseSubject CourseSubject @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
+  learningUnit LearningUnit @relation(fields: [tenantId, learningUnitId, courseSubjectId], references: [tenantId, id, courseSubjectId], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, courseSubjectId, publicationStatus, sortOrder, id])
+  @@index([tenantId, learningUnitId, sortOrder, id])
+  @@map("learning_items")
 }

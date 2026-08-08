@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AcademicModule } from './academic/academic.module';
 import { validateEnvironment } from './config/environment';
 import { HealthModule } from './health/health.module';
+import { LearningModule } from './learning/learning.module';
 import { PersistenceModule } from './persistence/persistence.module';
 import { SecurityFoundationModule } from './security/security-foundation.module';
 
@@ -17,6 +18,7 @@ import { SecurityFoundationModule } from './security/security-foundation.module'
     PersistenceModule,
     SecurityFoundationModule,
     AcademicModule,
+    LearningModule,
     HealthModule,
   ],
 })

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export * from './academic';
+export * from './learning';
 
 export const apiErrorDetailSchema = z
   .object({

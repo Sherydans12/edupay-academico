@@ -17,6 +17,7 @@ These records capture major architectural choices from the brief and architectur
 | [0009](ADR-0009-identity-contract-reconciliation.md) | Reconciled Identity, canonical tenant, session, and MVP authorization contract | Accepted (2026-08-08) |
 | [0010](ADR-0010-course-subject-and-lifecycle.md) | CourseSubject terminology and academic lifecycle baseline | Accepted (2026-08-08) |
 | [0011](ADR-0011-api-and-shared-contract-strategy.md) | API and shared application contract strategy | Accepted (2026-08-08) |
+| [0012](ADR-0012-learning-publication-and-edit-semantics.md) | Learning publication and edit semantics | Accepted (2026-08-08) |
 
 ## ADR workflow
 

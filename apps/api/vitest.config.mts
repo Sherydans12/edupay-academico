@@ -6,5 +6,6 @@ export default defineConfig({
     hookTimeout: 30_000,
     include: ['src/**/*.spec.ts', 'test/**/*.e2e-spec.ts'],
     pool: 'forks',
+    fileParallelism: false,
   },
 });

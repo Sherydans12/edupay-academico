@@ -90,6 +90,8 @@ describe.runIf(testDatabaseUrl)(
     beforeEach(async () => {
       identityStatus.active = true;
       audit.events.length = 0;
+      await prisma.learningItem.deleteMany();
+      await prisma.learningUnit.deleteMany();
       await prisma.courseSubjectTeacher.deleteMany();
       await prisma.studentSubjectEnrollment.deleteMany();
       await prisma.courseEnrollment.deleteMany();

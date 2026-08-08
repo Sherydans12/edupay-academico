@@ -7,9 +7,11 @@ Date: 2026-08-08
 The MVP Academic Structure implementation follows ADR-0009, ADR-0010, and
 ADR-0011. It adds Tenant, AcademicYear, Course, Student, Teacher, Subject,
 CourseSubject, CourseEnrollment, StudentSubjectEnrollment, and
-CourseSubjectTeacher persistence and `/api/v1` endpoints. It does not add
-LearningUnit, LearningItem, submissions, assignments, grades, attendance,
-payments, synchronization, or support impersonation/elevation.
+CourseSubjectTeacher persistence and `/api/v1` endpoints. The Academic
+Structure portion itself does not add submissions, grades, attendance,
+payments, synchronization, or support impersonation/elevation. LearningUnit
+and LearningItem are implemented separately by the Learning Content domain;
+see [the Learning implementation note](learning-content-domain.md).
 
 ## Persistence and tenant isolation
 
