@@ -23,6 +23,9 @@ This documentation governs the first implementation phase of EduPay Académico. 
 
 - [Platform bootstrap](governance/platform-bootstrap.md) records the Phase 0
   package-manager, workspace, quality-gate, and application-shell choices.
+- [Tenancy and authorization foundation](governance/tenancy-authorization-foundation.md)
+  records the implemented Identity consumer, request tenant context, policy,
+  repository-scope, and future job-context guardrails.
 
 ## Documentation conventions
 
