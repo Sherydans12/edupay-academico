@@ -1,3 +1,3 @@
-import { AdminPlaceholderScreen } from '@/features/admin-screen';
+import { AcademicAdminScreen } from '@/features/academic-admin';
 
-export default function AcademicStructurePage() { return <AdminPlaceholderScreen title="Estructura académica" />; }
+export default function AcademicStructurePage() { return <AcademicAdminScreen view="structure" />; }
