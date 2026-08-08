@@ -23,7 +23,7 @@ Components consume semantic tokens. They do not contain Colegio Conquistadores n
 Prioritize a small, consistent set:
 
 - application shell and responsive navigation;
-- subject and learning-unit navigation;
+- CourseSubject and learning-unit navigation;
 - item cards and status badges;
 - deadline and late indicators;
 - file picker/upload list;

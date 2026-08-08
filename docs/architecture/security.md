@@ -26,7 +26,7 @@ Status: mandatory controls plus proposed operational baseline
 - Resolve tenant from trusted membership/session context.
 - A client-provided `tenantId` is never authorization context; reject or ignore it if it conflicts with the validated Identity context.
 - Enforce tenant scope in API, database access, storage, background jobs, exports, and notifications.
-- Apply resource policies for subject assignment, enrollment, publication state, and submission ownership.
+- Apply resource policies for CourseSubjectTeacher assignment, enrollment, publication state, and submission ownership.
 - Fail closed on missing or stale context where the risk is material.
 
 `SYSTEM_ADMIN` has no automatic tenant access. Tenant access requires an explicit, audited elevated support context; user impersonation is out of scope for the MVP.

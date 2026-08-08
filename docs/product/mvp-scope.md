@@ -16,17 +16,18 @@ Status: mandated scope with implementation acceptance boundaries
 - Academic years.
 - Courses.
 - Student and teacher records.
-- Subjects.
+- Reusable tenant-level Subject catalog entries.
+- CourseSubject offerings that connect a Subject to a Course.
 - Course enrollment.
-- Course default subjects.
-- Direct subject enrollment for an individual student.
-- Multiple teachers on a subject.
+- CourseSubject default configuration for a Course.
+- Direct StudentSubjectEnrollment for an individual student targeting a CourseSubject.
+- Multiple teachers on a CourseSubject.
 - Import/synchronization of students and courses from existing EduPay through an explicit contract.
 - Manual creation for supported records.
 
 ### Learning and work
 
-- Subject → learning unit → learning item hierarchy.
+- CourseSubject → learning unit → learning item hierarchy.
 - Learning item types: `MATERIAL`, `ASSIGNMENT`, `ASSESSMENT`, `ANNOUNCEMENT`.
 - Materials and instructions with ordered attachments.
 - Deadlines for assignments and document-based assessments.
@@ -57,7 +58,7 @@ Status: mandated scope with implementation acceptance boundaries
 | --- | --- |
 | `SYSTEM_ADMIN` | Support tenants and controlled platform operations with explicit elevated access. |
 | `TENANT_ADMIN` | Set up the tenant’s academic structure, memberships, and operational configuration. |
-| `TEACHER` | Manage authorized subject content and review authorized student submissions. |
+| `TEACHER` | Manage authorized CourseSubject content and review authorized student submissions. |
 | `STUDENT` | Access assigned work and submit files for authorized assignments and assessments. |
 
 ## MVP acceptance boundary
@@ -65,8 +66,8 @@ Status: mandated scope with implementation acceptance boundaries
 The MVP is complete only when a configured tenant can execute the end-to-end path:
 
 1. A student and course exist, whether synchronized or manually created.
-2. The student is enrolled in a course or directly in a subject.
-3. A teacher is assigned to the subject.
+2. The student is enrolled in a course with a default CourseSubject or directly in a CourseSubject.
+3. A teacher is assigned to the CourseSubject.
 4. The teacher creates a learning unit and publishes a material or work item.
 5. The student sees only assigned content, opens instructions, and uploads one or more files.
 6. The system records whether the submission is late without blocking it.

@@ -12,6 +12,21 @@ Use versioned REST/JSON as the default for the MVP:
 - request validation at the boundary;
 - stable opaque IDs exposed to clients.
 
+## Shared application contracts
+
+Shared application request and response contracts belong in
+`packages/contracts`. When a request or response shape crosses the web/API
+boundary, define it with Zod 4 there and derive TypeScript types with
+`z.infer`; do not manually duplicate interfaces in the frontend and backend.
+The frontend may import `@edupay/contracts`, but it must never import API
+implementation files. The backend may adapt shared schemas at its HTTP
+boundary while keeping domain and application models independent from
+transport DTOs. Prisma models are persistence models, not API contracts.
+
+OpenAPI remains the externally inspectable API documentation at the API
+boundary. The MVP does not require code-generation infrastructure. The first
+frontend integration uses a thin hand-written API client.
+
 Académico JSON request/response fields use camelCase. This does not rename Identity JWT claims: the Identity token contract uses `tenant_id`, `membership_id`, and the other claim names documented in [identity model](identity-model.md).
 
 ## Identity integration contract
@@ -87,7 +102,7 @@ Messages should be safe for end users; diagnostic details belong in logs. Valida
 
 The exact route list belongs in the API contract, but the families are expected to include:
 
-- tenant-scoped academic years, courses, students, teachers, subjects, enrollments, assignments, and assignments/teacher relationships;
+- tenant-scoped academic years, courses, students, teachers, Subject catalog entries, CourseSubjects, enrollments, assignments, and CourseSubjectTeacher relationships;
 - learning units and typed learning items;
 - file upload intents and metadata;
 - submissions, reviews, and change requests, subject to later submission decisions;
@@ -103,12 +118,26 @@ The exact route list belongs in the API contract, but the families are expected 
 - API changes are backward-compatible within a version or deliberately versioned.
 - Provider-specific IDs are not required for normal client behavior.
 
+## Pagination and idempotency baseline
+
+Cursor-paginated collections use the conceptual envelope:
+
+```json
+{
+  "items": [],
+  "nextCursor": "opaque-value-or-null"
+}
+```
+
+The cursor is opaque to clients and must not expose database IDs or ordering
+implementation details. Idempotency is endpoint-specific; ordinary CRUD does
+not automatically require `Idempotency-Key`. Uploads, submissions, and
+synchronization may define stronger rules in their later accepted decisions.
+
 ## Unresolved API decisions
 
 These do not change the reconciled Identity boundary:
 
-- cursor format and standard pagination envelope;
-- whether Zod schemas are shared between frontend and backend or generated from OpenAPI;
-- whether API clients are generated or hand-written;
-- idempotency-key requirements for academic uploads, submissions, and sync triggers;
+- the internal encoding and signing/validation mechanics of opaque cursors;
+- endpoint-level idempotency rules for academic uploads, submissions, and sync triggers;
 - endpoint-level details for later submission revision/replacement behavior.

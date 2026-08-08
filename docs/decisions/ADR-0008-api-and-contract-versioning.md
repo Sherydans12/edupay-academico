@@ -1,6 +1,6 @@
 # ADR-0008: versioned API and contract strategy
 
-Status: Proposed  
+Status: Superseded by [ADR-0011](ADR-0011-api-and-shared-contract-strategy.md)
 Date: 2026-08-08
 
 ## Context
@@ -22,6 +22,8 @@ Use REST/JSON under `/api/v1`, document it with OpenAPI, use stable opaque IDs a
 - Requires naming, pagination, idempotency, and compatibility conventions.
 - Schema duplication risk exists if frontend/backend contracts are hand-maintained.
 
-## Open items before acceptance
+## Resolution note
 
-- JSON naming, pagination shape, schema source of truth, generated clients, and idempotency-key policy.
+D-14 is accepted by [ADR-0011](ADR-0011-api-and-shared-contract-strategy.md),
+which fixes the API style, shared Zod 4 contract location, pagination envelope,
+hand-written client strategy, and endpoint-specific idempotency baseline.

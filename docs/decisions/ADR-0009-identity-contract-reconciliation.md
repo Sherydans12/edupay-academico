@@ -44,9 +44,9 @@ Refresh tokens remain wholly owned by Identity. They rotate on use, and reuse re
 
 ### Approved MVP authorization boundary
 
-- `TENANT_ADMIN` may administer academic years, courses, students, teachers, subjects, enrollments, and assignments within the tenant, and may view submissions across the tenant for academic/operational oversight. It does not gain access to Identity credentials, password hashes, refresh tokens, or secrets.
-- `TEACHER` may see students enrolled in assigned subjects, manage learning content only in assigned subjects, collaborate with all other teachers assigned to the same subject, publish content, and review submissions for assigned subjects.
-- `STUDENT` may access only published content reachable through valid course or direct subject enrollment and only their own submission data, except where a future feature explicitly requires otherwise.
+- `TENANT_ADMIN` may administer academic years, courses, students, teachers, the Subject catalog, CourseSubjects, enrollments, and assignments within the tenant, and may view submissions across the tenant for academic/operational oversight. It does not gain access to Identity credentials, password hashes, refresh tokens, or secrets.
+- `TEACHER` may see students enrolled in assigned CourseSubjects, manage learning content only in assigned CourseSubjects, collaborate with all other teachers assigned to the same CourseSubject, publish content, and review submissions for assigned CourseSubjects.
+- `STUDENT` may access only published content reachable through a valid active course enrollment whose CourseSubject is a default or through a direct StudentSubjectEnrollment, and only their own submission data, except where a future feature explicitly requires otherwise.
 - `SYSTEM_ADMIN` has no automatic tenant data access. Tenant access requires an explicit audited elevated support context. User impersonation is out of scope for the MVP.
 
 ## Consequences

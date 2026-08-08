@@ -12,11 +12,17 @@ Build the narrow application boundary to EduPay Identity, JWKS/JWT validation, m
 
 ## Phase 2 — academic structure
 
-Implement academic years, courses, students, teachers, subjects, enrollment, default subjects, direct subject enrollment, multiple teachers, and manual administration. Include external-reference seams but do not invent an unapproved sync contract.
+Implement academic years, courses, students, teachers, the reusable Subject
+catalog, CourseSubjects, course enrollment, CourseSubject defaults, direct
+StudentSubjectEnrollment, multiple CourseSubject teachers, and manual
+administration. Include external-reference seams but do not invent an
+unapproved sync contract.
 
 ## Phase 3 — learning authoring and access
 
-Implement learning units, typed learning items, attachments, ordering, draft/published/archived behavior, teacher authoring, and student navigation. Integrate tenant theme tokens through the design-system boundary.
+Implement CourseSubject learning units, typed learning items, attachments,
+ordering, draft/published/archived behavior, teacher authoring, and student
+navigation. Integrate tenant theme tokens through the design-system boundary.
 
 ## Phase 4 — submissions and review
 

@@ -19,7 +19,7 @@ Each event should include, as available:
 - Identity session ID (`sid`) and membership ID when available;
 - action and result;
 - resource type and internal ID;
-- affected subject/course context;
+- affected CourseSubject/course context;
 - request/correlation ID;
 - source (API, worker, integration, support action);
 - safe summary of changed fields;

@@ -17,13 +17,13 @@ Identity role claims establish the caller’s membership-scoped role. They do no
 | Capability | `SYSTEM_ADMIN` | `TENANT_ADMIN` | `TEACHER` | `STUDENT` |
 | --- | --- | --- | --- | --- |
 | Access tenant data | No automatic access; explicit audited elevated support context required | Within active tenant membership | Within active tenant membership | Within active tenant membership |
-| Administer academic years, courses, students, teachers, subjects, enrollments, and assignments | Only through explicit audited support context | Yes, within the tenant | No, except actions separately granted by an academic relationship policy | No |
-| Administer assignment records | Only through explicit audited support context | Yes, within the tenant | Yes, only in assigned subjects | No |
-| View submissions | Only through explicit audited support context | Yes, across the tenant for academic/operational oversight | Yes, for subjects to which the teacher is assigned | Own submission data only |
-| See enrolled students | Only through explicit audited support context | Yes, within the tenant | Students enrolled in subjects to which the teacher is assigned | No general roster access |
-| Manage learning content | Only through explicit audited support context | Only where a separately approved tenant academic policy grants it; this reconciliation does not expand content semantics | Yes, only in assigned subjects | No |
-| Collaborate on subject content | Only through explicit audited support context | Not inferred by this reconciliation | Yes; all teachers assigned to the same subject may collaborate | No |
-| Publish content and review submissions | Only through explicit audited support context | Only where separately approved tenant policy grants it | Yes, for assigned subjects | No |
+| Administer academic years, courses, students, teachers, the Subject catalog, CourseSubjects, enrollments, and assignments | Only through explicit audited support context | Yes, within the tenant | No, except actions separately granted by an academic relationship policy | No |
+| Administer assignment records | Only through explicit audited support context | Yes, within the tenant | Yes, only in assigned CourseSubjects | No |
+| View submissions | Only through explicit audited support context | Yes, across the tenant for academic/operational oversight | Yes, for CourseSubjects to which the teacher is assigned | Own submission data only |
+| See enrolled students | Only through explicit audited support context | Yes, within the tenant | Students enrolled in CourseSubjects to which the teacher is assigned | No general roster access |
+| Manage learning content | Only through explicit audited support context | Only where a separately approved tenant academic policy grants it; this reconciliation does not expand content semantics | Yes, only in assigned CourseSubjects | No |
+| Collaborate on CourseSubject content | Only through explicit audited support context | Not inferred by this reconciliation | Yes; all teachers assigned to the same CourseSubject may collaborate | No |
+| Publish content and review submissions | Only through explicit audited support context | Only where separately approved tenant policy grants it | Yes, for assigned CourseSubjects | No |
 | Access Identity credentials, password hashes, refresh tokens, or secrets | No | No | No | No |
 | Impersonate a user | Out of scope for MVP | No | No | No |
 
@@ -32,10 +32,10 @@ Identity role claims establish the caller’s membership-scoped role. They do no
 ## Resource policies
 
 - A tenant administrator may administer the approved academic records and assignments only inside the trusted active tenant context.
-- A teacher may act only on subjects to which the teacher is assigned and only within that tenant. All teachers assigned to the same subject may collaborate on its learning content.
-- A teacher may publish learning content and review submissions for an assigned subject.
-- A teacher may see students enrolled in an assigned subject; an assignment does not grant access to unrelated tenant rosters.
-- A student may read only published content reachable through a valid active course enrollment or direct subject enrollment.
+- A teacher may act only on CourseSubjects to which the teacher is assigned and only within that tenant. All teachers assigned to the same CourseSubject may collaborate on its learning content.
+- A teacher may publish learning content and review submissions for an assigned CourseSubject.
+- A teacher may see students enrolled in an assigned CourseSubject; an assignment does not grant access to unrelated tenant rosters.
+- A student may read only published content reachable through a valid active CourseEnrollment whose CourseSubject is a default or through a direct StudentSubjectEnrollment.
 - A student may access only their own submission data. This statement does not decide draft, revision, replacement, or post-review semantics; those remain later-phase decisions.
 - Draft learning content is invisible to students unless a future accepted policy explicitly changes that rule.
 - A system administrator has no automatic tenant data access. Cross-tenant support requires an explicit, audited elevated support context with a reason and appropriate current authorization.

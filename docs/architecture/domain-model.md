@@ -24,13 +24,13 @@ erDiagram
     ACADEMIC_YEAR ||--o{ COURSE : contains
     COURSE ||--o{ COURSE_ENROLLMENT : has
     STUDENT ||--o{ COURSE_ENROLLMENT : joins
-    COURSE ||--o{ COURSE_SUBJECT : defaults
-    SUBJECT ||--o{ COURSE_SUBJECT : is_default_for
+    COURSE ||--o{ COURSE_SUBJECT : contains
+    SUBJECT ||--o{ COURSE_SUBJECT : catalog_entry_for
     STUDENT ||--o{ STUDENT_SUBJECT_ENROLLMENT : receives
-    SUBJECT ||--o{ STUDENT_SUBJECT_ENROLLMENT : directly_assigns
-    SUBJECT ||--o{ SUBJECT_TEACHER : taught_by
-    TEACHER ||--o{ SUBJECT_TEACHER : teaches
-    SUBJECT ||--o{ LEARNING_UNIT : organizes
+    COURSE_SUBJECT ||--o{ STUDENT_SUBJECT_ENROLLMENT : directly_assigns
+    COURSE_SUBJECT ||--o{ COURSE_SUBJECT_TEACHER : taught_by
+    TEACHER ||--o{ COURSE_SUBJECT_TEACHER : teaches
+    COURSE_SUBJECT ||--o{ LEARNING_UNIT : organizes
     LEARNING_UNIT ||--o{ LEARNING_ITEM : contains
     LEARNING_ITEM ||--o{ SUBMISSION : receives
     STUDENT ||--o{ SUBMISSION : creates
@@ -47,6 +47,8 @@ erDiagram
 - Creation and update timestamps use a consistent timezone strategy once approved; API dates are ISO 8601.
 - Domain records should not contain credentials, password hashes, refresh tokens, invitation/activation secrets, or payment details.
 - Student and Teacher records may store an optional stable `identityUserId` external reference. Académico explicitly initiates and owns that link; Identity never creates or owns the academic record.
+- A `CourseSubject` joins one Course to one reusable Subject within the same tenant.
+- CourseSubjectTeacher, StudentSubjectEnrollment, LearningUnit, and LearningItem relationships target CourseSubject rather than the reusable Subject catalog.
 
 ## Aggregate candidates
 
@@ -54,8 +56,9 @@ These are boundaries for implementation discussion, not a final persistence desi
 
 - **Tenant**: tenant configuration and theme tokens.
 - **Academic year**: lifecycle of a year and its courses.
-- **Course**: course membership and default subject assignments.
-- **Subject**: subject-teacher assignments and learning-unit ordering.
+- **Course**: course membership and its CourseSubject defaults.
+- **Subject**: reusable catalog metadata only.
+- **CourseSubject**: course-specific teaching context, teacher assignments, student direct enrollments, and learning-unit ordering.
 - **Learning unit**: ordered learning items and visibility state.
 - **Learning item**: typed content and work configuration.
 - **Submission**: the student work record, files, comments, and review history.

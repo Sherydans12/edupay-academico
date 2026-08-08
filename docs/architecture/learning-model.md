@@ -5,7 +5,7 @@ Status: proposed MVP content model
 ## Hierarchy
 
 ```text
-Subject
+CourseSubject
 └── Learning Unit
     └── Learning Item
         ├── MATERIAL
@@ -16,7 +16,15 @@ Subject
 
 ### Subject
 
-The academic area to which teachers, students, learning units, and content access are attached.
+The reusable tenant-level catalog entry. It provides the academic identity of
+the offering but does not own teachers, students, learning units, or content.
+
+### CourseSubject
+
+The course-specific offering/context that links a Course to a Subject. Teachers,
+student access, learning units, and content are attached to this context. A
+single Subject may therefore have different CourseSubjects, teachers, materials,
+and timelines across courses.
 
 ### Learning unit
 
@@ -27,7 +35,7 @@ An ordered organizational container such as a topic, module, or period. It shoul
 A typed unit with common metadata:
 
 - title and optional description/instructions;
-- parent learning unit and subject context;
+- parent learning unit and CourseSubject context;
 - ordering;
 - draft/published/archived lifecycle proposal;
 - optional availability dates;
@@ -41,7 +49,7 @@ A typed unit with common metadata:
 | `MATERIAL` | Readable content and optional files/links for student study. |
 | `ASSIGNMENT` | Instructions, optional attachments, deadline, and student file submission. |
 | `ASSESSMENT` | Document-based instructions, attachments, deadline, and file submission; no exam engine or grade. |
-| `ANNOUNCEMENT` | Teacher/tenant communication displayed in the appropriate subject context; no submission. |
+| `ANNOUNCEMENT` | Teacher/tenant communication displayed in the appropriate CourseSubject context; no submission. |
 
 `ASSESSMENT` is intentionally a content/work type, not an online question bank or automatic evaluation model.
 
@@ -59,9 +67,9 @@ The exact edit-after-publication policy is unresolved.
 
 ## Ordering and presentation
 
-- Subject navigation is stable and predictable on mobile and desktop.
+- CourseSubject navigation is stable and predictable on mobile and desktop.
 - Units and items have explicit ordering values rather than relying on creation time.
-- A future reordering operation must be scoped to one subject/unit and be idempotent.
+- A future reordering operation must be scoped to one CourseSubject/unit and be idempotent.
 - The content model should not assume a single teacher or a single content author.
 
 ## Content safety

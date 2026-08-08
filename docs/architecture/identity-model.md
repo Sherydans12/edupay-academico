@@ -79,7 +79,7 @@ The Identity claim names are part of the integration contract. JSON API fields r
 | `scope` | Audience/application scope; never interpreted as a tenant role. |
 | `auth_time` | Authentication time for recent-authentication or step-up policies. |
 
-Tenant-scoped requests require `tenant_id` and `membership_id` from a valid active context. A `SYSTEM_ADMIN` token without an active context does not authorize tenant data access. Académico must apply its own role, relationship, lifecycle, publication, enrollment, subject-assignment, and submission-ownership policies after token validation.
+Tenant-scoped requests require `tenant_id` and `membership_id` from a valid active context. A `SYSTEM_ADMIN` token without an active context does not authorize tenant data access. Académico must apply its own role, relationship, lifecycle, publication, enrollment, CourseSubjectTeacher-assignment, and submission-ownership policies after token validation.
 
 Refresh tokens, token-family state, and session revocation remain wholly owned by Identity. Refresh tokens rotate on every use; reuse revokes the session and token family. Académico does not store or process refresh tokens. Normal request validation does not require an Identity round trip, while high-risk operations may call the restricted session/membership status endpoint.
 

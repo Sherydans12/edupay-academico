@@ -24,16 +24,16 @@ Exit criteria:
 
 Exit criteria:
 
-- Academic years, courses, students, teachers, subjects, and enrollment rules are usable.
-- Course default subjects, direct subject enrollment, and multiple teachers per subject work.
+- Academic years, courses, students, teachers, Subject catalog entries, CourseSubjects, and enrollment rules are usable.
+- CourseSubject defaults, direct StudentSubjectEnrollment, and multiple teachers per CourseSubject work.
 - Manual creation works even if synchronization is unavailable.
 
 ## Phase 3 — learning authoring and student access
 
 Exit criteria:
 
-- Teachers can organize subject learning units and create the four MVP item types.
-- Students can navigate assigned subjects and published content responsively.
+- Teachers can organize CourseSubject learning units and create the four MVP item types.
+- Students can navigate assigned CourseSubjects and published content responsively.
 - Draft/publish visibility and access rules are verified.
 
 ## Phase 4 — submissions and review

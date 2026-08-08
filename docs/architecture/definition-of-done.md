@@ -26,8 +26,8 @@ Before pilot, demonstrate:
 - independent Identity/authentication path;
 - tenant and role resolution;
 - academic setup manually and through the agreed sync path;
-- course/default subject/direct subject enrollment;
-- multiple teachers per subject;
+- CourseSubject defaults and direct StudentSubjectEnrollment;
+- multiple teachers per CourseSubject;
 - learning unit and four learning item types;
 - student assignment access;
 - multiple-file on-time and late submission;

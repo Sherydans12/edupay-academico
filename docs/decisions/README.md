@@ -13,8 +13,10 @@ These records capture major architectural choices from the brief and architectur
 | [0005](ADR-0005-private-object-storage-abstraction.md) | Private storage, quota, validation, immutability, and tenant-local deduplication | Accepted (2026-08-08) |
 | [0006](ADR-0006-submission-revision-and-review-state.md) | Submission revision and review state | Proposed / product decision required |
 | [0007](ADR-0007-notification-outbox.md) | Notification abstraction and outbox | Proposed |
-| [0008](ADR-0008-api-and-contract-versioning.md) | Versioned API and contract strategy | Proposed |
+| [0008](ADR-0008-api-and-contract-versioning.md) | Versioned API and contract strategy | Superseded by ADR-0011 |
 | [0009](ADR-0009-identity-contract-reconciliation.md) | Reconciled Identity, canonical tenant, session, and MVP authorization contract | Accepted (2026-08-08) |
+| [0010](ADR-0010-course-subject-and-lifecycle.md) | CourseSubject terminology and academic lifecycle baseline | Accepted (2026-08-08) |
+| [0011](ADR-0011-api-and-shared-contract-strategy.md) | API and shared application contract strategy | Accepted (2026-08-08) |
 
 ## ADR workflow
 

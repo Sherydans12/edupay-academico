@@ -1,5 +1,7 @@
 # @edupay/contracts
 
-Shared contracts are added here only after their owning boundary is reviewed.
-The bootstrap exports the already-documented API error envelope; it deliberately
-does not choose a shared Zod/OpenAPI source of truth or define academic DTOs.
+Reviewed shared web/API request and response contracts belong here. Cross-boundary
+shapes use Zod 4 schemas and export TypeScript types inferred from those schemas.
+The package contains no Prisma models and no API implementation imports. OpenAPI
+remains the externally inspectable API documentation; code generation is not
+required for the MVP.

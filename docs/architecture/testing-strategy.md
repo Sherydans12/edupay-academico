@@ -37,7 +37,7 @@ Verify the EduPay Identity, existing EduPay integration, object storage abstract
 Exercise the MVP path as each role, including negative cases:
 
 - student sees assigned content only;
-- teacher sees assigned subjects only;
+- teacher sees assigned CourseSubjects only;
 - late submission is accepted and flagged;
 - change request and resubmission work;
 - forbidden cross-tenant resource, file, notification, and sync access is rejected.

@@ -27,14 +27,19 @@ Owns request-scoped canonical tenant context, authorization policy primitives, t
 
 ## Agent D — academic domain
 
-Owns academic years, courses, students, teachers, subjects, course enrollment, default subjects, direct subject enrollment, teacher assignment, manual administration, and external-reference seams.
+Owns academic years, courses, students, teachers, the reusable Subject catalog,
+CourseSubject offerings, course enrollment, CourseSubject default configuration,
+direct StudentSubjectEnrollment targeting CourseSubject, CourseSubjectTeacher
+assignments, manual administration, and external-reference seams.
 
 **Depends on:** tenant/authorization foundation.  
 **Must not:** invent synchronization semantics or learning/submission tables.
 
 ## Agent E — learning domain and teacher authoring
 
-Owns subjects’ learning units, typed learning items, publication/lifecycle behavior, ordering, and teacher authoring APIs/UI.
+Owns CourseSubject learning units, typed learning items, publication/lifecycle
+behavior, ordering, and teacher authoring APIs/UI. It must not attach learning
+content directly to the reusable Subject catalog.
 
 **Depends on:** academic domain and approved publication rules.  
 **Must not:** implement submission state before ADR-0006 is accepted.

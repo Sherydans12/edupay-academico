@@ -42,7 +42,10 @@ This documentation governs the first implementation phase of EduPay Académico. 
 - **Identity user**: a person managed by EduPay Identity.
 - **Student / teacher record**: an academic-domain record that may optionally link to an Identity user.
 - **Course**: a class/cohort inside an academic year, not a catalog subject.
-- **Subject**: an academic area assigned to a course or directly to a student.
+- **Subject**: a tenant-level reusable academic catalog entry, such as Matemáticas or Inglés; it is not a teaching/classroom instance.
+- **CourseSubject**: the course-specific offering/context of a Subject and the primary teaching/learning context. It may be a default for its Course or assigned selectively.
+- **CourseSubjectTeacher**: an active or inactive teacher assignment to one CourseSubject.
+- **StudentSubjectEnrollment**: an active or inactive direct student enrollment targeting one CourseSubject, never only the reusable Subject catalog entry.
 - **Learning item**: a unit of learning content or work, typed as material, assignment, assessment, or announcement.
 - **Submission**: a student’s submitted work for an assignment or document-based assessment.
 
