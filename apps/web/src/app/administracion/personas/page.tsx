@@ -1,3 +1,3 @@
-import { AdminPlaceholderScreen } from '@/features/admin-screen';
+import { AcademicAdminScreen } from '@/features/academic-admin';
 
-export default function AcademicPeoplePage() { return <AdminPlaceholderScreen title="Personas y asignaciones" />; }
+export default function AcademicPeoplePage() { return <AcademicAdminScreen view="people" />; }

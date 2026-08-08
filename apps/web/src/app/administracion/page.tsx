@@ -1,3 +1,3 @@
-import { AdminOverviewScreen } from '@/features/admin-screen';
+import { AcademicAdminScreen } from '@/features/academic-admin';
 
-export default function AdminPage() { return <AdminOverviewScreen />; }
+export default function AdminPage() { return <AcademicAdminScreen view="overview" />; }

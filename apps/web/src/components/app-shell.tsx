@@ -42,7 +42,7 @@ function isCurrentPath(pathname: string, href: string) {
   return href.split('/').filter(Boolean).length > 1 && pathname.startsWith(`${href}/`);
 }
 
-export function AppShell({ children, session }: CurrentSessionConsumerProps & { children: ReactNode }) {
+export function AppShell({ children, dataMode = 'demo', session }: CurrentSessionConsumerProps & { children: ReactNode; dataMode?: 'demo' | 'real' }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigation = workspaceNavigation[session.workspace];
@@ -112,9 +112,9 @@ export function AppShell({ children, session }: CurrentSessionConsumerProps & { 
             </DropdownMenu>
           </div>
         </header>
-        <div className="demo-banner" role="status">
-          <span>Vista de demostración</span>
-          <p>Contenido local para validar la experiencia; aún no conectado al backend.</p>
+        <div className={`demo-banner demo-banner--${dataMode}`} role="status">
+          <span>{dataMode === 'real' ? 'Datos académicos reales' : 'Vista de demostración'}</span>
+          <p>{dataMode === 'real' ? 'La estructura y las relaciones se cargan desde el Academic Structure API.' : 'Contenido local para validar la experiencia; aprendizaje aún aislado del backend.'}</p>
         </div>
         <main className="app-content" id="main-content" tabIndex={-1}>{children}</main>
       </div>
