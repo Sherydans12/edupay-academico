@@ -113,8 +113,8 @@ export function AppShell({ children, dataMode = 'demo', session }: CurrentSessio
           </div>
         </header>
         <div className={`demo-banner demo-banner--${dataMode}`} role="status">
-          <span>{dataMode === 'real' ? 'Datos académicos reales' : 'Vista de demostración'}</span>
-          <p>{dataMode === 'real' ? 'La estructura y las relaciones se cargan desde el Academic Structure API.' : 'Contenido local para validar la experiencia; aprendizaje aún aislado del backend.'}</p>
+          <span>{dataMode === 'real' ? 'Datos académicos y de aprendizaje reales' : 'Vista de demostración'}</span>
+          <p>{dataMode === 'real' ? 'La estructura y las rutas de aprendizaje se cargan desde Academic Structure y Learning API. Entregas aún no conectadas.' : 'Contenido local para validar la experiencia; aprendizaje aún aislado del backend.'}</p>
         </div>
         <main className="app-content" id="main-content" tabIndex={-1}>{children}</main>
       </div>

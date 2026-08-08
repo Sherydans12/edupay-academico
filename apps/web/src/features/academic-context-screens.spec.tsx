@@ -15,10 +15,11 @@ function client(overrides: Partial<AcademicApiClient>): AcademicApiClient {
 }
 
 describe('Academic context screens', () => {
-  it('renders the student effective-subject view and labels learning as isolated demo data', async () => {
+  it('renders the student effective-subject view and links to the real Learning API route', async () => {
     render(<StudentAcademicSubjectsScreen api={client({ getStudentContextSubjects: vi.fn(async () => [contextSubject]) })} />);
     expect(await screen.findByRole('heading', { name: 'Lenguaje y Comunicación' })).toBeTruthy();
-    expect(screen.getByText(/contenido de aprendizaje: demo aislada/i)).toBeTruthy();
+    expect(screen.getByText(/aprendizaje conectado al learning api/i)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /abrir ruta/i }).getAttribute('href')).toBe(`/estudiante/asignaturas/${id}`);
   });
 
   it('renders the teacher assigned-subject view and authorized roster', async () => {

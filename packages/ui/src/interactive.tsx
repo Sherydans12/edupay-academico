@@ -8,27 +8,50 @@ import { Button } from './components';
 export function Dialog({
   children,
   description,
+  onOpenChange,
+  open: controlledOpen,
   openLabel,
   title,
 }: {
   children: ReactNode;
   description?: string;
-  openLabel: string;
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
+  openLabel?: string;
   title: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
+    if (open && !dialog.open) {
+      try {
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.open = true;
+      } catch {
+        dialog.setAttribute('open', '');
+      }
+    }
+    if (!open && dialog.open) {
+      try {
+        dialog.close();
+      } catch {
+        dialog.removeAttribute('open');
+      }
+    }
   }, [open]);
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>{openLabel}</Button>
+      {openLabel ? <Button onClick={() => setOpen(true)}>{openLabel}</Button> : null}
       <dialog
         className="ui-dialog"
         onCancel={() => setOpen(false)}

@@ -47,3 +47,32 @@ export function getIdentitySessionAdapter(): IdentitySessionAdapter | null {
 export function clearIdentitySessionAdapter(): void {
   activeSessionAdapter = null;
 }
+
+export function useTrustedCurrentSession(fallback: TrustedCurrentSession): {
+  loading: boolean;
+  session: TrustedCurrentSession;
+} {
+  const [session, setSession] = useState(fallback);
+  const [loading, setLoading] = useState(Boolean(activeSessionAdapter));
+
+  useEffect(() => {
+    const adapter = activeSessionAdapter;
+    if (!adapter) {
+      return;
+    }
+    let mounted = true;
+    void adapter.getCurrentSession().then((current) => {
+      if (!mounted) return;
+      if (current) setSession(current);
+      setLoading(false);
+    }).catch(() => {
+      if (mounted) setLoading(false);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [fallback]);
+
+  return { loading, session };
+}
+import { useEffect, useState } from 'react';
