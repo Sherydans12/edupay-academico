@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-08T00:00:00.000Z",
+  "title": "Design System: EduPay Académico",
+  "extensions": {
+    "colorMeta": {
+      "conquistadores-primary": {
+        "role": "primary",
+        "displayName": "Institutional Route Blue",
+        "canonical": "#1d2f70",
+        "tonalRamp": ["#0d1635", "#14234f", "#1d2f70", "#2d4b82", "#526b9b", "#8293b6", "#bdc7d9", "#eef1f7"]
+      },
+      "conquistadores-accent": {
+        "role": "secondary",
+        "displayName": "Attention Yellow",
+        "canonical": "#e6b83f",
+        "tonalRamp": ["#3f2d00", "#6c4b00", "#9a6500", "#c99520", "#e6b83f", "#efd071", "#f7e8ad", "#fdf8e9"]
+      },
+      "conquistadores-educational": {
+        "role": "tertiary",
+        "displayName": "Educational Teal",
+        "canonical": "#477e82",
+        "tonalRamp": ["#142c2e", "#274d50", "#477e82", "#68a0a4", "#8dbcbf", "#b5d6d8", "#d9eaea", "#f1f8f8"]
+      },
+      "conquistadores-background": {
+        "role": "neutral",
+        "displayName": "Warm Learning Ground",
+        "canonical": "#f5f3ee",
+        "tonalRamp": ["#282724", "#4f4d48", "#77746d", "#9f9b93", "#c3c0b9", "#dfdcd6", "#f0eee9", "#f5f3ee"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Academic Display", "purpose": "Page greetings and decisive assignment titles." },
+      "body": { "displayName": "Working Body", "purpose": "Readable task guidance and supporting context." },
+      "label": { "displayName": "Status Label", "purpose": "Badges, metadata, and compact control labels." }
+    },
+    "shadows": [
+      { "name": "ambient-surface", "value": "0 3px 12px rgb(25 41 64 / 0.08)", "purpose": "Resting cards and grouped panels." },
+      { "name": "interactive-lift", "value": "0 12px 32px rgb(25 41 64 / 0.13)", "purpose": "Menus, dialogs, drawers, and hovered interactive cards." }
+    ],
+    "motion": [
+      { "name": "fast", "value": "160ms ease", "purpose": "Color, focus-adjacent, and small hover feedback." },
+      { "name": "standard", "value": "220ms ease", "purpose": "Card lift and responsive drawer transitions." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "400px" },
+      { "name": "mobile", "value": "680px" },
+      { "name": "shell", "value": "900px" },
+      { "name": "wide-grid", "value": "1180px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The principal action inside an academic task.",
+      "html": "<button class=\"ds-button-primary\">Guardar cambios</button>",
+      "css": ".ds-button-primary{min-height:44px;border:0;border-radius:8px;background:#1d2f70;color:#fff;padding:11px 16px;font:700 14px Montserrat,sans-serif;transition:background 160ms ease,transform 160ms ease}.ds-button-primary:hover{background:#14234f;transform:translateY(-1px)}.ds-button-primary:focus-visible{outline:3px solid #f0b429;outline-offset:3px}"
+    },
+    {
+      "name": "Attention Button",
+      "kind": "button",
+      "refersTo": "button-accent",
+      "description": "A rare yellow forward action for time-sensitive student work.",
+      "html": "<button class=\"ds-button-accent\">Continuar actividad</button>",
+      "css": ".ds-button-accent{min-height:44px;border:0;border-radius:8px;background:#e6b83f;color:#252016;padding:11px 16px;font:700 14px Montserrat,sans-serif;transition:background 160ms ease}.ds-button-accent:hover{background:#c99520}.ds-button-accent:focus-visible{outline:3px solid #f0b429;outline-offset:3px}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A visible-label academic form field.",
+      "html": "<label class=\"ds-field\">Título<input placeholder=\"Ej. Reseña literaria\"></label>",
+      "css": ".ds-field{display:grid;gap:7px;color:#263149;font:700 14px Montserrat,sans-serif}.ds-field input{min-height:44px;border:1px solid #d7dce5;border-radius:8px;background:#fffefa;color:#263149;padding:11px 13px;font:400 16px Montserrat,sans-serif}.ds-field input:focus-visible{outline:3px solid #f0b429;outline-offset:3px}"
+    },
+    {
+      "name": "Warning Badge",
+      "kind": "chip",
+      "refersTo": "badge-warning",
+      "description": "Compact deadline or attention status with compliant small-text contrast.",
+      "html": "<span class=\"ds-badge-warning\">Vence mañana</span>",
+      "css": ".ds-badge-warning{display:inline-flex;align-items:center;min-height:26px;border-radius:999px;background:#fdf8ec;color:#885900;padding:4px 9px;font:750 12px Montserrat,sans-serif}"
+    },
+    {
+      "name": "Subject Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A calm subject entry with continuity and next-action context.",
+      "html": "<article class=\"ds-subject-card\"><span>LEN</span><h3>Lenguaje y Comunicación</h3><p>Continuidad 68%</p></article>",
+      "css": ".ds-subject-card{border-radius:16px;background:#fffefa;color:#263149;padding:17px;box-shadow:0 3px 12px rgba(25,41,64,.08);font-family:Montserrat,sans-serif;transition:transform 220ms ease,box-shadow 220ms ease}.ds-subject-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(25,41,64,.13)}.ds-subject-card span{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#e4e9f1;color:#1d2f70;font-weight:800}.ds-subject-card h3{margin:16px 0 6px;font-size:16px}.ds-subject-card p{margin:0;color:#5f687b;font-size:12px}"
+    },
+    {
+      "name": "Institutional Navigation",
+      "kind": "nav",
+      "description": "Deep-blue application navigation with a clear selected state.",
+      "html": "<nav class=\"ds-nav\"><a class=\"is-active\" href=\"#\">Inicio</a><a href=\"#\">Asignaturas</a></nav>",
+      "css": ".ds-nav{display:grid;gap:5px;background:#14234f;padding:12px;font-family:Montserrat,sans-serif}.ds-nav a{min-height:44px;display:flex;align-items:center;border-radius:8px;color:rgba(255,255,255,.74);padding:10px 13px;text-decoration:none;font-size:14px;font-weight:680}.ds-nav a:hover{background:rgba(255,255,255,.08);color:#fff}.ds-nav a:focus-visible{outline:3px solid #f0b429;outline-offset:3px}.ds-nav .is-active{background:#2d4b82;color:#fff}"
+    }
+  ],
+  "narrative": {
+    "northStar": "La Ruta de Aprendizaje",
+    "overview": "A warm, professional learning workspace whose hierarchy always points to the next meaningful step. Institutional structure remains calm while tactile route markers and restrained educational accents make progress visible.",
+    "keyCharacteristics": [
+      "Work-first hierarchy with the next action visible early.",
+      "Warm paper surfaces and disciplined institutional color.",
+      "Semantic tenant theming without component forks.",
+      "Responsive learning and review workflows with 44px targets."
+    ],
+    "rules": [
+      { "name": "Yellow Carries Meaning", "body": "Yellow is reserved for attention and forward action and never carries white text.", "section": "colors" },
+      { "name": "Semantic Tenant", "body": "Change tenant identity through semantic tokens, never component forks.", "section": "colors" },
+      { "name": "Next Step First", "body": "Place the meaningful learning or review action in the first viewport.", "section": "layout" },
+      { "name": "Ambient First", "body": "Stronger lift appears only for hierarchy, overlay, or interaction.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do place the next meaningful learning or review action before broad summaries.",
+      "Do preserve visible labels, non-color status cues, strong focus rings, and 44px targets.",
+      "Do use the same semantic component structure for every tenant."
+    ],
+    "donts": [
+      "Don't turn the workspace into a dense ERP dashboard, generic LMS grid, marketing page, or glassmorphic control center.",
+      "Don't use white text on yellow or use yellow as a general decorative fill.",
+      "Don't invent a Colegio Conquistadores crest."
+    ]
+  }
+}
