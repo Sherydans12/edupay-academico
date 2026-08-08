@@ -1,0 +1,37 @@
+# Documentation inventory
+
+Status: baseline inventory
+
+| Area | Document | Purpose | Status |
+| --- | --- | --- | --- |
+| Product | [Vision](../product/vision.md) | Product purpose, users, principles, success signals, non-vision | Baseline proposed |
+| Product | [MVP scope](../product/mvp-scope.md) | Included/out-of-scope capabilities and end-to-end acceptance boundary | Baseline |
+| Product | [Roadmap](../product/roadmap.md) | Outcome-based sequencing and exit criteria | Proposed |
+| Architecture | [System context](../architecture/system-context.md) | Services, data stores, providers, and integration boundaries | Proposed |
+| Architecture | [Domain model](../architecture/domain-model.md) | Bounded contexts, entities, relationships, aggregate candidates | Proposed |
+| Architecture | [Multitenancy](../architecture/multitenancy.md) | Tenant resolution, persistence, file, cache, worker, and test rules | Mandatory controls |
+| Architecture | [Identity model](../architecture/identity-model.md) | Identity ownership, optional academic links, session boundary | Mandated boundary / unresolved details |
+| Architecture | [Roles and authorization](../architecture/roles-and-authorization.md) | Role matrix, resource policies, authorization questions | Proposed |
+| Architecture | [Academic model](../architecture/academic-model.md) | Academic years, courses, subjects, enrollment, sync/manual rules | Proposed |
+| Architecture | [Learning model](../architecture/learning-model.md) | Subject/unit/item hierarchy and item-type behavior | Proposed |
+| Architecture | [Submissions workflow](../architecture/submissions-workflow.md) | Submission, deadline, late, review, correction, and resubmission flow | Proposed / ADR candidate |
+| Architecture | [File storage](../architecture/file-storage.md) | Private storage, dual quotas, metadata/blobs/references, validation, authorization, accounting, and reconciliation | Accepted storage baseline |
+| Architecture | [Notifications](../architecture/notifications.md) | In-app/email abstraction, Resend adapter, reliability | Proposed |
+| Architecture | [EduPay integration](../architecture/edupay-integration.md) | Explicit API/sync boundary, references, consistency, conflicts | Mandated boundary / unresolved details |
+| Architecture | [API conventions](../architecture/api-conventions.md) | REST/JSON proposal, context, errors, pagination, versioning | Proposed / ADR candidate |
+| Architecture | [Frontend architecture](../architecture/frontend-architecture.md) | Next.js App Router, data, forms, responsive/accessibility rules | Proposed |
+| Architecture | [Design system](../architecture/design-system.md) | Warm educational UX and tenant-configured design tokens | Proposed |
+| Operations | [Security](../architecture/security.md) | Authentication, authorization, files, privacy, threat checkpoints | Mandatory controls / proposed operations |
+| Operations | [Audit strategy](../architecture/audit-strategy.md) | Identity and academic audit ownership and event shape | Proposed |
+| Operations | [Testing strategy](../architecture/testing-strategy.md) | Unit through e2e, contract, isolation, accessibility, release gates | Proposed |
+| Operations | [Deployment](../architecture/deployment.md) | Environments, runtime, observability, recovery, operational gaps | Proposed |
+| Governance | [Definition of done](../architecture/definition-of-done.md) | Quality and release evidence requirements | Proposed |
+| Governance | [Unresolved decisions](unresolved-decisions.md) | Decision register with impact and owners to assign | Open |
+| Governance | [Risks](risks.md) | Risk register and mitigations | Open |
+| Governance | [Implementation phases](implementation-phases.md) | Work packages and sequencing constraints | Proposed |
+| Governance | [Agent boundaries](agent-boundaries.md) | Recommended parallel-agent seams and handoffs | Proposed |
+| Decisions | [ADR index](../decisions/README.md) | Proposed and accepted ADR status and review workflow | ADR-0005 accepted; others open |
+
+## Repository inspection result
+
+At the time of this baseline, the repository contained no source files or prior documentation. No existing conventions, schema, CI pipeline, or deployment manifest were available to validate. The documents above therefore define a greenfield starting point and must be reconciled with the first approved repository bootstrap.

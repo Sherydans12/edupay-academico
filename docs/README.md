@@ -1,0 +1,45 @@
+# EduPay Académico documentation
+
+Status: architecture baseline proposed for review  
+Repository state at baseline: empty; no application code, schema, tests, or prior documentation were found.
+
+This documentation governs the first implementation phase of EduPay Académico. It separates product scope from architectural constraints and records unresolved choices instead of hiding them in code.
+
+## Reading order
+
+1. [Product vision](product/vision.md)
+2. [MVP scope](product/mvp-scope.md)
+3. [System context](architecture/system-context.md)
+4. [Domain model](architecture/domain-model.md)
+5. [Multitenancy](architecture/multitenancy.md)
+6. [Identity model](architecture/identity-model.md) and [roles and authorization](architecture/roles-and-authorization.md)
+7. [Academic model](architecture/academic-model.md), [learning model](architecture/learning-model.md), and [submissions workflow](architecture/submissions-workflow.md)
+8. [Cross-cutting architecture](architecture/file-storage.md), [notifications](architecture/notifications.md), [EduPay integration](architecture/edupay-integration.md), and [API conventions](architecture/api-conventions.md)
+9. [Frontend architecture](architecture/frontend-architecture.md) and [design system](architecture/design-system.md)
+10. [Security](architecture/security.md), [audit strategy](architecture/audit-strategy.md), [testing strategy](architecture/testing-strategy.md), [deployment](architecture/deployment.md), and [definition of done](architecture/definition-of-done.md)
+11. [Roadmap](product/roadmap.md), [unresolved decisions](governance/unresolved-decisions.md), [risks](governance/risks.md), [implementation phases](governance/implementation-phases.md), and [agent boundaries](governance/agent-boundaries.md)
+
+## Documentation conventions
+
+- **Mandated** means directly required by the project brief and should be treated as a constraint.
+- **Proposed** means a recommended default that still needs owner approval before implementation.
+- **Unresolved** means the implementation must not assume an answer without an explicit decision.
+- Every change that materially alters a boundary, ownership model, security property, or user-visible workflow should update the relevant document and add or amend an ADR.
+- Domain names in this documentation are canonical. UI labels may be localized, but they should map back to these terms.
+
+## Canonical terms
+
+- **Tenant**: an institution or organization using EduPay Académico.
+- **Identity user**: a person managed by EduPay Identity.
+- **Student / teacher record**: an academic-domain record that may optionally link to an Identity user.
+- **Course**: a class/cohort inside an academic year, not a catalog subject.
+- **Subject**: an academic area assigned to a course or directly to a student.
+- **Learning item**: a unit of learning content or work, typed as material, assignment, assessment, or announcement.
+- **Submission**: a student’s submitted work for an assignment or document-based assessment.
+
+## Governing constraints
+
+- The initial deployment is Colegio Conquistadores, but the product is multi-tenant from its first schema and request path.
+- EduPay Académico owns its own database and must never read or write EduPay tables directly.
+- EduPay Identity is a separate identity boundary; the existing EduPay admin login remains unchanged initially.
+- The MVP does not include grades, attendance, exams, chat, live classes, or financial workflows.
