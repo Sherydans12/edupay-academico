@@ -72,6 +72,43 @@ describe('real Learning screens', () => {
     await waitFor(() => expect(createLearningItem).toHaveBeenCalledWith(unitId, expect.objectContaining({ type: 'ASSIGNMENT', title: 'Nueva actividad', instructions: 'Entrega el documento.', dueAt: '2026-08-20T22:00:00.000Z' })));
   });
 
+  it('creates units and renders publication states with schedule and archive actions', async () => {
+    const createLearningUnit = vi.fn(async () => route.units[0]!);
+    const publishLearningItem = vi.fn(async () => draftItem);
+    const scheduleLearningItem = vi.fn(async () => futureItem);
+    const archiveLearningItem = vi.fn(async () => draftItem);
+    const publicationRoute = { ...route, units: [{ ...route.units[0]!, items: [draftItem, futureItem] }] };
+    const client = api({
+      getTeacherContextSubjects: vi.fn(async () => [subject]),
+      getLearningRoute: vi.fn(async () => publicationRoute),
+      createLearningUnit,
+      publishLearningItem,
+      scheduleLearningItem,
+      archiveLearningItem,
+    });
+    render(<TeacherSubjectScreen api={client} courseSubjectId={subjectId} />);
+
+    expect(await screen.findByRole('heading', { name: 'Ruta de aprendizaje' })).toBeTruthy();
+    expect(screen.getByText('Borrador')).toBeTruthy();
+    expect(screen.getByText('Programado')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva unidad' }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Unidad nueva' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear unidad' }));
+    await waitFor(() => expect(createLearningUnit).toHaveBeenCalledWith(expect.objectContaining({ courseSubjectId: subjectId, title: 'Unidad nueva', sortOrder: 0 })));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+    await waitFor(() => expect(publishLearningItem).toHaveBeenCalledWith(draftItem.id));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Programar' }));
+    fireEvent.change(screen.getByLabelText('Programar publicación'), { target: { value: '2099-08-20T18:00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar programación' }));
+    await waitFor(() => expect(scheduleLearningItem).toHaveBeenCalledWith(draftItem.id, expect.objectContaining({ confirmSensitiveChange: false, publishAt: expect.any(String) })));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archivar Borrador privado' }));
+    await waitFor(() => expect(archiveLearningItem).toHaveBeenCalledWith(draftItem.id));
+  });
+
   it('requires explicit confirmation when the API rejects a sensitive published edit', async () => {
     const updateLearningItem = vi.fn()
       .mockRejectedValueOnce(new AcademicApiError({ code: 'CONFIRMATION_REQUIRED', details: [], message: 'Published content changes require explicit confirmation.', requestId: 'req-sensitive', status: 409 }))

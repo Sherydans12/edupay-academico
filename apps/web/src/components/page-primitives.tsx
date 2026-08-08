@@ -149,7 +149,7 @@ export function LearningRoute({
                         <span className="learning-item__meta">
                           <Badge tone={state.tone}>{state.label}</Badge>
                           {item.dueAt ? <small><Icon name="clock" />Vence {formatDueAt(item.dueAt)}</small> : null}
-                          {item.publicationStatus === 'SCHEDULED' && item.publishAt && audience === 'teacher' ? <small><Icon name="calendar" />{isEffectivelyVisible(item) ? 'Disponible desde ' : 'Disponible el '}{formatDueAt(item.publishAt)}</small> : null}
+                          {item.publicationStatus === 'SCHEDULED' && item.publishAt ? <small><Icon name="calendar" />{isEffectivelyVisible(item) ? audience === 'student' ? 'Programado · disponible desde ' : 'Disponible desde ' : 'Disponible el '}{formatDueAt(item.publishAt)}</small> : null}
                         </span>
                         {actions ? <span className="learning-item__actions">{actions}</span> : href ? <Icon className="learning-item__chevron" name="chevron-right" /> : null}
                       </>
