@@ -28,4 +28,4 @@ Operate EduPay Académico as an independent bounded service with its own Postgre
 
 - Production service/deployment topology.
 - Exact EduPay integration contract and source-of-truth matrix.
-- Identity network/authentication boundary.
+- Identity network/authentication boundary is defined for Académico by [ADR-0009](ADR-0009-identity-contract-reconciliation.md); deployment topology and operational connectivity remain subject to the deployment decision.

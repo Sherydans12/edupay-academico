@@ -23,6 +23,13 @@ The exact folder layout is an implementation detail and should follow the approv
 - Treat authorization as server-owned even if route visibility is also mirrored in the UI.
 - Invalidate/revalidate data after mutations using a consistent policy.
 
+## Identity and tenant context
+
+- The authenticated shell reflects the active Identity membership context from the server-side API response; a browser-selected `tenantId` is never treated as authorization context.
+- Membership switching is requested through the Identity flow, which issues a new access token. The web application does not mint, edit, or persist Identity JWT claims.
+- Académico API authorization remains authoritative even when route groups or navigation are role-specific.
+- Refresh tokens and Identity session secrets remain in the Identity-controlled browser/session boundary; they are never stored in Académico data or exposed to academic components.
+
 ## Forms and validation
 
 - React Hook Form manages interaction state.

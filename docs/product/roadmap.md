@@ -49,7 +49,7 @@ Exit criteria:
 
 Exit criteria:
 
-- In-app notifications and Resend email delivery run through the notification abstraction.
+- In-app notifications and Académico-owned Resend email delivery run through the notification abstraction; Identity invitation/activation/recovery email remains owned by Identity.
 - Retry, idempotency, and failure visibility are implemented.
 - The agreed student/course synchronization contract is exercised against a representative source.
 

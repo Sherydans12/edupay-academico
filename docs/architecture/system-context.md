@@ -16,7 +16,8 @@ flowchart LR
     Identity[EduPay Identity service]
     AcademicDB[(Academic PostgreSQL 15 database)]
     ObjectStore[S3-compatible object storage]
-    Mail[Resend]
+    AcademicMail[Académico notification adapter]
+    IdentityMail[Identity outbox + Resend adapter]
     EduPay[Existing EduPay APIs or sync source]
 
     Student --> Web
@@ -26,7 +27,8 @@ flowchart LR
     API --> Identity
     API --> AcademicDB
     API --> ObjectStore
-    API --> Mail
+    API --> AcademicMail
+    Identity --> IdentityMail
     API <--> EduPay
 ```
 
@@ -34,7 +36,7 @@ flowchart LR
 
 ### EduPay Académico web application
 
-- Renders tenant-aware student, teacher, and administration experiences.
+- Renders tenant-aware student, teacher, and administration experiences using the active Identity membership context.
 - Requests data through the academic API.
 - Keeps authorization decisions on the server; client visibility is not a security boundary.
 - Applies tenant theme/design tokens returned by configuration.
@@ -42,14 +44,17 @@ flowchart LR
 ### EduPay Académico API
 
 - Owns academic, learning, submission, notification, and academic audit behavior.
-- Resolves tenant context from authenticated identity and membership context.
+- Validates EduPay Identity access JWTs through the JWKS contract and resolves the canonical ecosystem tenant context from `tenant_id` and `membership_id`.
 - Enforces resource authorization and validates input.
 - Mediates all database, object-storage, notification, and EduPay integration access.
+- Does not store or handle Identity credentials, password hashes, refresh tokens, or secrets.
+- If academic email is enabled, uses an Académico-owned notification adapter; it does not deliver Identity invitation, activation, or recovery email.
 
 ### EduPay Identity
 
 - Owns users, credentials, sessions, refresh tokens, memberships, roles, invitations, and authentication auditing.
 - Does not own students, teachers, courses, subjects, payments, or grades.
+- Owns authentication email delivery through its durable outbox and Resend adapter.
 
 ### Existing EduPay
 
@@ -65,8 +70,9 @@ flowchart LR
 
 ## Architectural boundaries
 
-- Academic data and Identity data are separate ownership boundaries even if deployed together during development.
+- Academic data and Identity data are separate ownership boundaries even if deployed together during development. Each service owns its own tenant record/reference; the canonical ecosystem tenant ID is shared only through contracts, never through tables or foreign keys.
 - The academic API should not accept a raw database connection to the existing EduPay database.
+- The existing EduPay administrative login is a separate trust domain and is not accepted as an Identity credential or cookie.
 - External provider failures must degrade in a visible, recoverable way: a failed email should not lose a submission, and a failed sync should not disable manual academic operations.
 
 ## Unresolved topology choices

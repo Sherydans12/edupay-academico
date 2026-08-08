@@ -6,6 +6,8 @@ Status: proposed application notification layer
 
 Domain behavior should emit notification intents without knowing whether delivery is in-app, email, or a future channel. Resend is an infrastructure adapter, not a domain dependency.
 
+Identity email delivery is a separate ownership boundary: EduPay Identity owns invitation, activation, password-recovery, and authentication email state through its durable outbox and Resend adapter. Académico must not send, retry, or persist Identity email secrets. Any Académico email adapter handles only academic notification intents and has its own contract and audit ownership.
+
 ## Candidate flow
 
 ```mermaid
@@ -14,13 +16,13 @@ flowchart LR
     Outbox[Notification intent/outbox]
     Dispatcher[Notification dispatcher]
     InApp[In-app notification store]
-    Resend[Resend adapter]
+    AcademicResend[Académico Resend adapter]
     Mail[Email provider]
     Domain --> Outbox
     Outbox --> Dispatcher
     Dispatcher --> InApp
-    Dispatcher --> Resend
-    Resend --> Mail
+    Dispatcher --> AcademicResend
+    AcademicResend --> Mail
 ```
 
 ## MVP notification candidates
@@ -31,7 +33,7 @@ flowchart LR
 - A submission is reviewed.
 - Changes are requested.
 - A resubmission is received.
-- An invitation is issued or accepted through Identity.
+- An Identity invitation or activation event may be consumed as a bounded integration signal for an Académico in-app/status notification; Identity remains the owner of the email and secret.
 
 The final event catalog, recipients, email copy, and reminder timing are unresolved.
 

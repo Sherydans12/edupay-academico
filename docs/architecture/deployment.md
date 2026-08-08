@@ -11,7 +11,8 @@ The production topology must support, at minimum:
 - EduPay Identity integration;
 - PostgreSQL 15 academic database;
 - S3-compatible object storage;
-- Resend email integration;
+- Académico notification delivery adapter, if enabled;
+- EduPay Identity’s separate durable-outbox/Resend delivery remains owned and operated by Identity;
 - a mechanism for retryable notification/synchronization work once approved.
 
 Components may share infrastructure in early environments, but ownership and failure boundaries must remain explicit.

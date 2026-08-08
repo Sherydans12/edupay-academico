@@ -14,17 +14,22 @@ Status: mandatory controls plus proposed operational baseline
 
 ### Authentication and sessions
 
-- Validate issuer, audience, signature, expiry, and session status according to the Identity contract.
-- Keep refresh token ownership in Identity.
-- Define revocation and logout behavior before launch.
+- Validate Identity JWT signature through JWKS, issuer, audience, expiry, not-before, acceptable clock skew, and required active-context claims (`sub`, `sid`, `tenant_id`, `membership_id`, and `roles`).
+- Treat `tenant_id` as the canonical ecosystem tenant ID, not a client-selected or local database identifier.
+- Enforce the Identity access-token maximum lifetime of 10 minutes. Role and membership changes may leave an already-issued token valid only within that bounded lifetime.
+- Keep refresh-token ownership, rotation, reuse detection, token-family revocation, and logout behavior in Identity. Académico never stores refresh tokens.
+- Perform an online Identity session/membership status check for high-risk operations when current status is required.
 - Use secure transport and secure cookie/token handling as approved by the Identity threat model.
 
 ### Authorization and tenancy
 
 - Resolve tenant from trusted membership/session context.
+- A client-provided `tenantId` is never authorization context; reject or ignore it if it conflicts with the validated Identity context.
 - Enforce tenant scope in API, database access, storage, background jobs, exports, and notifications.
 - Apply resource policies for subject assignment, enrollment, publication state, and submission ownership.
 - Fail closed on missing or stale context where the risk is material.
+
+`SYSTEM_ADMIN` has no automatic tenant access. Tenant access requires an explicit, audited elevated support context; user impersonation is out of scope for the MVP.
 
 ### Input and content
 
@@ -62,6 +67,7 @@ Before pilot, review at least:
 - ID enumeration and resource existence leaks;
 - malicious file upload and signed URL abuse;
 - unauthorized teacher/student linking;
+- refresh-token replay and session/membership revocation staleness;
 - replayed integration callbacks;
 - notification spoofing and email enumeration;
 - over-privileged system-admin support actions;

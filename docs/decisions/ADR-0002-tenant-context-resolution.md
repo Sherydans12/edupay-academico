@@ -1,6 +1,6 @@
 # ADR-0002: trusted tenant-context resolution
 
-Status: Proposed; tenant isolation requirement is mandatory  
+Status: Proposed; tenant isolation requirement is mandatory; Identity context reconciled by ADR-0009
 Date: 2026-08-08
 
 ## Context
@@ -23,6 +23,6 @@ This makes the authorization boundary server-owned and testable across API, data
 
 ## Open items before acceptance
 
-- Token claim versus active-tenant endpoint versus server-side session.
-- Context staleness and role revocation behavior.
 - Database-level defense-in-depth policy, if any.
+
+The token claim, membership-switch endpoint, 10-minute staleness ceiling, and high-risk online status checks are resolved for Académico by [ADR-0009](ADR-0009-identity-contract-reconciliation.md). This ADR remains proposed for any remaining persistence implementation details.

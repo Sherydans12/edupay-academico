@@ -4,11 +4,11 @@ Status: proposed work decomposition; application code intentionally not started
 
 ## Phase 0 — architecture approval and repository bootstrap
 
-Own the monorepo layout, coding conventions, environment contract, CI quality gates, ADR process, and approved Identity/API/integration contracts. Do not start domain features until tenant and identity boundaries are testable.
+Own the future monorepo layout, coding conventions, environment contract, CI quality gates, ADR process, and the reconciled Identity/API/integration contracts. Do not start domain features until the 10-minute Identity JWT, canonical tenant context, membership switching, and tenant-isolation boundaries are testable.
 
 ## Phase 1 — identity adapter and tenant guardrails
 
-Build the narrow application boundary to EduPay Identity, membership/role context, request-scoped tenant resolution, authorization foundations, audit correlation, and isolation fixtures. Deliver no broad academic UI in this phase.
+Build the narrow application boundary to EduPay Identity, JWKS/JWT validation, membership/role context, request-scoped canonical tenant resolution, authorization foundations, high-risk session-status checks, audit correlation, and isolation fixtures. Deliver no broad academic UI in this phase.
 
 ## Phase 2 — academic structure
 

@@ -5,11 +5,11 @@ Date: 2026-08-08
 
 ## Context
 
-The MVP needs in-app and Resend email notifications. Academic actions must not fail merely because an email provider is unavailable.
+The MVP needs in-app and academic Resend email notifications. Academic actions must not fail merely because an email provider is unavailable. EduPay Identity separately owns authentication email, its durable outbox, and its Resend adapter.
 
 ## Candidate decision
 
-Record notification intents transactionally with the domain action, then dispatch them asynchronously through channel adapters. Store in-app notifications as tenant-scoped recipient records and use a Resend adapter for email. Delivery is idempotent, retryable, observable, and independently fail-able.
+Record Académico notification intents transactionally with the domain action, then dispatch them asynchronously through channel adapters. Store in-app notifications as tenant-scoped recipient records and use an Académico-owned Resend adapter only for academic email. Delivery is idempotent, retryable, observable, and independently fail-able. Identity invitation, activation, and recovery emails remain outside this outbox.
 
 ## Rationale
 

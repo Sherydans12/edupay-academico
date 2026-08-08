@@ -14,8 +14,9 @@ The services may correlate events, but neither should duplicate ownership of the
 Each event should include, as available:
 
 - event ID and timestamp;
-- tenant ID;
-- actor identity and actor type;
+- canonical ecosystem tenant ID;
+- actor Identity user ID (`sub`) and actor type;
+- Identity session ID (`sid`) and membership ID when available;
 - action and result;
 - resource type and internal ID;
 - affected subject/course context;
@@ -37,7 +38,7 @@ Do not record credentials, refresh tokens, file contents, or unnecessary student
 - review and request-changes actions;
 - notification preference or delivery changes;
 - sync runs, record mappings, conflicts, and failures;
-- system-admin cross-tenant or impersonation-like support actions.
+- system-admin cross-tenant or elevated support actions, including the reason and support-context reference. User impersonation is out of scope for the MVP.
 
 ## Integrity and access
 

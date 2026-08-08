@@ -1,13 +1,13 @@
 # Domain model
 
-Status: proposed conceptual model; not a Prisma schema
+Status: reconciled conceptual model; not a Prisma schema
 
 ## Bounded contexts
 
 | Context | Owns | Does not own |
 | --- | --- | --- |
-| Identity | Users, credentials, sessions, refresh tokens, memberships, roles, invitations, authentication audit | Students, teachers, courses, subjects, payments, grades |
-| Tenant configuration | Tenant lifecycle, tenant settings, theme tokens, external references | Identity credentials and academic work |
+| Identity | Users, credentials, sessions, refresh tokens, memberships, roles, invitations, authentication audit, minimal `TenantRealm` references | Students, teachers, courses, subjects, tenant academic configuration, payments, grades |
+| Tenant configuration | Académico tenant lifecycle, tenant settings, theme tokens, and the canonical ecosystem tenant ID reference | Identity credentials, Identity membership state, and academic work owned by other contexts |
 | Academic structure | Academic years, courses, students, teachers, subjects, enrollments, subject-teacher assignments | Authentication and learning content |
 | Learning | Learning units and typed learning items, publishing, ordering, item attachments | Identity and payment records |
 | Work and review | Submissions, submission files, reviews, comments, change requests | Grades and automatic evaluation |
@@ -40,11 +40,13 @@ erDiagram
 
 ## Entity rules
 
-- Every tenant-owned entity has an internal identifier and an immutable `tenantId`.
+- Every tenant-owned entity has an internal identifier and an immutable canonical ecosystem `tenantId`.
+- The Académico tenant record and Identity `TenantRealm` are service-owned records that use the same opaque ecosystem tenant ID; they are not shared tables or foreign-key relationships.
 - External identifiers are stored as explicit references, not as primary keys.
 - Soft deletion, archival, or status transitions must be chosen per aggregate; no global deletion convention is assumed.
 - Creation and update timestamps use a consistent timezone strategy once approved; API dates are ISO 8601.
-- Domain records should not contain credentials, refresh tokens, or payment details.
+- Domain records should not contain credentials, password hashes, refresh tokens, invitation/activation secrets, or payment details.
+- Student and Teacher records may store an optional stable `identityUserId` external reference. Académico explicitly initiates and owns that link; Identity never creates or owns the academic record.
 
 ## Aggregate candidates
 

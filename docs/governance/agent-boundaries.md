@@ -13,14 +13,14 @@ Owns monorepo layout, package conventions, shared configuration, environment val
 
 ## Agent B — EduPay Identity adapter
 
-Owns the application-side Identity client/adapter, token/session validation contract, membership context, invitation integration boundary, and authentication audit correlation. It does not own academic records or change existing EduPay admin login behavior.
+Owns the application-side Identity client/adapter, JWKS/JWT validation, canonical tenant and membership context, high-risk session-status check, invitation integration boundary, and authentication audit correlation. It does not own academic records, Identity credentials, or refresh tokens, and it does not change existing EduPay admin login behavior.
 
-**Depends on:** Identity contract and tenant-context decision.  
+**Depends on:** the reconciled Identity contract in [ADR-0009](../decisions/ADR-0009-identity-contract-reconciliation.md) and the approved Identity repository contract.
 **Must publish:** adapter contract, fake provider, failure semantics, integration tests.
 
 ## Agent C — tenancy and authorization foundation
 
-Owns request-scoped tenant context, authorization policy primitives, tenant-scoped repositories/constraints, elevated support context, and cross-tenant test fixtures.
+Owns request-scoped canonical tenant context, authorization policy primitives, tenant-scoped repositories/constraints, explicit elevated support context, and cross-tenant test fixtures. It must not treat a client `tenantId` as authorization context.
 
 **Depends on:** Agent A and Agent B contracts.  
 **Must publish:** rules for every tenant-owned access path and negative test helpers.

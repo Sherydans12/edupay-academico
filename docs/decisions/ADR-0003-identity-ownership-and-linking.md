@@ -1,6 +1,6 @@
 # ADR-0003: Identity ownership and optional academic links
 
-Status: Proposed; ownership split is mandated  
+Status: Proposed; ownership split is mandated; Identity linking contract reconciled by ADR-0009
 Date: 2026-08-08
 
 ## Context
@@ -25,6 +25,6 @@ EduPay Identity owns users, credentials, sessions, refresh tokens, memberships, 
 
 ## Open items before acceptance
 
-- Email uniqueness and identity matching.
-- Which service initiates link operations.
-- Existing-admin recognition and future migration plan.
+- Any merge/unlink behavior beyond the approved exact-link operation.
+
+Verified-email uniqueness, normalized tenant-realm username uniqueness, explicit Académico-initiated linking, restricted Identity lookup, and separate existing-admin coexistence are resolved for the current implementation boundary by [ADR-0009](ADR-0009-identity-contract-reconciliation.md). No automatic name-only or unverified-email linking may be added.

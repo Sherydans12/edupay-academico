@@ -1,9 +1,9 @@
 # EduPay Académico documentation
 
-Status: architecture baseline proposed for review  
+Status: reconciled architecture baseline for implementation bootstrap
 Repository state at baseline: empty; no application code, schema, tests, or prior documentation were found.
 
-This documentation governs the first implementation phase of EduPay Académico. It separates product scope from architectural constraints and records unresolved choices instead of hiding them in code.
+This documentation governs the first implementation phase of EduPay Académico. It separates product scope from architectural constraints, records the approved Identity integration contract, and keeps later unresolved choices explicit instead of hiding them in code.
 
 ## Reading order
 
@@ -30,6 +30,7 @@ This documentation governs the first implementation phase of EduPay Académico. 
 ## Canonical terms
 
 - **Tenant**: an institution or organization using EduPay Académico.
+- **Canonical ecosystem tenant ID**: one stable opaque tenant identifier used by Identity `TenantRealm`, the Académico tenant record, and future ecosystem services. Services own separate tenant records and databases; the identifier is an integration value, not a shared foreign key.
 - **Identity user**: a person managed by EduPay Identity.
 - **Student / teacher record**: an academic-domain record that may optionally link to an Identity user.
 - **Course**: a class/cohort inside an academic year, not a catalog subject.
@@ -41,5 +42,8 @@ This documentation governs the first implementation phase of EduPay Académico. 
 
 - The initial deployment is Colegio Conquistadores, but the product is multi-tenant from its first schema and request path.
 - EduPay Académico owns its own database and must never read or write EduPay tables directly.
-- EduPay Identity is a separate identity boundary; the existing EduPay admin login remains unchanged initially.
+- EduPay Identity is a separate identity boundary. It issues a short-lived access JWT with the active membership context; Académico owns academic authorization and never stores credentials or refresh tokens.
+- A client-provided `tenantId` is never authorization context. Tenant context comes from validated Identity claims or an approved high-risk status check.
+- The same canonical ecosystem tenant ID is used in Identity token claim `tenant_id` and Académico integration contracts, without shared tables or foreign keys.
+- The existing EduPay administrative login remains a separate trust domain initially.
 - The MVP does not include grades, attendance, exams, chat, live classes, or financial workflows.

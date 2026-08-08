@@ -28,6 +28,8 @@ For synchronized records, store an explicit external reference containing:
 - synchronization status/error summary;
 - optional source version or updated timestamp.
 
+The tenant mapping must resolve the source institution to the canonical ecosystem tenant ID. A source-system identifier, client-provided tenant selector, or synchronized academic record is never proof of Identity membership or authorization.
+
 Internal IDs remain the only IDs used by the academic API and UI.
 
 ## Candidate synchronization modes
@@ -61,4 +63,4 @@ The first implementation should choose the smallest mode supported reliably by t
 - Source of truth for each student/course field.
 - Tenant mapping between current EduPay institutions and new tenants.
 - Initial sync frequency and expected data volume.
-- Whether a sync can create Identity links or only academic records.
+- Synchronization may create or update only academic records and external references. It cannot silently create Identity links; Student/Teacher ↔ IdentityUser linking is an explicit Académico-initiated operation through the restricted Identity contract.
