@@ -1,0 +1,17 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+overrides:
+  '@nestjs/swagger>js-yaml': 5.2.3
+
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - esbuild
+  - prisma
+  - sharp
+
+ignoredBuiltDependencies:
+  - '@scarf/scarf'
+  - unrs-resolver

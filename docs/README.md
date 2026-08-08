@@ -19,6 +19,11 @@ This documentation governs the first implementation phase of EduPay Académico. 
 10. [Security](architecture/security.md), [audit strategy](architecture/audit-strategy.md), [testing strategy](architecture/testing-strategy.md), [deployment](architecture/deployment.md), and [definition of done](architecture/definition-of-done.md)
 11. [Roadmap](product/roadmap.md), [unresolved decisions](governance/unresolved-decisions.md), [risks](governance/risks.md), [implementation phases](governance/implementation-phases.md), and [agent boundaries](governance/agent-boundaries.md)
 
+## Implementation notes
+
+- [Platform bootstrap](governance/platform-bootstrap.md) records the Phase 0
+  package-manager, workspace, quality-gate, and application-shell choices.
+
 ## Documentation conventions
 
 - **Mandated** means directly required by the project brief and should be treated as a constraint.

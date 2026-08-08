@@ -1,0 +1,14 @@
+{
+  "name": "@edupay/config",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "typescript"
+  ],
+  "exports": {
+    "./typescript/base.json": "./typescript/base.json",
+    "./typescript/library.json": "./typescript/library.json",
+    "./typescript/nestjs.json": "./typescript/nestjs.json",
+    "./typescript/nextjs.json": "./typescript/nextjs.json"
+  }
+}

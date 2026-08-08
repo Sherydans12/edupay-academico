@@ -1,0 +1,14 @@
+{
+  "extends": "../../packages/config/typescript/nestjs.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "outDir": "dist"
+  },
+  "include": [
+    "prisma.config.ts",
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "vitest.config.mts"
+  ],
+  "exclude": ["dist", "node_modules", "src/generated"]
+}

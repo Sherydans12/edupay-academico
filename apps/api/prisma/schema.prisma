@@ -1,0 +1,11 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// No models are defined during platform bootstrap. Domain agents must add only
+// reviewed, tenant-scoped models and migrations after their governing decisions.

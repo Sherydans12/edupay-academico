@@ -1,0 +1,30 @@
+{
+  "name": "edupay-academico",
+  "version": "0.0.0",
+  "private": true,
+  "description": "EduPay Academico monorepo",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=10.0.0 <11"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @edupay/web --filter @edupay/api dev",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:validate": "pnpm --filter @edupay/api db:validate",
+    "db:generate": "pnpm --filter @edupay/api db:generate"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.0",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.66.0"
+  }
+}
