@@ -1,6 +1,7 @@
 # Learning model
 
-Status: proposed MVP content model
+Status: accepted MVP content model; implemented as recorded in
+[the implementation note](../governance/learning-content-domain.md)
 
 ## Hierarchy
 
@@ -28,7 +29,11 @@ and timelines across courses.
 
 ### Learning unit
 
-An ordered organizational container such as a topic, module, or period. It should support a title, description, ordering, visibility/lifecycle state, and tenant ownership.
+An ordered organizational container such as a topic, module, or period. It
+supports a title, description, ordering, optional absolute start/end instants,
+visibility/lifecycle state, and tenant ownership. `DRAFT`, `ACTIVE`, and
+`ARCHIVED` are stable values. Active units outside their optional time window
+are not shown on the student active route.
 
 ### Learning item
 
@@ -37,7 +42,7 @@ A typed unit with common metadata:
 - title and optional description/instructions;
 - parent learning unit and CourseSubject context;
 - ordering;
-- draft/published/archived lifecycle proposal;
+- `DRAFT`, `SCHEDULED`, `PUBLISHED`, and `ARCHIVED` publication lifecycle;
 - optional availability dates;
 - created/updated metadata;
 - attachment references where applicable.
@@ -63,7 +68,9 @@ Proposed baseline:
 - an item with a deadline should preserve the effective deadline used for already-created submissions;
 - edits to instructions or attachments after submission require audit history.
 
-The exact edit-after-publication policy is unresolved.
+Publication and sensitive edit confirmation are defined by
+[ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md).
+Submission revision, replacement, and deadline policy remain unresolved.
 
 ## Ordering and presentation
 

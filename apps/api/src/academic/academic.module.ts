@@ -31,6 +31,6 @@ import {
       useExisting: UnconfiguredAcademicIdentityLinkVerifier,
     },
   ],
-  exports: [AcademicService],
+  exports: [AcademicService, ACADEMIC_AUDIT_PORT],
 })
 export class AcademicModule {}

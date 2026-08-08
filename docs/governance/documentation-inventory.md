@@ -13,7 +13,7 @@ Status: baseline inventory
 | Architecture | [Identity model](../architecture/identity-model.md) | Identity ownership, canonical tenant ID, academic links, JWT/session boundary | Reconciled cross-repository contract |
 | Architecture | [Roles and authorization](../architecture/roles-and-authorization.md) | Approved MVP role matrix and academic resource policies | Reconciled MVP policy |
 | Architecture | [Academic model](../architecture/academic-model.md) | Academic years, courses, Subject catalog, CourseSubjects, enrollment, lifecycle, and sync/manual rules | Accepted terminology/lifecycle baseline |
-| Architecture | [Learning model](../architecture/learning-model.md) | CourseSubject/unit/item hierarchy and item-type behavior | Proposed within accepted CourseSubject context |
+| Architecture | [Learning model](../architecture/learning-model.md) | CourseSubject/unit/item hierarchy and item-type behavior | Accepted MVP; ADR-0012 implemented |
 | Architecture | [Submissions workflow](../architecture/submissions-workflow.md) | Submission, deadline, late, review, correction, and resubmission flow | Proposed / ADR candidate |
 | Architecture | [File storage](../architecture/file-storage.md) | Private storage, dual quotas, metadata/blobs/references, validation, authorization, accounting, and reconciliation | Accepted storage baseline |
 | Architecture | [Notifications](../architecture/notifications.md) | In-app/email abstraction, Resend adapter, reliability | Proposed |
@@ -30,7 +30,7 @@ Status: baseline inventory
 | Governance | [Risks](risks.md) | Risk register and mitigations | Open |
 | Governance | [Implementation phases](implementation-phases.md) | Work packages and sequencing constraints | Proposed |
 | Governance | [Agent boundaries](agent-boundaries.md) | Recommended parallel-agent seams and handoffs | Proposed |
-| Decisions | [ADR index](../decisions/README.md) | Proposed and accepted ADR status and review workflow | ADR-0005, ADR-0009, ADR-0010, and ADR-0011 accepted; later decisions open |
+| Decisions | [ADR index](../decisions/README.md) | Proposed and accepted ADR status and review workflow | ADR-0005, ADR-0009, ADR-0010, ADR-0011, and ADR-0012 accepted; later decisions open |
 
 ## Repository inspection result
 

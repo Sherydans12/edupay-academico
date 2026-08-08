@@ -22,6 +22,7 @@ Status: decision register; resolved rows are recorded for traceability and all r
 | D-16 | Colegio Conquistadores brand assets, localization, and theme-admin scope | Affects design tokens and first-pilot UX | Product + design + tenant | Phase 3 |
 | D-17 | Audit retention, field-level change history, and support access | Affects storage, privacy, and incident response | Security + operations | Phase 1/6 |
 | D-18 | MVP success targets and pilot cohort | Determines rollout and product validation | Product + tenant | Phase 0/6 |
+| D-19 | **Resolved 2026-08-08 by [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md):** Learning unit/item publication, effective scheduled visibility, sensitive edit confirmation, CourseSubject authorization, and scoped ordering | Defines student visibility and safe content mutation before submissions exist | Product + teaching lead + security | Resolved for Learning MVP |
 
 ## Reconciliation decisions now fixed
 
@@ -31,6 +32,7 @@ Status: decision register; resolved rows are recorded for traceability and all r
 - Existing EduPay administrative authentication remains a separate trust domain. User impersonation is out of scope for the MVP.
 - Course/subject terminology and lifecycle are fixed by [ADR-0010](../decisions/ADR-0010-course-subject-and-lifecycle.md): `Subject` is a reusable catalog entry; `CourseSubject` is the course-specific teaching/learning context; teacher, learning, and direct student relationships target `CourseSubject`.
 - API/shared-contract strategy is fixed by [ADR-0011](../decisions/ADR-0011-api-and-shared-contract-strategy.md): REST/JSON `/api/v1`, camelCase, opaque IDs, ISO 8601 timestamps, stable errors, OpenAPI boundary, Zod 4 schemas in `packages/contracts`, a thin hand-written client, an opaque cursor envelope, and endpoint-specific idempotency.
+- Learning publication and edit semantics are fixed for this MVP by [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md). This does not close D-08, D-09, or D-10.
 
 These resolutions do not close D-05, D-06, D-08, D-09, D-10, D-11, D-12, D-13, D-15, D-16, D-17, or D-18. Submission revision, replacement, draft, and post-review behavior remains a later-phase product/teaching decision.
 

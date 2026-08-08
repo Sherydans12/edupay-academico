@@ -41,7 +41,7 @@ Owns CourseSubject learning units, typed learning items, publication/lifecycle
 behavior, ordering, and teacher authoring APIs/UI. It must not attach learning
 content directly to the reusable Subject catalog.
 
-**Depends on:** academic domain and approved publication rules.  
+**Depends on:** academic domain and [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md).
 **Must not:** implement submission state before ADR-0006 is accepted.
 
 ## Agent F — student workspace and design system
