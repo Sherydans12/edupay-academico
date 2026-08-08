@@ -7,5 +7,242 @@ datasource db {
   provider = "postgresql"
 }
 
-// No models are defined during platform bootstrap. Domain agents must add only
-// reviewed, tenant-scoped models and migrations after their governing decisions.
+enum AcademicYearStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum CourseStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum PersonStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SubjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum CourseSubjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum RelationshipStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Tenant {
+  id        String   @id @db.VarChar(128)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  academicYears             AcademicYear[]
+  courses                   Course[]
+  students                  Student[]
+  teachers                  Teacher[]
+  subjects                  Subject[]
+  courseSubjects            CourseSubject[]
+  courseEnrollments         CourseEnrollment[]
+  studentSubjectEnrollments StudentSubjectEnrollment[]
+  courseSubjectTeachers     CourseSubjectTeacher[]
+
+  @@map("tenants")
+}
+
+model AcademicYear {
+  id              String             @default(uuid()) @db.Uuid
+  tenantId        String             @map("tenant_id") @db.VarChar(128)
+  paginationToken String             @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  label           String             @db.VarChar(160)
+  startDate       DateTime           @map("start_date") @db.Date
+  endDate         DateTime           @map("end_date") @db.Date
+  status          AcademicYearStatus @default(DRAFT)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  courses Course[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, label])
+  @@index([tenantId, status, startDate])
+  @@map("academic_years")
+}
+
+model Course {
+  id              String       @default(uuid()) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.VarChar(128)
+  academicYearId  String       @map("academic_year_id") @db.Uuid
+  paginationToken String       @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  label           String       @db.VarChar(160)
+  status          CourseStatus @default(DRAFT)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  academicYear   AcademicYear       @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
+  courseSubjects CourseSubject[]
+  enrollments    CourseEnrollment[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, academicYearId, label])
+  @@index([tenantId, academicYearId, status, label])
+  @@map("courses")
+}
+
+model Student {
+  id                String       @default(uuid()) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.VarChar(128)
+  paginationToken   String       @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  identityUserId    String?      @map("identity_user_id") @db.VarChar(128)
+  source            String       @default("MANUAL") @db.VarChar(80)
+  externalReference String?      @map("external_reference") @db.VarChar(200)
+  firstName         String       @map("first_name") @db.VarChar(120)
+  lastName          String       @map("last_name") @db.VarChar(120)
+  email             String?      @db.VarChar(320)
+  status            PersonStatus @default(ACTIVE)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant             Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  courseEnrollments  CourseEnrollment[]
+  subjectEnrollments StudentSubjectEnrollment[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, identityUserId])
+  @@unique([tenantId, source, externalReference])
+  @@index([tenantId, status, lastName, firstName])
+  @@map("students")
+}
+
+model Teacher {
+  id                String       @default(uuid()) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.VarChar(128)
+  paginationToken   String       @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  identityUserId    String?      @map("identity_user_id") @db.VarChar(128)
+  source            String       @default("MANUAL") @db.VarChar(80)
+  externalReference String?      @map("external_reference") @db.VarChar(200)
+  firstName         String       @map("first_name") @db.VarChar(120)
+  lastName          String       @map("last_name") @db.VarChar(120)
+  email             String?      @db.VarChar(320)
+  status            PersonStatus @default(ACTIVE)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  assignments CourseSubjectTeacher[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, identityUserId])
+  @@unique([tenantId, source, externalReference])
+  @@index([tenantId, status, lastName, firstName])
+  @@map("teachers")
+}
+
+model Subject {
+  id              String        @default(uuid()) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.VarChar(128)
+  paginationToken String        @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  name            String        @db.VarChar(160)
+  status          SubjectStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  courseSubjects CourseSubject[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, name])
+  @@index([tenantId, status, name])
+  @@map("subjects")
+}
+
+model CourseSubject {
+  id               String              @default(uuid()) @db.Uuid
+  tenantId         String              @map("tenant_id") @db.VarChar(128)
+  courseId         String              @map("course_id") @db.Uuid
+  subjectId        String              @map("subject_id") @db.Uuid
+  paginationToken  String              @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  defaultForCourse Boolean             @default(true) @map("default_for_course")
+  sortOrder        Int                 @default(0) @map("sort_order")
+  status           CourseSubjectStatus @default(ACTIVE)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant             Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  course             Course                     @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  subject            Subject                    @relation(fields: [tenantId, subjectId], references: [tenantId, id], onDelete: Restrict)
+  directEnrollments  StudentSubjectEnrollment[]
+  teacherAssignments CourseSubjectTeacher[]
+
+  @@id([tenantId, id])
+  @@index([tenantId, courseId, status, sortOrder])
+  @@index([tenantId, subjectId, status])
+  @@map("course_subjects")
+}
+
+model CourseEnrollment {
+  id        String             @default(uuid()) @db.Uuid
+  tenantId  String             @map("tenant_id") @db.VarChar(128)
+  studentId String             @map("student_id") @db.Uuid
+  courseId  String             @map("course_id") @db.Uuid
+  status    RelationshipStatus @default(ACTIVE)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  student Student @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
+  course  Course  @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, courseId, status, studentId])
+  @@index([tenantId, studentId, status, courseId])
+  @@map("course_enrollments")
+}
+
+model StudentSubjectEnrollment {
+  id              String             @default(uuid()) @db.Uuid
+  tenantId        String             @map("tenant_id") @db.VarChar(128)
+  studentId       String             @map("student_id") @db.Uuid
+  courseSubjectId String             @map("course_subject_id") @db.Uuid
+  status          RelationshipStatus @default(ACTIVE)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  student       Student       @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
+  courseSubject CourseSubject @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, studentId, status, courseSubjectId])
+  @@index([tenantId, courseSubjectId, status, studentId])
+  @@map("student_subject_enrollments")
+}
+
+model CourseSubjectTeacher {
+  id              String             @default(uuid()) @db.Uuid
+  tenantId        String             @map("tenant_id") @db.VarChar(128)
+  teacherId       String             @map("teacher_id") @db.Uuid
+  courseSubjectId String             @map("course_subject_id") @db.Uuid
+  status          RelationshipStatus @default(ACTIVE)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  teacher       Teacher       @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Restrict)
+  courseSubject CourseSubject @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, teacherId, status, courseSubjectId])
+  @@index([tenantId, courseSubjectId, status, teacherId])
+  @@map("course_subject_teachers")
+}

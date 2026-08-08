@@ -1,11 +1,11 @@
 # Academic model
 
-Status: accepted terminology and lifecycle baseline; implementation remains pending
+Status: accepted terminology and lifecycle baseline; MVP Academic Structure implementation present
 
 The terminology and lifecycle baseline in this document is accepted by
 [ADR-0010](../decisions/ADR-0010-course-subject-and-lifecycle.md). This is a
-conceptual model, not permission to add Academic Domain persistence during the
-Phase 1 foundation integration.
+conceptual model. Its MVP Academic Structure subset is implemented as recorded
+in [the implementation note](../governance/academic-structure-domain.md).
 
 ## Concepts
 

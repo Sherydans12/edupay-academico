@@ -28,4 +28,8 @@ export class CurrentRequestContext {
     }
     return this.request.tenantContext;
   }
+
+  requestId(): string {
+    return this.request.requestId ?? 'unavailable';
+  }
 }

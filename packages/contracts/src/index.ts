@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export * from './academic';
+
 export const apiErrorDetailSchema = z
   .object({
     field: z.string().optional(),

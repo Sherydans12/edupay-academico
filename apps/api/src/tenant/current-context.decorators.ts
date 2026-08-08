@@ -30,3 +30,8 @@ export const CurrentTenant = createParamDecorator(
     return tenantContext;
   },
 );
+
+export const CurrentRequestId = createParamDecorator(
+  (_data: unknown, context: ExecutionContext): string =>
+    context.switchToHttp().getRequest<Request>().requestId ?? 'unavailable',
+);

@@ -1,9 +1,8 @@
 # EduPay Academico
 
 EduPay Academico is a multi-tenant academic service. This repository contains
-the approved platform bootstrap and the Phase 1 Identity-consumer and
-tenant-authorization foundation. Product and academic capabilities are
-introduced in later governed phases.
+the approved platform bootstrap, Identity-consumer and tenant-authorization
+foundation, and the MVP Academic Structure domain.
 
 The architecture and implementation constraints in [AGENTS.md](AGENTS.md) and
 [docs/README.md](docs/README.md) are authoritative.
@@ -75,9 +74,9 @@ pnpm --filter @edupay/api db:migrate:dev
 pnpm --filter @edupay/api db:migrate:deploy
 ```
 
-No database model or initial migration exists yet. Domain agents must introduce
-reviewed tenant-scoped models and migrations rather than deriving schema from
-this placeholder boundary.
+The initial Academic Structure migration is tenant-scoped and includes
+composite tenant foreign keys plus reviewed PostgreSQL constraints. See the
+[academic persistence notes](apps/api/prisma/README.md).
 
 ## Configuration and trust boundaries
 
