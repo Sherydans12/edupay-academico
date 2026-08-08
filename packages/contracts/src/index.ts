@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export * from './academic';
 export * from './learning';
+export * from './storage';
+export * from './submissions';
 
 export const apiErrorDetailSchema = z
   .object({

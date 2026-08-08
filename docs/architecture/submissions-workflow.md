@@ -1,53 +1,53 @@
 # Submissions workflow
 
-Status: proposed workflow; revision semantics are an ADR candidate
+Status: accepted MVP workflow; semantics are fixed by ADR-0013
 
 ## MVP behavior
 
-Students can upload multiple files and an optional comment for an assignment or document-based assessment. They can submit after the deadline. Late submissions remain valid and receive a recorded late flag. Teachers can review, comment, and request changes. No grades are produced.
+Students can upload one or more files and an optional comment for a published assignment or document-based assessment. They can submit after the deadline. Late submissions remain valid and receive a recorded late flag. Teachers can review, comment, and request changes. No grades are produced.
 
-## Proposed state model
+## Accepted state model
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT
-    DRAFT --> SUBMITTED: student submits
+    [*] --> PENDING
+    PENDING --> SUBMITTED: student submits revision 1
     SUBMITTED --> REVIEWED: teacher reviews
     SUBMITTED --> CHANGES_REQUESTED: teacher requests changes
-    CHANGES_REQUESTED --> RESUBMITTED: student submits revision
-    RESUBMITTED --> REVIEWED: teacher reviews
-    RESUBMITTED --> CHANGES_REQUESTED: teacher requests more changes
-    REVIEWED --> CHANGES_REQUESTED: teacher reopens for changes
+    CHANGES_REQUESTED --> SUBMITTED: student submits new revision
+    SUBMITTED --> REVIEWED: teacher reviews new revision
+    SUBMITTED --> CHANGES_REQUESTED: teacher requests more changes
 ```
 
-The labels are workflow states, not grades or pass/fail judgments. Whether `REVIEWED` means “accepted” or simply “teacher completed a review” must be agreed before UI copy is finalized.
+The labels are workflow states, not grades or pass/fail judgments. `REVIEWED`
+means the teacher completed review; it does not create a grade or score.
 
-## Proposed persistence behavior
+## Accepted persistence behavior
 
 Treat a student’s work for one learning item as one logical submission with a revision history:
 
-- a draft can contain staged files and a comment;
+- the MVP does not persist server-side student drafts;
 - submission creates an immutable revision snapshot;
 - each revision records submitted time, effective deadline, late flag, files, and comment;
 - teacher reviews attach to a specific revision;
 - a change request allows a new revision without erasing prior work.
 
-This supports corrections and an audit trail, but it is a proposed design and must be confirmed in [ADR-0006](../decisions/ADR-0006-submission-revision-and-review-state.md).
+This supports corrections and an audit trail as accepted in [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md).
 
 ## Deadline rules
 
 - The server records the authoritative submission timestamp.
-- Late status is computed against the item deadline and a tenant-approved timezone/clock policy.
+- Late status is computed against the item dueAt absolute instant.
 - Client clock values are never authoritative.
 - The API must permit late submission unless a future explicit policy says otherwise.
-- Deadline changes after submission require an audit record and a policy for whether late status is recomputed.
+- Deadline changes after submission do not rewrite effectiveDueAt or isLate on historical revisions.
 
 ## File rules
 
 - Multiple files per revision are supported.
 - File metadata is associated with the revision that submitted it.
 - A teacher can download only after resource authorization.
-- Replacing a file creates a new revision or draft change according to the approved policy; it must not silently mutate reviewed history.
+- Replacing a file creates a new revision after CHANGES_REQUESTED; it must not silently mutate reviewed history.
 
 ## Notifications and audit events
 
@@ -61,7 +61,7 @@ Candidate events:
 
 Each event should carry tenant, actor, resource, revision, and correlation identifiers. Notification delivery is asynchronous and must not be part of the transaction that determines whether a submission was accepted.
 
-## Unresolved workflow decisions
+## Deferred workflow decisions
 
 - One logical submission with revisions versus multiple independent attempts.
 - Whether students can save drafts before the first submission.

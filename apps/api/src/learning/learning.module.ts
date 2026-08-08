@@ -2,10 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AcademicModule } from '../academic/academic.module';
 import { SecurityFoundationModule } from '../security/security-foundation.module';
-import {
-  LEARNING_STUDENT_WORK_PORT,
-  NoSubmissionStudentWorkPort,
-} from './learning-student-work.port';
+import { StorageModule } from '../storage/storage.module';
 import {
   LearningManagementController,
   LearningReadController,
@@ -13,14 +10,10 @@ import {
 import { LearningService } from './learning.service';
 
 @Module({
-  imports: [SecurityFoundationModule, AcademicModule],
+  imports: [SecurityFoundationModule, AcademicModule, StorageModule],
   controllers: [LearningManagementController, LearningReadController],
   providers: [
     LearningService,
-    {
-      provide: LEARNING_STUDENT_WORK_PORT,
-      useClass: NoSubmissionStudentWorkPort,
-    },
   ],
   exports: [LearningService],
 })
