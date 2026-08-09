@@ -26,6 +26,29 @@ Components may share infrastructure in early environments, but ownership and fai
 
 Environment configuration must be externalized and validated at startup. Missing required configuration should fail clearly rather than silently disabling security or tenant checks.
 
+## Browser Identity topology
+
+The Académico web deployment configures two independent public boundaries:
+
+- `NEXT_PUBLIC_API_BASE_URL` points to the versioned Académico API base, ending in `/api/v1`.
+- `NEXT_PUBLIC_IDENTITY_BASE_URL` is the EduPay Identity origin, without an API path. Browser login, refresh, logout, activation, recovery, and membership requests are resolved against this origin.
+
+The exact user-facing Académico frontend origin must also be present in Identity's
+`IDENTITY_TRUSTED_WEB_ORIGINS`. Identity reflects credentialed CORS only for exact
+trusted origins and does not implicitly trust localhost. Cross-site HTTPS deployments
+must coordinate Identity's secure cookie `SameSite` setting with the accepted browser-
+session ADR; the frontend does not bypass Origin or CORS checks.
+
+For the deployment topology where Académico serves the account pages, Identity's
+`IDENTITY_PUBLIC_BASE_URL` must be the public web origin that serves `/activate` and
+`/reset-password`, not the Identity API origin. Identity invitation and recovery emails
+currently construct links under those exact routes. Production domains remain an
+operator-approved environment choice and are not committed to this repository.
+
+The access JWT exists only in the running frontend provider's memory. The rotating
+refresh credential remains in Identity's host-only `HttpOnly` cookie and is never read,
+copied, logged, persisted, or sent to Académico by frontend code.
+
 ## Database operations
 
 - All schema changes are reviewed migrations.

@@ -7,9 +7,11 @@ describe('validateClientEnvironment', () => {
     expect(
       validateClientEnvironment({
         NEXT_PUBLIC_API_BASE_URL: 'http://localhost:3001/api/v1',
+        NEXT_PUBLIC_IDENTITY_BASE_URL: 'http://localhost:3000',
       }),
     ).toEqual({
       NEXT_PUBLIC_API_BASE_URL: 'http://localhost:3001/api/v1',
+      NEXT_PUBLIC_IDENTITY_BASE_URL: 'http://localhost:3000',
     });
   });
 
@@ -17,5 +19,12 @@ describe('validateClientEnvironment', () => {
     expect(() => validateClientEnvironment({})).toThrow(
       /Client environment validation failed/,
     );
+  });
+
+  it('rejects an Identity URL with an application path', () => {
+    expect(() => validateClientEnvironment({
+      NEXT_PUBLIC_API_BASE_URL: 'http://localhost:3001/api/v1',
+      NEXT_PUBLIC_IDENTITY_BASE_URL: 'https://identity.example.test/api/v1',
+    })).toThrow(/NEXT_PUBLIC_IDENTITY_BASE_URL/);
   });
 });

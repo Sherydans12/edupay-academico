@@ -13,6 +13,7 @@ const storageFile = { id: '00000000-0000-4000-8000-000000000021', originalFilena
 const uploadIntent = { id: uploadIntentId, parentType: 'LEARNING_ITEM' as const, parentId: learningItem.id, category: 'STUDENT_SUBMISSION' as const, filename: 'trabajo.pdf', mimeType: 'application/pdf', sizeBytes: 12, status: 'RESERVED' as const, expiresAt: '2026-08-08T12:15:00+00:00', upload: { method: 'POST' as const, path: `/api/v1/file-upload-intents/${uploadIntentId}/content`, fieldName: 'file' as const, maxSizeBytes: 25_000_000 as const } };
 const submission = { id: '00000000-0000-4000-8000-000000000022', studentId: id, learningItemId: learningItem.id, status: 'SUBMITTED' as const, createdAt: timestamp, updatedAt: timestamp, revisions: [] };
 const notification = { id: '00000000-0000-4000-8000-000000000030', eventId: 'event-assignment-1', type: 'ASSIGNMENT_PUBLISHED' as const, title: 'Nueva actividad de Lenguaje', body: 'La actividad "Reseña literaria" ya está publicada.', targetPath: '/estudiante/asignaturas/lenguaje/items/resena-literaria', createdAt: timestamp, readAt: null };
+const student = { id, identityUserId: null, source: 'MANUAL', externalReference: null, firstName: 'Sofía', lastName: 'Herrera', email: null, status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp };
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -47,6 +48,7 @@ describe('AcademicApiClient', () => {
   });
 
   it('refreshes once after an expired access token and retries the request', async () => {
+    session.refreshAccessToken.mockClear();
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(response({ error: { code: 'TOKEN_INVALID', message: 'expired', details: [], requestId: 'req-1' } }, 401))
       .mockResolvedValueOnce(response({ items: [year], nextCursor: null }));
@@ -55,6 +57,28 @@ describe('AcademicApiClient', () => {
     await expect(client.listAcademicYears()).resolves.toMatchObject({ items: [year] });
     expect(session.refreshAccessToken).toHaveBeenCalledOnce();
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes but does not blindly replay a non-idempotent mutation', async () => {
+    const localSession = { ...session, refreshAccessToken: vi.fn(async () => 'replacement-token') };
+    const fetchImpl = vi.fn(async () => response({ error: { code: 'TOKEN_INVALID', message: 'expired', details: [], requestId: 'req-1' } }, 401));
+    const client = new AcademicApiClient({ baseUrl: 'http://localhost:3001/api/v1', fetchImpl, sessionAdapter: localSession });
+
+    await expect(client.createStudent({ firstName: 'Sofía', lastName: 'Herrera' })).rejects.toMatchObject({ code: 'AUTH_REFRESHED_RETRY_REQUIRED' });
+    expect(localSession.refreshAccessToken).toHaveBeenCalledOnce();
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('uses idempotent PUT identity-link contracts and can retry them once after refresh', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response({ error: { code: 'TOKEN_INVALID', message: 'expired', details: [], requestId: 'req-1' } }, 401))
+      .mockResolvedValueOnce(response({ ...student, identityUserId: 'identity-user-1' }));
+    const localSession = { ...session, refreshAccessToken: vi.fn(async () => 'replacement-token') };
+    const client = new AcademicApiClient({ baseUrl: 'http://localhost:3001/api/v1', fetchImpl, sessionAdapter: localSession });
+
+    await expect(client.linkStudentIdentity(id, { identityUserId: 'identity-user-1' })).resolves.toMatchObject({ identityUserId: 'identity-user-1' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ identityUserId: 'identity-user-1' }) });
   });
 
   it('fails closed when no Identity adapter can provide an access token', async () => {

@@ -224,5 +224,6 @@ export function StudentAssignmentScreen({ api, courseSubjectId, learningItemId, 
 }
 
 export function StudentPlaceholderScreen({ title }: { title: string }) {
-  return <StudentShell session={demoSessions.student}><PageHeading description="Esta navegación está preparada para una fase posterior del MVP." title={title} /><Card className="placeholder-panel"><Icon name="layers" /><h2>Fundación lista</h2><p>La ruta existe para validar el shell responsive, pero su flujo aún no está implementado ni conectado a datos académicos.</p><Button disabled>Disponible más adelante</Button></Card></StudentShell>;
+  const session = useTrustedCurrentSession(demoSessions.student).session;
+  return <StudentShell session={session}><PageHeading description="Esta navegación está preparada para una fase posterior del MVP." title={title} /><Card className="placeholder-panel"><Icon name="layers" /><h2>Fundación lista</h2><p>La ruta existe para validar el shell responsive, pero su flujo aún no está implementado ni conectado a datos académicos.</p><Button disabled>Disponible más adelante</Button></Card></StudentShell>;
 }

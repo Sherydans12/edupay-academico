@@ -2,12 +2,13 @@
 
 import { Avatar, DropdownItem, DropdownMenu } from '@edupay/ui';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 
 import { createAcademicApiClient } from '@/api/client-factory';
 import { getIdentitySessionAdapter, type CurrentSessionConsumerProps, type WorkspaceKind } from '@/auth/current-session';
+import { destinationForRoles, useIdentitySession } from '@/auth/session-provider';
 import { Icon, type IconName } from '@/components/icons';
 import { NotificationCenter, type NotificationApiClient } from '@/components/notification-center';
 
@@ -46,6 +47,8 @@ function isCurrentPath(pathname: string, href: string) {
 
 export function AppShell({ children, dataMode = 'demo', notificationsApi, session }: CurrentSessionConsumerProps & { children: ReactNode; dataMode?: 'demo' | 'real'; notificationsApi?: NotificationApiClient }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const identity = useIdentitySession();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigation = workspaceNavigation[session.workspace];
   const defaultNotificationsApi = useMemo(() => dataMode === 'real' && getIdentitySessionAdapter() ? createAcademicApiClient() : undefined, [dataMode]);
@@ -58,7 +61,7 @@ export function AppShell({ children, dataMode = 'demo', notificationsApi, sessio
         <div className="brand-lockup">
           <div aria-label="Espacio para logo institucional aprobado" className="brand-mark" role="img">CC</div>
           <div className="brand-copy">
-            <strong>Colegio Conquistadores</strong>
+            <strong>{session.tenantDisplayName}</strong>
             <span>EduPay Académico</span>
           </div>
           <button aria-label="Cerrar navegación" className="sidebar-close" onClick={() => setMobileOpen(false)} type="button">
@@ -79,7 +82,7 @@ export function AppShell({ children, dataMode = 'demo', notificationsApi, sessio
         <div className="sidebar-context">
           <span>Espacio activo</span>
           <strong>{session.roleLabel}</strong>
-          <p>La autorización real será validada por el servidor.</p>
+          <p>Identity y Académico validan cada acción en el servidor.</p>
         </div>
       </aside>
 
@@ -107,15 +110,20 @@ export function AppShell({ children, dataMode = 'demo', notificationsApi, sessio
                 </span>
               }
             >
-              <DropdownItem>Mi perfil</DropdownItem>
-              <DropdownItem>Preferencias</DropdownItem>
-              <DropdownItem>Ir a EduPay Identity</DropdownItem>
+              {identity?.memberships.filter((membership) => membership.membershipId !== session.membershipId).map((membership) => (
+                <DropdownItem key={membership.membershipId} onSelect={() => {
+                  void identity.switchMembership(membership.membershipId).then((nextSession) => {
+                    router.push(destinationForRoles(nextSession.roles));
+                  });
+                }}>Cambiar a {membership.tenantHandle}</DropdownItem>
+              ))}
+              <DropdownItem onSelect={() => void identity?.logout()}>Cerrar sesión</DropdownItem>
             </DropdownMenu>
           </div>
         </header>
         <div className={`demo-banner demo-banner--${dataMode}`} role="status">
           <span>{dataMode === 'real' ? 'Datos académicos y de aprendizaje reales' : 'Vista de demostración'}</span>
-          <p>{dataMode === 'real' ? 'La estructura y las rutas de aprendizaje se cargan desde Academic Structure y Learning API. Entregas aún no conectadas.' : 'Contenido local para validar la experiencia; aprendizaje aún aislado del backend.'}</p>
+          <p>{dataMode === 'real' ? 'La información se carga con tu contexto activo de Identity y la autorización final del API Académico.' : 'Contenido local aislado para validar componentes.'}</p>
         </div>
         <main className="app-content" id="main-content" tabIndex={-1}>{children}</main>
       </div>

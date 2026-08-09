@@ -1,3 +1,7 @@
+import { useContext, useEffect, useState } from 'react';
+
+import { IdentitySessionContext } from './session-context';
+
 export type WorkspaceKind = 'student' | 'teacher' | 'tenant-admin';
 export type IdentityRole = 'SYSTEM_ADMIN' | 'TENANT_ADMIN' | 'TEACHER' | 'STUDENT';
 
@@ -52,10 +56,12 @@ export function useTrustedCurrentSession(fallback: TrustedCurrentSession): {
   loading: boolean;
   session: TrustedCurrentSession;
 } {
+  const context = useContext(IdentitySessionContext);
   const [session, setSession] = useState(fallback);
   const [loading, setLoading] = useState(Boolean(activeSessionAdapter));
 
   useEffect(() => {
+    if (context?.session) return;
     const adapter = activeSessionAdapter;
     if (!adapter) {
       return;
@@ -71,8 +77,9 @@ export function useTrustedCurrentSession(fallback: TrustedCurrentSession): {
     return () => {
       mounted = false;
     };
-  }, [fallback]);
+  }, [context?.session, fallback]);
 
-  return { loading, session };
+  return context?.session
+    ? { loading: false, session: context.session }
+    : { loading, session };
 }
-import { useEffect, useState } from 'react';
