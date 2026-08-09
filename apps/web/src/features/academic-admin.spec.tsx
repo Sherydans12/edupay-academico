@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AcademicApiError, type AcademicApiClient } from '@/api/academic-client';
 import { AcademicAdminScreen } from '@/features/academic-admin';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/administracion/estructura' }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/administracion/estructura', useRouter: () => ({ push: () => undefined }) }));
 
 const id = '00000000-0000-4000-8000-000000000001';
 const timestamp = '2026-08-08T12:00:00+00:00';

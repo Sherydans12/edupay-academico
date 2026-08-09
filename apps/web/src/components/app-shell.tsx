@@ -4,10 +4,12 @@ import { Avatar, DropdownItem, DropdownMenu } from '@edupay/ui';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import type { CurrentSessionConsumerProps, WorkspaceKind } from '@/auth/current-session';
+import { createAcademicApiClient } from '@/api/client-factory';
+import { getIdentitySessionAdapter, type CurrentSessionConsumerProps, type WorkspaceKind } from '@/auth/current-session';
 import { Icon, type IconName } from '@/components/icons';
+import { NotificationCenter, type NotificationApiClient } from '@/components/notification-center';
 
 interface NavigationItem {
   href: string;
@@ -42,10 +44,12 @@ function isCurrentPath(pathname: string, href: string) {
   return href.split('/').filter(Boolean).length > 1 && pathname.startsWith(`${href}/`);
 }
 
-export function AppShell({ children, dataMode = 'demo', session }: CurrentSessionConsumerProps & { children: ReactNode; dataMode?: 'demo' | 'real' }) {
+export function AppShell({ children, dataMode = 'demo', notificationsApi, session }: CurrentSessionConsumerProps & { children: ReactNode; dataMode?: 'demo' | 'real'; notificationsApi?: NotificationApiClient }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigation = workspaceNavigation[session.workspace];
+  const defaultNotificationsApi = useMemo(() => dataMode === 'real' && getIdentitySessionAdapter() ? createAcademicApiClient() : undefined, [dataMode]);
+  const notificationApi = notificationsApi ?? defaultNotificationsApi;
 
   return (
     <div className="app-shell">
@@ -92,10 +96,7 @@ export function AppShell({ children, dataMode = 'demo', session }: CurrentSessio
             <kbd>⌘ K</kbd>
           </button>
           <div className="topbar-actions">
-            <button aria-label="Notificaciones, 3 sin leer; vista no interactiva" className="topbar-icon notification-button" disabled title="Las notificaciones se conectarán en una fase posterior" type="button">
-              <Icon name="bell" />
-              <span className="notification-dot">3</span>
-            </button>
+            <NotificationCenter api={notificationApi} />
             <DropdownMenu
               label="Cuenta"
               trigger={

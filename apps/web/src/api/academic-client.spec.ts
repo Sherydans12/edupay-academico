@@ -12,6 +12,7 @@ const uploadIntentId = '00000000-0000-4000-8000-000000000020';
 const storageFile = { id: '00000000-0000-4000-8000-000000000021', originalFilename: 'trabajo.pdf', sizeBytes: 12, declaredMime: 'application/pdf', detectedMime: 'application/pdf', extension: '.pdf', category: 'STUDENT_SUBMISSION' as const, createdAt: timestamp };
 const uploadIntent = { id: uploadIntentId, parentType: 'LEARNING_ITEM' as const, parentId: learningItem.id, category: 'STUDENT_SUBMISSION' as const, filename: 'trabajo.pdf', mimeType: 'application/pdf', sizeBytes: 12, status: 'RESERVED' as const, expiresAt: '2026-08-08T12:15:00+00:00', upload: { method: 'POST' as const, path: `/api/v1/file-upload-intents/${uploadIntentId}/content`, fieldName: 'file' as const, maxSizeBytes: 25_000_000 as const } };
 const submission = { id: '00000000-0000-4000-8000-000000000022', studentId: id, learningItemId: learningItem.id, status: 'SUBMITTED' as const, createdAt: timestamp, updatedAt: timestamp, revisions: [] };
+const notification = { id: '00000000-0000-4000-8000-000000000030', eventId: 'event-assignment-1', type: 'ASSIGNMENT_PUBLISHED' as const, title: 'Nueva actividad de Lenguaje', body: 'La actividad "Reseña literaria" ya está publicada.', targetPath: '/estudiante/asignaturas/lenguaje/items/resena-literaria', createdAt: timestamp, readAt: null };
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -129,5 +130,24 @@ describe('AcademicApiClient', () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(4, expect.stringContaining(`/files/${storageFile.id}/download`), expect.objectContaining({ headers: expect.anything() }));
     expect(downloaded.filename).toBe('trabajo.pdf');
     await expect(downloaded.blob.text()).resolves.toContain('private file bytes');
+  });
+
+  it('uses the shared notification contracts for count, cursor pagination, and read mutations', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response({ count: 2 }))
+      .mockResolvedValueOnce(response({ items: [notification], nextCursor: 'opaque-next-cursor' }))
+      .mockResolvedValueOnce(response({ ...notification, readAt: timestamp }))
+      .mockResolvedValueOnce(response({ updatedCount: 1 }));
+    const client = new AcademicApiClient({ baseUrl: 'http://localhost:3001/api/v1', fetchImpl, sessionAdapter: session });
+
+    await expect(client.getUnreadNotificationCount()).resolves.toEqual({ count: 2 });
+    await expect(client.listNotifications('opaque-cursor', 20)).resolves.toMatchObject({ items: [notification], nextCursor: 'opaque-next-cursor' });
+    await expect(client.markNotificationRead(notification.id)).resolves.toMatchObject({ id: notification.id, readAt: timestamp });
+    await expect(client.markAllNotificationsRead()).resolves.toEqual({ updatedCount: 1 });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, 'http://localhost:3001/api/v1/notifications/unread-count', expect.anything());
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'http://localhost:3001/api/v1/notifications?cursor=opaque-cursor&limit=20', expect.anything());
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, `http://localhost:3001/api/v1/notifications/${notification.id}/read`, expect.objectContaining({ method: 'PATCH' }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(4, 'http://localhost:3001/api/v1/notifications/read-all', expect.objectContaining({ method: 'POST' }));
   });
 });
