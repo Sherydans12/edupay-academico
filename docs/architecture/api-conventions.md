@@ -110,6 +110,12 @@ The exact route list belongs in the API contract, but the families are expected 
 - integration/sync status for authorized operators;
 - explicit support operations that require the approved elevated context.
 
+Notification routes are tenant/principal-scoped and use shared Zod contracts:
+`GET /api/v1/notifications`, `PATCH /api/v1/notifications/:notificationId/read`,
+`POST /api/v1/notifications/read-all`, and
+`GET /api/v1/notifications/unread-count`. Notification cursors are opaque and
+another user’s or tenant’s notification ID is not disclosed.
+
 Upload control-plane requests use JSON metadata and return an opaque
 `uploadIntentId` with an expiry and bounded upload instructions. File bytes use
 the dedicated content endpoint as one-file `multipart/form-data`; bytes are not

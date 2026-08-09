@@ -48,6 +48,13 @@ A typed unit with common metadata:
 - attachment references where applicable. Storage owns the immutable
   FileObject/FileReference records; LearningItems never store filesystem paths.
 
+Publication of an immediately published ASSIGNMENT or ASSESSMENT creates a
+transactional academic notification intent for eligible students. Announcement
+publication may create an in-app intent; MATERIAL publication does not email.
+Scheduled publication never notifies at scheduling time. After `publishAt`, the
+notification worker may materialize the event idempotently while student
+visibility remains correct through the existing effective-visibility query.
+
 ## Item types
 
 | Type | MVP behavior |

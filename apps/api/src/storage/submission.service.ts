@@ -22,6 +22,7 @@ import type { SubmissionStatus } from '../generated/prisma/client';
 import { PrismaService } from '../persistence/prisma.service';
 import { TenantQueryScope } from '../persistence/tenant-query-scope';
 import { StorageService } from './storage.service';
+import { NotificationService } from '../notifications/notification.service';
 
 @Injectable()
 export class SubmissionService {
@@ -31,6 +32,7 @@ export class SubmissionService {
     private readonly storage: StorageService,
     @Inject(ACADEMIC_AUDIT_PORT)
     private readonly audit: AcademicAuditPort,
+    private readonly notifications: NotificationService,
   ) {}
 
   async hasStudentWork(input: {
@@ -100,6 +102,13 @@ export class SubmissionService {
       await tx.submission.update({
         where: { tenantId_id: { tenantId, id: submission.id } },
         data: { status: 'SUBMITTED' },
+      });
+      await this.notifications.createSubmissionIntent(tx, {
+        tenantId,
+        submissionRevisionId: revision.id,
+        eventType: existing ? 'RESUBMISSION_RECEIVED' : 'SUBMISSION_RECEIVED',
+        occurredAt: now,
+        requestId: context.requestId,
       });
       return { submissionId: submission.id, resubmission: Boolean(existing) };
     });
@@ -238,7 +247,7 @@ export class SubmissionService {
       throw new ConflictException('Only a submitted revision can receive this review action.');
     }
     await this.prisma.$transaction(async (tx) => {
-      await tx.review.create({
+      const review = await tx.review.create({
         data: {
           tenantId,
           submissionRevisionId: revision.id,
@@ -256,6 +265,17 @@ export class SubmissionService {
           },
         });
       }
+      if (input.action !== 'COMMENTED') {
+        await this.notifications.createReviewIntent(tx, {
+          tenantId,
+          reviewId: review.id,
+          eventType:
+            input.action === 'REVIEWED' ? 'SUBMISSION_REVIEWED' : 'CHANGES_REQUESTED',
+          occurredAt: review.createdAt,
+          requestId: context.requestId,
+        });
+      }
+      return { reviewId: review.id };
     });
     await this.audit.record({
       action: `SUBMISSION_${input.action}`,

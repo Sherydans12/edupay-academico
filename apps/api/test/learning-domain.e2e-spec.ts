@@ -81,6 +81,9 @@ describe.runIf(testDatabaseUrl)(
     beforeEach(async () => {
       identityStatus.active = true;
       audit.events.length = 0;
+      await prisma.inAppNotification.deleteMany();
+      await prisma.notificationDelivery.deleteMany();
+      await prisma.notificationEvent.deleteMany();
       await prisma.review.deleteMany();
       await prisma.fileReference.deleteMany();
       await prisma.fileObject.deleteMany();

@@ -55,6 +55,29 @@ const optionalStorageNumber = z.preprocess(
   z.coerce.number().optional(),
 );
 
+const optionalNonEmptyString = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z.string().min(1).optional(),
+);
+
+const retryScheduleSeconds = z
+  .string()
+  .default('60,300,900,3600,21600')
+  .transform((value, context) => {
+    const values = value.split(',').map((part) => Number(part.trim()));
+    if (
+      values.length === 0 ||
+      values.some((part) => !Number.isInteger(part) || part < 1)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'must be a comma-separated list of positive seconds',
+      });
+      return z.NEVER;
+    }
+    return values;
+  });
+
 const environmentSchema = z
   .object({
     NODE_ENV: z
@@ -95,6 +118,45 @@ const environmentSchema = z
     STORAGE_TEMP_ROOT: z.string().min(1).optional(),
     STORAGE_MIN_FREE_BYTES: optionalStorageNumber.pipe(z.number().int().min(0).optional()),
     STORAGE_MIN_FREE_PERCENTAGE: optionalStorageNumber.pipe(z.number().min(0).max(100).optional()),
+    ACADEMIC_RESEND_API_KEY: optionalNonEmptyString,
+    ACADEMIC_EMAIL_FROM: z
+      .string()
+      .min(1)
+      .default('EduPay Académico <no-reply@example.invalid>'),
+    ACADEMIC_PUBLIC_BASE_URL: z
+      .string()
+      .url()
+      .default('http://localhost:3001'),
+    ACADEMIC_EMAIL_REPLY_TO: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.email().optional(),
+    ),
+    ACADEMIC_EMAIL_MODE: z.enum(['resend', 'fake']).default('resend'),
+    NOTIFICATION_WORKER_POLL_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(300_000)
+      .default(5_000),
+    NOTIFICATION_WORKER_BATCH_SIZE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(50),
+    NOTIFICATION_MAX_DELIVERY_ATTEMPTS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(5),
+    NOTIFICATION_PROCESSING_LEASE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(30)
+      .max(86_400)
+      .default(900),
+    NOTIFICATION_RETRY_SCHEDULE_SECONDS: retryScheduleSeconds,
   })
   .superRefine((environment, context) => {
     if (environment.NODE_ENV !== 'production') {
@@ -121,6 +183,28 @@ const environmentSchema = z
           path: [key],
         });
       }
+    }
+    if (environment.ACADEMIC_EMAIL_MODE !== 'fake') {
+      if (!environment.ACADEMIC_RESEND_API_KEY) {
+        context.addIssue({
+          code: 'custom',
+          message: 'must be configured in production when Resend is enabled',
+          path: ['ACADEMIC_RESEND_API_KEY'],
+        });
+      }
+      if (new URL(environment.ACADEMIC_PUBLIC_BASE_URL).protocol !== 'https:') {
+        context.addIssue({
+          code: 'custom',
+          message: 'must use HTTPS in production',
+          path: ['ACADEMIC_PUBLIC_BASE_URL'],
+        });
+      }
+    } else {
+      context.addIssue({
+        code: 'custom',
+        message: 'fake email delivery is not allowed in production',
+        path: ['ACADEMIC_EMAIL_MODE'],
+      });
     }
   });
 

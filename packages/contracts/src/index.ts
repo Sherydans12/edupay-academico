@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './academic';
 export * from './learning';
+export * from './notifications';
 export * from './storage';
 export * from './submissions';
 

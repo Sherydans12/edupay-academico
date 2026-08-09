@@ -64,6 +64,14 @@ Candidate events:
 
 Each event should carry tenant, actor, resource, revision, and correlation identifiers. Notification delivery is asynchronous and must not be part of the transaction that determines whether a submission was accepted.
 
+The accepted notification integration records the intent in the same
+transaction as the submission or review mutation. `SUBMISSION_RECEIVED` and
+`RESUBMISSION_RECEIVED` target active assigned teachers in-app. `REVIEWED` and
+`CHANGES_REQUESTED` target the submitting student in-app and by operational
+academic email. `COMMENTED` alone does not create a notification event. The
+outbox persistence is durable with the mutation, but provider delivery is
+outside the request transaction and cannot roll back the academic action.
+
 ## Deferred workflow decisions
 
 - One logical submission with revisions versus multiple independent attempts.

@@ -12,13 +12,14 @@ These records capture major architectural choices from the brief and architectur
 | [0004](ADR-0004-edupay-sync-contract.md) | Explicit EduPay synchronization boundary | Proposed / mostly mandated |
 | [0005](ADR-0005-private-object-storage-abstraction.md) | Private storage, quota, validation, immutability, and tenant-local deduplication | Accepted (2026-08-08) |
 | [0006](ADR-0006-submission-revision-and-review-state.md) | Submission revision and review state | Superseded by ADR-0013 |
-| [0007](ADR-0007-notification-outbox.md) | Notification abstraction and outbox | Proposed |
+| [0007](ADR-0007-notification-outbox.md) | Notification abstraction and outbox | Proposed; MVP details accepted by ADR-0014 |
 | [0008](ADR-0008-api-and-contract-versioning.md) | Versioned API and contract strategy | Superseded by ADR-0011 |
 | [0009](ADR-0009-identity-contract-reconciliation.md) | Reconciled Identity, canonical tenant, session, and MVP authorization contract | Accepted (2026-08-08) |
 | [0010](ADR-0010-course-subject-and-lifecycle.md) | CourseSubject terminology and academic lifecycle baseline | Accepted (2026-08-08) |
 | [0011](ADR-0011-api-and-shared-contract-strategy.md) | API and shared application contract strategy | Accepted (2026-08-08) |
 | [0012](ADR-0012-learning-publication-and-edit-semantics.md) | Learning publication and edit semantics | Accepted (2026-08-08) |
 | [0013](ADR-0013-submissions-and-storage-mvp-semantics.md) | MVP submission, revision, and deadline semantics | Accepted (2026-08-08) |
+| [0014](ADR-0014-academic-notifications-and-delivery.md) | Academic notification event catalog, transactional PostgreSQL outbox, worker, in-app delivery, and Academic Resend adapter | Accepted (2026-08-09) |
 
 ## ADR workflow
 

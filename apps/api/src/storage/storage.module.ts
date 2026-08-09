@@ -13,9 +13,10 @@ import { StorageService } from './storage.service';
 import { SubmissionController } from './submission.controller';
 import { LocalPrivateStorageAdapter } from './local-private-storage.adapter';
 import { PRIVATE_STORAGE_PROVIDER } from './private-storage.port';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [SecurityFoundationModule, AcademicModule],
+  imports: [SecurityFoundationModule, AcademicModule, NotificationsModule],
   controllers: [StorageController, SubmissionController],
   providers: [
     LocalPrivateStorageAdapter,
