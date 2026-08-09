@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-import { storageFileSchema, storageUploadFileSchema } from './storage';
-
 const opaqueIdSchema = z.string().uuid();
 const timestampSchema = z.iso.datetime({ offset: true });
 
@@ -38,7 +36,18 @@ export const submissionRevisionSchema = z
     isLate: z.boolean(),
     createdByIdentityUserId: z.string().min(1).max(128),
     createdAt: timestampSchema,
-    files: z.array(storageFileSchema).min(1),
+    files: z.array(
+      z.object({
+        id: opaqueIdSchema,
+        originalFilename: z.string().min(1).max(255),
+        sizeBytes: z.number().int().nonnegative(),
+        declaredMime: z.string().min(1).max(160),
+        detectedMime: z.string().min(1).max(160),
+        extension: z.string().min(1).max(16),
+        category: z.literal('STUDENT_SUBMISSION'),
+        createdAt: timestampSchema,
+      }).strict(),
+    ).min(1),
     reviews: z.array(submissionReviewSchema),
   })
   .strict();
@@ -55,9 +64,22 @@ export const submissionSchema = z
   })
   .strict();
 
+const finalizedFileIdsSchema = z
+  .array(opaqueIdSchema)
+  .min(1)
+  .max(20)
+  .superRefine((ids, context) => {
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'fileObjectIds must not contain duplicates.',
+      });
+    }
+  });
+
 export const createSubmissionSchema = z
   .object({
-    files: z.array(storageUploadFileSchema).min(1).max(20),
+    fileObjectIds: finalizedFileIdsSchema,
     studentComment: z.string().trim().max(20_000).optional(),
   })
   .strict();

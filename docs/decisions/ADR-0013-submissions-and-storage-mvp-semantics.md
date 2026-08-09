@@ -55,9 +55,14 @@ domain calculations remain instant-based.
 - Submission files are typed FileReferences to a SubmissionRevision. New
   revisions receive new FileObjects/references.
 - Uploads reserve global and tenant quota atomically, validate authoritative
-  bytes, and use the private provider abstraction. The first adapter streams
-  through the API from a local private filesystem; no public storage path is
-  exposed.
+  bytes, and use the private provider abstraction. The control plane is JSON
+  metadata only; the data plane transfers one file per request using bounded
+  `multipart/form-data` disk staging. The first adapter uses a local private
+  filesystem; no public storage path is exposed.
+- Submission and revision JSON bodies contain finalized opaque `fileObjectIds`,
+  never file bytes. Each referenced object is rechecked transactionally for
+  tenant, actor, category, availability, LearningItem compatibility, and
+  prior evidence attachment before its immutable FileReference is created.
 - Every download reauthorizes the parent resource and trusted tenant. Student
   access is limited to the student’s own submission; assigned teachers can
   review their CourseSubject; TENANT_ADMIN has tenant oversight.

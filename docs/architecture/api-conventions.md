@@ -110,6 +110,11 @@ The exact route list belongs in the API contract, but the families are expected 
 - integration/sync status for authorized operators;
 - explicit support operations that require the approved elevated context.
 
+Upload control-plane requests use JSON metadata and return an opaque
+`uploadIntentId` with an expiry and bounded upload instructions. File bytes use
+the dedicated content endpoint as one-file `multipart/form-data`; bytes are not
+embedded in JSON or represented as base64 in application contracts.
+
 ## Contract requirements
 
 - A successful response and error response are documented.

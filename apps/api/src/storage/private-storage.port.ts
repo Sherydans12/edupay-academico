@@ -7,7 +7,7 @@ export interface PrivateStorageProvider {
   stage(input: {
     tenantId: string;
     intentId: string;
-    bytes: Buffer;
+    sourcePath: string;
   }): Promise<{ storageKey: string; sizeBytes: number }>;
   promote(input: { stagingKey: string; finalKey: string }): Promise<void>;
   remove(storageKey: string): Promise<void>;

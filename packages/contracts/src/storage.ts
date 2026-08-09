@@ -12,6 +12,13 @@ export const storageCategorySchema = z.enum([
   'OTHER_SYSTEM',
 ]);
 
+export const storageUploadCategorySchema = z.enum([
+  'LEARNING_MATERIAL',
+  'ASSIGNMENT_SOURCE',
+  'ASSESSMENT_SOURCE',
+  'STUDENT_SUBMISSION',
+]);
+
 export const storageQuotaStateSchema = z.enum([
   'NORMAL',
   'INFO',
@@ -20,22 +27,48 @@ export const storageQuotaStateSchema = z.enum([
   'FULL',
 ]);
 
-export const storageUploadFileSchema = z
+export const uploadIntentStatusSchema = z.enum([
+  'RESERVED',
+  'STAGED',
+  'FINALIZED',
+  'FAILED',
+  'EXPIRED',
+]);
+
+/**
+ * Control-plane metadata for an upload. File bytes are intentionally absent;
+ * they are transferred through the dedicated multipart content endpoint.
+ */
+export const createUploadIntentSchema = z
   .object({
+    parentType: z.literal('LEARNING_ITEM'),
+    parentId: opaqueIdSchema,
+    category: storageUploadCategorySchema,
     filename: z.string().trim().min(1).max(255),
     mimeType: z.string().trim().min(1).max(160),
     sizeBytes: z.number().int().nonnegative().max(25_000_000),
-    contentBase64: z.string().min(1).max(34_000_000),
   })
   .strict();
 
-export const learningAttachmentUploadSchema = storageUploadFileSchema
-  .extend({
-    purpose: z.enum([
-      'LEARNING_MATERIAL',
-      'ASSIGNMENT_SOURCE',
-      'ASSESSMENT_SOURCE',
-    ]),
+export const uploadIntentSchema = z
+  .object({
+    id: opaqueIdSchema,
+    parentType: z.literal('LEARNING_ITEM'),
+    parentId: opaqueIdSchema,
+    category: storageUploadCategorySchema,
+    filename: z.string().min(1).max(255),
+    mimeType: z.string().min(1).max(160),
+    sizeBytes: z.number().int().nonnegative(),
+    status: uploadIntentStatusSchema,
+    expiresAt: timestampSchema,
+    upload: z
+      .object({
+        method: z.literal('POST'),
+        path: z.string().min(1).max(300),
+        fieldName: z.literal('file'),
+        maxSizeBytes: z.literal(25_000_000),
+      })
+      .strict(),
   })
   .strict();
 
@@ -87,7 +120,5 @@ export const storagePolicySchema = z
   })
   .strict();
 
-export type StorageUploadFile = z.infer<typeof storageUploadFileSchema>;
-export type LearningAttachmentUpload = z.infer<
-  typeof learningAttachmentUploadSchema
->;
+export type CreateUploadIntent = z.infer<typeof createUploadIntentSchema>;
+export type UploadIntent = z.infer<typeof uploadIntentSchema>;

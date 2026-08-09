@@ -1,7 +1,7 @@
 export interface LearningAttachmentTarget {
   readonly tenantId: string;
   readonly learningItemId: string;
-  readonly purpose: 'MATERIAL' | 'ASSIGNMENT_SOURCE' | 'ASSESSMENT_SOURCE';
+  readonly purpose: 'LEARNING_MATERIAL' | 'ASSIGNMENT_SOURCE' | 'ASSESSMENT_SOURCE';
 }
 
 export const LEARNING_ATTACHMENT_PORT = Symbol('LEARNING_ATTACHMENT_PORT');

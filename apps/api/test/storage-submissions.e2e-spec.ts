@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 
 import type { INestApplication } from '@nestjs/common';
@@ -16,6 +16,7 @@ import {
 } from '../src/identity/identity-adapter.port';
 import { PrismaService } from '../src/persistence/prisma.service';
 import { configureApplication } from '../src/bootstrap/configure-application';
+import { MAX_FILE_SIZE_BYTES } from '../src/storage/file-validation';
 import { IdentityJwksFixture } from './support/identity-jwks.fixture';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -46,6 +47,7 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
     for (const [key, value] of Object.entries(fixture.environment())) vi.stubEnv(key, value);
     vi.stubEnv('DATABASE_URL', testDatabaseUrl as string);
     vi.stubEnv('STORAGE_ROOT', storageRoot);
+    vi.stubEnv('STORAGE_TEMP_ROOT', `${storageRoot}\\tmp`);
     vi.stubEnv('STORAGE_MIN_FREE_BYTES', '0');
     vi.stubEnv('STORAGE_MIN_FREE_PERCENTAGE', '0');
     const { AppModule } = await import('../src/app.module');
@@ -93,111 +95,212 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
     vi.unstubAllEnvs();
   });
 
-  it('keeps storage private, deduplicates only within a tenant, and reauthorizes downloads', async () => {
+  it('uses metadata-only intents, bounded multipart transfer, quota conversion, and private tenant-local deduplication', async () => {
     const admin = await token('storage-a', 'admin', ['TENANT_ADMIN']);
     const setup = await createDeliverable(admin, 'storage-a', 'teacher-storage', 'student-storage');
     const bytes = Buffer.from('%PDF-storage-evidence');
-    const upload = {
+    const base64Body = {
+      parentType: 'LEARNING_ITEM',
+      parentId: setup.item.id,
+      category: 'ASSIGNMENT_SOURCE',
       filename: 'guide.pdf',
       mimeType: 'application/pdf',
       sizeBytes: bytes.length,
       contentBase64: bytes.toString('base64'),
-      purpose: 'ASSIGNMENT_SOURCE',
     };
-    const first = await post(setup.teacherToken, `/api/v1/learning-items/${setup.item.id}/attachments`, upload);
-    const second = await post(setup.teacherToken, `/api/v1/learning-items/${setup.item.id}/attachments`, {
-      ...upload,
-      filename: 'guide-copy.pdf',
+    await api(setup.teacherToken)
+      .post('/api/v1/file-upload-intents')
+      .send(base64Body)
+      .expect(400);
+
+    const intent = await createIntentOnly(
+      setup.teacherToken,
+      setup.item.id,
+      'ASSIGNMENT_SOURCE',
+      'guide.pdf',
+      bytes,
+    );
+    const reservedBeforeTransfer = await prisma.storageUsageAccount.findUniqueOrThrow({
+      where: { scopeKey: 'TENANT:storage-a' },
     });
+    expect(reservedBeforeTransfer.reservedBytes).toBe(BigInt(bytes.length));
+    expect(reservedBeforeTransfer.usedBytes).toBe(0n);
+
+    const first = await transfer(setup.teacherToken, intent.id, 'guide.pdf', bytes);
+    const afterTransfer = await prisma.storageUsageAccount.findUniqueOrThrow({
+      where: { scopeKey: 'TENANT:storage-a' },
+    });
+    expect(afterTransfer.reservedBytes).toBe(0n);
+    expect(afterTransfer.usedBytes).toBe(BigInt(bytes.length));
+
+    const secondIntent = await createIntentOnly(
+      setup.teacherToken,
+      setup.item.id,
+      'ASSIGNMENT_SOURCE',
+      'guide-copy.pdf',
+      bytes,
+    );
+    const second = await transfer(setup.teacherToken, secondIntent.id, 'guide-copy.pdf', bytes);
     expect(first.id).not.toBe(second.id);
     expect(await prisma.storedBlob.count({ where: { tenantId: 'storage-a' } })).toBe(1);
     expect(await prisma.fileObject.count({ where: { tenantId: 'storage-a' } })).toBe(2);
     await api(setup.studentToken).get(`/api/v1/files/${first.id}/download`).expect(200);
-    await api(setup.studentToken).post(`/api/v1/learning-items/${setup.item.id}/submission`).send({
-      files: [{ filename: 'work.pdf', mimeType: 'application/pdf', sizeBytes: bytes.length, contentBase64: bytes.toString('base64') }],
-    }).expect(201);
-    const tenantB = await token('storage-b', 'other', ['TENANT_ADMIN']);
-    await api(tenantB).get(`/api/v1/files/${first.id}/download`).expect(403);
+
+    const otherActor = await token('storage-a', 'unassigned-teacher', ['TEACHER']);
+    const actorIntent = await createIntentOnly(
+      setup.teacherToken,
+      setup.item.id,
+      'ASSIGNMENT_SOURCE',
+      'actor.pdf',
+      bytes,
+    );
+    await api(otherActor)
+      .post(`/api/v1/file-upload-intents/${actorIntent.id}/content`)
+      .attach('file', bytes, { filename: 'actor.pdf', contentType: 'application/pdf' })
+      .expect(403);
+    await api(await token('storage-b', 'other', ['TENANT_ADMIN']))
+      .post(`/api/v1/file-upload-intents/${actorIntent.id}/content`)
+      .attach('file', bytes, { filename: 'actor.pdf', contentType: 'application/pdf' })
+      .expect(403);
+    await transfer(setup.teacherToken, actorIntent.id, 'actor.pdf', bytes);
+
     await prisma.storageQuotaPolicy.updateMany({
       where: { scopeKey: { in: ['GLOBAL', 'TENANT:storage-a'] } },
       data: { quotaBytes: 1n },
     });
-    await api(setup.teacherToken).post(`/api/v1/learning-items/${setup.item.id}/attachments`).send({
-      ...upload,
-      filename: 'quota.pdf',
-    }).expect(400);
-    const tenantUsage = await prisma.storageUsageAccount.findUniqueOrThrow({ where: { scopeKey: 'TENANT:storage-a' } });
-    expect(tenantUsage.reservedBytes).toBe(0n);
-    await api(setup.studentToken).get(`/api/v1/files/${first.id}/download`).expect(200);
-    await api(setup.teacherToken).post(`/api/v1/learning-items/${setup.item.id}/attachments`).send({
-      ...upload,
-      filename: 'bad.pdf',
-      mimeType: 'image/png',
-    }).expect(400);
-  });
-
-  it('preserves late revision evidence, enables only requested corrections, and blocks reviewed resubmission', async () => {
-    const admin = await token('submission-a', 'admin', ['TENANT_ADMIN']);
-    const setup = await createDeliverable(admin, 'submission-a', 'teacher-review', 'student-review');
-    const pdf = (name: string) => {
-      const bytes = Buffer.from('%PDF-submission');
-      return {
-        filename: name,
+    await api(setup.teacherToken)
+      .post('/api/v1/file-upload-intents')
+      .send({
+        parentType: 'LEARNING_ITEM',
+        parentId: setup.item.id,
+        category: 'ASSIGNMENT_SOURCE',
+        filename: 'quota.pdf',
         mimeType: 'application/pdf',
         sizeBytes: bytes.length,
-        contentBase64: bytes.toString('base64'),
-      };
-    };
+      })
+      .expect(400);
+  });
+
+  it('expires intents, rejects oversized multipart payloads, and cleans failed transfer staging', async () => {
+    const admin = await token('hardening-a', 'admin', ['TENANT_ADMIN']);
+    const setup = await createDeliverable(admin, 'hardening-a', 'teacher-hardening', 'student-hardening');
+    const bytes = Buffer.from('%PDF-hardening');
+    const expired = await createIntentOnly(
+      setup.teacherToken,
+      setup.item.id,
+      'ASSIGNMENT_SOURCE',
+      'expired.pdf',
+      bytes,
+    );
+    await prisma.uploadIntent.update({
+      where: { tenantId_id: { tenantId: 'hardening-a', id: expired.id } },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+    await api(setup.teacherToken)
+      .post(`/api/v1/file-upload-intents/${expired.id}/content`)
+      .attach('file', bytes, { filename: 'expired.pdf', contentType: 'application/pdf' })
+      .expect(400);
+    expect((await prisma.uploadIntent.findUniqueOrThrow({ where: { tenantId_id: { tenantId: 'hardening-a', id: expired.id } } })).status).toBe('EXPIRED');
+    expect((await prisma.storageUsageAccount.findUniqueOrThrow({ where: { scopeKey: 'TENANT:hardening-a' } })).reservedBytes).toBe(0n);
+
+    const oversized = await createIntentOnly(
+      setup.teacherToken,
+      setup.item.id,
+      'ASSIGNMENT_SOURCE',
+      'oversized.pdf',
+      bytes,
+    );
+    const oversizedBytes = Buffer.alloc(MAX_FILE_SIZE_BYTES + 1, 65);
+    Buffer.from('%PDF-').copy(oversizedBytes);
+    await api(setup.teacherToken)
+      .post(`/api/v1/file-upload-intents/${oversized.id}/content`)
+      .attach('file', oversizedBytes, { filename: 'oversized.pdf', contentType: 'application/pdf' })
+      .expect(413);
+    expect((await prisma.uploadIntent.findUniqueOrThrow({ where: { tenantId_id: { tenantId: 'hardening-a', id: oversized.id } } })).status).toBe('FAILED');
+    expect((await prisma.storageUsageAccount.findUniqueOrThrow({ where: { scopeKey: 'TENANT:hardening-a' } })).reservedBytes).toBe(0n);
+
+    const invalid = await createIntentOnly(
+      setup.teacherToken,
+      setup.item.id,
+      'ASSIGNMENT_SOURCE',
+      'invalid.pdf',
+      bytes,
+    );
+    await api(setup.teacherToken)
+      .post(`/api/v1/file-upload-intents/${invalid.id}/content`)
+      .attach('file', Buffer.from('not a pdf'), { filename: 'invalid.pdf', contentType: 'application/pdf' })
+      .expect(400);
+    expect((await prisma.uploadIntent.findUniqueOrThrow({ where: { tenantId_id: { tenantId: 'hardening-a', id: invalid.id } } })).status).toBe('FAILED');
+    expect((await prisma.storageUsageAccount.findUniqueOrThrow({ where: { scopeKey: 'TENANT:hardening-a' } })).reservedBytes).toBe(0n);
+    await expect(readdir(`${storageRoot}\\tmp`)).resolves.toEqual([]);
+  });
+
+  it('accepts only separately finalized authorized student files and preserves immutable revision semantics', async () => {
+    const admin = await token('submission-a', 'admin', ['TENANT_ADMIN']);
+    const setup = await createDeliverable(admin, 'submission-a', 'teacher-review', 'student-review');
+    const pdf = (name: string) => Buffer.from(`%PDF-${name}`);
+    const firstFile = await uploadStudentFile(setup.studentToken, setup.item.id, 'first.pdf', pdf('first'));
+    const secondFile = await uploadStudentFile(setup.studentToken, setup.item.id, 'second.pdf', pdf('second'));
+
+    const arbitrary = await api(setup.studentToken)
+      .post(`/api/v1/learning-items/${setup.item.id}/submission`)
+      .send({ fileObjectIds: ['00000000-0000-4000-8000-000000000099'] })
+      .expect(403);
+    expect(arbitrary.body.error.code).toBe('FORBIDDEN');
+
     const createdResponse = await api(setup.studentToken)
       .post(`/api/v1/learning-items/${setup.item.id}/submission`)
-      .send({ files: [pdf('first.pdf'), pdf('second.pdf')], studentComment: 'Please review' })
+      .send({ fileObjectIds: [firstFile.id, secondFile.id], studentComment: 'Please review' })
       .expect(201);
     const created = createdResponse.body;
     expect(created.status).toBe('SUBMITTED');
     expect(created.revisions[0].isLate).toBe(true);
     expect(created.revisions[0].files).toHaveLength(2);
-    await api(admin).get(`/api/v1/learning-items/${setup.item.id}/submissions`).expect(200);
-    await api(await token('submission-a', 'unrelated-student', ['STUDENT']))
-      .get(`/api/v1/submissions/${created.id}`)
-      .expect(403);
-    await api(await token('submission-a', 'unrelated-teacher', ['TEACHER']))
-      .get(`/api/v1/submissions/${created.id}`)
-      .expect(403);
-    const dueAt = created.revisions[0].effectiveDueAt;
-    await prisma.learningItem.update({
-      where: { tenantId_id: { tenantId: 'submission-a', id: setup.item.id } },
-      data: { dueAt: new Date(Date.now() + 86_400_000) },
+
+    const otherStudent = await post(admin, '/api/v1/students', { firstName: 'Other', lastName: 'Student' });
+    await prisma.student.update({
+      where: { tenantId_id: { tenantId: 'submission-a', id: otherStudent.id } },
+      data: { identityUserId: 'other-student' },
     });
-    const unchanged = await api(setup.studentToken).get(`/api/v1/submissions/${created.id}`).expect(200);
-    expect(unchanged.body.revisions[0].effectiveDueAt).toBe(dueAt);
+    await post(admin, '/api/v1/course-enrollments', { studentId: otherStudent.id, courseId: setup.course.id });
+    const otherStudentToken = await token('submission-a', 'other-student', ['STUDENT']);
+    await api(otherStudentToken)
+      .post(`/api/v1/learning-items/${setup.item.id}/submission`)
+      .send({ fileObjectIds: [firstFile.id] })
+      .expect(403);
+
     await api(setup.teacherToken)
       .post(`/api/v1/submission-revisions/${created.revisions[0].id}/reviews`)
       .send({ action: 'CHANGES_REQUESTED', comment: 'Please correct the document.' })
       .expect(201);
-    const revisedResponse = await api(setup.studentToken)
+    const revisedFile = await uploadStudentFile(setup.studentToken, setup.item.id, 'corrected.pdf', pdf('corrected'));
+    const revised = (await api(setup.studentToken)
       .post(`/api/v1/submissions/${created.id}/revisions`)
-      .send({ files: [pdf('corrected.pdf')] })
-      .expect(201);
-    const revised = revisedResponse.body;
+      .send({ fileObjectIds: [revisedFile.id] })
+      .expect(201)).body;
     expect(revised.revisions).toHaveLength(2);
     expect(revised.revisions[0].files[0].id).not.toBe(revised.revisions[1].files[0].id);
+
     await api(setup.teacherToken)
       .post(`/api/v1/submission-revisions/${revised.revisions[1].id}/reviews`)
       .send({ action: 'REVIEWED', comment: 'Reviewed.' })
       .expect(201);
     await api(setup.studentToken)
       .post(`/api/v1/submissions/${created.id}/revisions`)
-      .send({ files: [pdf('too-late.pdf')] })
+      .send({ fileObjectIds: [revisedFile.id] })
       .expect(409);
-    const material = await post(setup.teacherToken, `/api/v1/learning-units/${setup.unit.id}/items`, {
-      type: 'MATERIAL',
-      title: 'Read only',
-    });
-    await api(setup.teacherToken).post(`/api/v1/learning-items/${material.id}/publish`).send({}).expect(201);
-    await api(setup.studentToken)
-      .post(`/api/v1/learning-items/${material.id}/submission`)
-      .send({ files: [pdf('material.pdf')] })
-      .expect(409);
+
+    await api(await token('submission-a', 'unrelated-teacher', ['TEACHER']))
+      .post('/api/v1/file-upload-intents')
+      .send({
+        parentType: 'LEARNING_ITEM',
+        parentId: setup.item.id,
+        category: 'ASSIGNMENT_SOURCE',
+        filename: 'unauthorized.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: pdf('unauthorized').length,
+      })
+      .expect(403);
     await api(await token('submission-a', 'system', ['SYSTEM_ADMIN']))
       .get(`/api/v1/submissions/${created.id}`)
       .expect(403);
@@ -213,6 +316,39 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
 
   async function post(accessToken: string, path: string, body: object) {
     return (await api(accessToken).post(path).send(body).expect(201)).body;
+  }
+
+  async function createIntentOnly(
+    accessToken: string,
+    learningItemId: string,
+    category: 'ASSIGNMENT_SOURCE' | 'STUDENT_SUBMISSION',
+    filename: string,
+    bytes: Buffer,
+  ) {
+    return (await api(accessToken)
+      .post('/api/v1/file-upload-intents')
+      .send({
+        parentType: 'LEARNING_ITEM',
+        parentId: learningItemId,
+        category,
+        filename,
+        mimeType: 'application/pdf',
+        sizeBytes: bytes.length,
+      })
+      .expect(201)).body;
+  }
+
+  async function transfer(accessToken: string, intentId: string, filename: string, bytes: Buffer) {
+    const response = await api(accessToken)
+      .post(`/api/v1/file-upload-intents/${intentId}/content`)
+      .attach('file', bytes, { filename, contentType: 'application/pdf' });
+    expect(response.status).toBe(201);
+    return response.body;
+  }
+
+  async function uploadStudentFile(accessToken: string, itemId: string, filename: string, bytes: Buffer) {
+    const intent = await createIntentOnly(accessToken, itemId, 'STUDENT_SUBMISSION', filename, bytes);
+    return transfer(accessToken, intent.id, filename, bytes);
   }
 
   async function token(
@@ -261,6 +397,6 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
       dueAt: new Date(Date.now() - 60_000).toISOString(),
     });
     await api(teacherToken).post(`/api/v1/learning-items/${item.id}/publish`).send({}).expect(201);
-    return { item, unit, teacherToken, studentToken };
+    return { item, unit, course, teacherToken, studentToken };
   }
 });

@@ -12,7 +12,7 @@ import { Prisma } from '../generated/prisma/client';
 import type {
   StorageCategory as PrismaStorageCategory,
 } from '../generated/prisma/client';
-import type { StorageUploadFile } from '@edupay/contracts';
+import type { CreateUploadIntent } from '@edupay/contracts';
 
 import { AuthorizationService } from '../authorization/authorization.service';
 import { TenantCapability } from '../authorization/authorization.types';
@@ -33,7 +33,8 @@ import {
   MAX_FILE_SIZE_BYTES,
   FileValidationError,
   allowedExtensions,
-  validateUploadFile,
+  validateUploadFilePath,
+  validateUploadMetadata,
   type ValidatedFile,
 } from './file-validation';
 import {
@@ -48,6 +49,8 @@ type LearningAttachmentPurpose =
   | 'LEARNING_MATERIAL'
   | 'ASSIGNMENT_SOURCE'
   | 'ASSESSMENT_SOURCE';
+
+type UploadCategory = LearningAttachmentPurpose | 'STUDENT_SUBMISSION';
 
 export type StoredFileResult = {
   readonly id: string;
@@ -175,12 +178,10 @@ export class StorageService implements LearningAttachmentPort {
     };
   }
 
-  async attachLearningFile(
+  async createUploadIntent(
     context: AcademicRequestContext,
-    learningItemId: string,
-    purpose: LearningAttachmentPurpose,
-    input: StorageUploadFile,
-  ): Promise<StoredFileResult> {
+    input: CreateUploadIntent,
+  ): Promise<object> {
     const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
     this.authorization.requireCapability(
       context.principal,
@@ -188,23 +189,210 @@ export class StorageService implements LearningAttachmentPort {
       TenantCapability.AccessTenant,
     );
     const item = await this.prisma.learningItem.findUnique({
-      where: { tenantId_id: { tenantId, id: learningItemId } },
+      where: { tenantId_id: { tenantId, id: input.parentId } },
     });
     if (!item) this.notFound();
-    if (
-      (purpose === 'ASSIGNMENT_SOURCE' && item.type !== 'ASSIGNMENT') ||
-      (purpose === 'ASSESSMENT_SOURCE' && item.type !== 'ASSESSMENT') ||
-      (purpose === 'LEARNING_MATERIAL' && item.type !== 'MATERIAL')
-    ) {
-      throw new BadRequestException('The attachment purpose does not match the learning item.');
+
+    const category = input.category as UploadCategory;
+    if (category === 'STUDENT_SUBMISSION') {
+      await this.requireStudentUploadTarget(context, item.id);
+    } else {
+      this.requireMatchingLearningAttachment(item.type, category);
+      await this.requireTeacherOrTenantAdminForCourseSubject(context, item.courseSubjectId);
     }
-    await this.requireTeacherOrTenantAdminForCourseSubject(context, item.courseSubjectId);
-    return this.storeFile(context, input, {
-      referenceType: 'LEARNING_ITEM',
+
+    let metadata: ReturnType<typeof validateUploadMetadata>;
+    try {
+      metadata = validateUploadMetadata({
+        filename: input.filename,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+      });
+    } catch (error) {
+      this.throwValidation(error);
+    }
+
+    const intent = await this.reserveUpload(context, {
+      parentType: 'LEARNING_ITEM',
       parentId: item.id,
-      category: purpose,
-      learningItemId: item.id,
+      category,
+    }, metadata);
+    return {
+      id: intent.id,
+      parentType: 'LEARNING_ITEM',
+      parentId: item.id,
+      category,
+      filename: metadata.normalizedFilename,
+      mimeType: metadata.declaredMime,
+      sizeBytes: metadata.declaredSizeBytes,
+      status: 'RESERVED',
+      expiresAt: intent.expiresAt.toISOString(),
+      upload: {
+        method: 'POST',
+        path: `/api/v1/file-upload-intents/${intent.id}/content`,
+        fieldName: 'file',
+        maxSizeBytes: MAX_FILE_SIZE_BYTES,
+      },
+    };
+  }
+
+  async completeUpload(
+    context: AcademicRequestContext,
+    intentId: string,
+    input: { filePath: string; filename: string; mimeType: string },
+  ): Promise<StoredFileResult> {
+    const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
+    this.authorization.requireCapability(
+      context.principal,
+      context.tenant,
+      TenantCapability.AccessTenant,
+    );
+    let intent: Awaited<ReturnType<StorageService['getAuthorizedIntent']>>;
+    try {
+      intent = await this.getAuthorizedIntent(context, intentId);
+    } catch (error) {
+      const owned = await this.prisma.uploadIntent.findUnique({
+        where: { tenantId_id: { tenantId, id: intentId } },
+      });
+      if (owned?.createdByIdentityUserId === context.principal.identityUserId) {
+        await this.failIntent(tenantId, intentId);
+      }
+      throw error;
+    }
+    if (intent.status === 'FINALIZED' && intent.finalizedFileObjectId) {
+      const existing = await this.prisma.fileObject.findUnique({
+        where: { tenantId_id: { tenantId, id: intent.finalizedFileObjectId } },
+      });
+      if (existing) return this.mapFile(existing);
+    }
+    if (intent.status !== 'RESERVED' && intent.status !== 'STAGED') {
+      throw new ConflictException('The upload intent is no longer available.');
+    }
+    if (intent.expiresAt <= new Date()) {
+      await this.expireIntent(tenantId, intent.id, intent.stagingKey);
+      throw new BadRequestException('The upload intent has expired.');
+    }
+
+    let validated: ValidatedFile;
+    try {
+      validated = await validateUploadFilePath({
+        filename: input.filename,
+        mimeType: input.mimeType,
+        sizeBytes: this.toSafeNumber(intent.expectedSizeBytes),
+        filePath: input.filePath,
+      });
+      if (
+        validated.normalizedFilename !== intent.expectedFilename ||
+        validated.declaredMime !== intent.expectedMime ||
+        validated.declaredSizeBytes !== this.toSafeNumber(intent.expectedSizeBytes)
+      ) {
+        throw new FileValidationError(
+          'FILE_CONTENT_MISMATCH',
+          'The transferred file does not match the upload intent.',
+        );
+      }
+    } catch (error) {
+      await this.failIntent(tenantId, intent.id);
+      this.throwValidation(error);
+    }
+
+    let stagedKey: string | undefined;
+    let finalKey: string | undefined;
+    try {
+      const staged = await this.provider.stage({
+        tenantId,
+        intentId: intent.id,
+        sourcePath: input.filePath,
+      });
+      if (staged.sizeBytes !== validated.authoritativeSizeBytes || staged.sizeBytes > MAX_FILE_SIZE_BYTES) {
+        throw new BadRequestException('The authoritative stored size is invalid.');
+      }
+      stagedKey = staged.storageKey;
+      await this.prisma.uploadIntent.update({
+        where: { tenantId_id: { tenantId, id: intent.id } },
+        data: { status: 'STAGED' },
+      });
+
+      const existingBlob = await this.prisma.storedBlob.findFirst({
+        where: {
+          tenantId,
+          sha256: validated.sha256,
+          storedSizeBytes: BigInt(validated.authoritativeSizeBytes),
+          lifecycle: 'AVAILABLE',
+        },
+      });
+      const storedBlobId = existingBlob?.id ?? randomUUID();
+      const isNewBlob = !existingBlob;
+      if (isNewBlob) {
+        finalKey = `tenants/${createHash('sha256').update(tenantId).digest('hex')}/blobs/${storedBlobId}`;
+        await this.provider.promote({ stagingKey: stagedKey, finalKey });
+        stagedKey = undefined;
+      } else {
+        await this.provider.remove(stagedKey);
+        stagedKey = undefined;
+      }
+
+      let result: StoredFileResult;
+      try {
+        result = await this.finalizeUpload({
+          context,
+          intent: { ...intent, status: 'STAGED' },
+          validated,
+          storedBlobId,
+          storageKey: finalKey ?? existingBlob?.storageKey,
+          isNewBlob,
+        });
+      } catch (error) {
+        if (!isNewBlob || !this.isUniqueViolation(error)) throw error;
+        if (finalKey) {
+          await this.provider.remove(finalKey);
+          finalKey = undefined;
+        }
+        const winner = await this.prisma.storedBlob.findFirst({
+          where: {
+            tenantId,
+            sha256: validated.sha256,
+            storedSizeBytes: BigInt(validated.authoritativeSizeBytes),
+            lifecycle: 'AVAILABLE',
+          },
+        });
+        if (!winner) throw error;
+        result = await this.finalizeUpload({
+          context,
+          intent: { ...intent, status: 'STAGED' },
+          validated,
+          storedBlobId: winner.id,
+          storageKey: winner.storageKey,
+          isNewBlob: false,
+        });
+      }
+      await this.audit.record({
+        action: isNewBlob ? 'FILE_STORED' : 'FILE_DEDUPLICATED',
+        context,
+        resourceId: result.id,
+        resourceType: 'FileObject',
+      });
+      return result;
+    } catch (error) {
+      if (stagedKey) await this.provider.remove(stagedKey);
+      await this.failIntent(tenantId, intent.id);
+      await this.provider.remove(intent.stagingKey);
+      if (finalKey) await this.provider.remove(finalKey);
+      throw error;
+    }
+  }
+
+  async releaseFailedUploadIntent(
+    context: AcademicRequestContext,
+    intentId: string,
+  ): Promise<void> {
+    const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
+    const intent = await this.prisma.uploadIntent.findUnique({
+      where: { tenantId_id: { tenantId, id: intentId } },
     });
+    if (!intent || intent.createdByIdentityUserId !== context.principal.identityUserId) return;
+    await this.failIntent(tenantId, intentId);
+    await this.provider.remove(intent.stagingKey);
   }
 
   async listLearningAttachments(
@@ -228,47 +416,67 @@ export class StorageService implements LearningAttachmentPort {
     return records.map(this.mapFile);
   }
 
-  async storeSubmissionFile(
+  async attachSubmissionFiles(
+    tx: Prisma.TransactionClient,
     context: AcademicRequestContext,
-    submissionRevisionId: string,
-    input: StorageUploadFile,
-  ): Promise<StoredFileResult> {
-    const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
-    const revision = await this.prisma.submissionRevision.findUnique({
-      where: { tenantId_id: { tenantId, id: submissionRevisionId } },
-      include: { submission: true },
-    });
-    if (!revision) this.notFound();
-    return this.storeFile(context, input, {
-      referenceType: 'SUBMISSION_REVISION',
-      parentId: revision.id,
-      category: 'STUDENT_SUBMISSION',
-      submissionRevisionId: revision.id,
-    });
-  }
-
-  async removeRevisionArtifacts(
-    context: AcademicRequestContext,
-    revisionId: string,
+    input: {
+      revisionId: string;
+      learningItemId: string;
+      fileObjectIds: readonly string[];
+    },
   ): Promise<void> {
     const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
-    const references = await this.prisma.fileReference.findMany({
-      where: { tenantId, submissionRevisionId: revisionId },
-      select: { id: true, fileObjectId: true },
+    const studentIdentityUserId = context.principal.identityUserId;
+    const files = await tx.fileObject.findMany({
+      where: {
+        tenantId,
+        id: { in: [...input.fileObjectIds] },
+        category: 'STUDENT_SUBMISSION',
+        lifecycle: 'AVAILABLE',
+        uploadedByIdentityUserId: studentIdentityUserId,
+        storedBlob: { lifecycle: 'AVAILABLE' },
+      },
+      include: {
+        fileReferences: { select: { id: true, submissionRevisionId: true } },
+      },
     });
-    if (references.length === 0) return;
-    await this.prisma.$transaction(async (tx) => {
-      await tx.fileReference.deleteMany({
-        where: { tenantId, submissionRevisionId: revisionId },
-      });
-      await tx.fileObject.deleteMany({
-        where: {
+    if (files.length !== input.fileObjectIds.length) {
+      throw new ForbiddenException('One or more files are not authorized for this submission.');
+    }
+
+    const intents = await tx.uploadIntent.findMany({
+      where: {
+        tenantId,
+        finalizedFileObjectId: { in: [...input.fileObjectIds] },
+        createdByIdentityUserId: studentIdentityUserId,
+        parentType: 'LEARNING_ITEM',
+        parentId: input.learningItemId,
+        category: 'STUDENT_SUBMISSION',
+        status: 'FINALIZED',
+      },
+      select: { finalizedFileObjectId: true },
+    });
+    if (intents.length !== input.fileObjectIds.length) {
+      throw new ForbiddenException('One or more files are not authorized for this learning item.');
+    }
+    if (files.some((file) => file.fileReferences.length > 0)) {
+      throw new ConflictException('A file is already attached to another evidence record.');
+    }
+
+    await Promise.all(files.map((file, index) =>
+      tx.fileReference.create({
+        data: {
+          id: randomUUID(),
           tenantId,
-          id: { in: references.map((reference) => reference.fileObjectId) },
+          fileObjectId: file.id,
+          referenceType: 'SUBMISSION_REVISION',
+          category: 'STUDENT_SUBMISSION',
+          submissionRevisionId: input.revisionId,
+          displayOrder: index,
+          createdByIdentityUserId: studentIdentityUserId,
         },
-      });
-      await this.adjustAccount(tx, tenantId, -references.length, 0, 0, 0);
-    });
+      }),
+    ));
   }
 
   async download(
@@ -318,134 +526,109 @@ export class StorageService implements LearningAttachmentPort {
     };
   }
 
-  private async storeFile(
+  private async getAuthorizedIntent(
     context: AcademicRequestContext,
-    input: StorageUploadFile,
-    reference: {
-      referenceType: 'LEARNING_ITEM' | 'SUBMISSION_REVISION';
-      parentId: string;
-      category: LearningAttachmentPurpose | 'STUDENT_SUBMISSION';
-      learningItemId?: string;
-      submissionRevisionId?: string;
-    },
-  ): Promise<StoredFileResult> {
+    intentId: string,
+  ) {
     const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
-    let validated: ValidatedFile;
-    try {
-      validated = validateUploadFile(input);
-    } catch (error) {
-      if (error instanceof FileValidationError) {
-        throw new BadRequestException(error.message);
-      }
-      throw error;
+    const intent = await this.prisma.uploadIntent.findUnique({
+      where: { tenantId_id: { tenantId, id: intentId } },
+    });
+    if (!intent || intent.createdByIdentityUserId !== context.principal.identityUserId) {
+      this.deny();
     }
-    const intent = await this.reserveUpload(context, reference, validated);
-    let stagedKey: string | undefined;
-    let finalKey: string | undefined;
-    try {
-      const staged = await this.provider.stage({
+    if (intent.parentType !== 'LEARNING_ITEM') this.deny();
+    const item = await this.prisma.learningItem.findUnique({
+      where: { tenantId_id: { tenantId, id: intent.parentId } },
+    });
+    if (!item) this.notFound();
+    if (intent.category === 'STUDENT_SUBMISSION') {
+      await this.requireStudentUploadTarget(context, item.id);
+    } else {
+      this.requireMatchingLearningAttachment(
+        item.type,
+        intent.category as LearningAttachmentPurpose,
+      );
+      await this.requireTeacherOrTenantAdminForCourseSubject(context, item.courseSubjectId);
+    }
+    return intent;
+  }
+
+  private requireMatchingLearningAttachment(
+    itemType: string,
+    category: UploadCategory,
+  ): void {
+    if (
+      (category === 'ASSIGNMENT_SOURCE' && itemType !== 'ASSIGNMENT') ||
+      (category === 'ASSESSMENT_SOURCE' && itemType !== 'ASSESSMENT') ||
+      (category === 'LEARNING_MATERIAL' && itemType !== 'MATERIAL')
+    ) {
+      throw new BadRequestException('The attachment purpose does not match the learning item.');
+    }
+  }
+
+  private async requireStudentUploadTarget(
+    context: AcademicRequestContext,
+    learningItemId: string,
+  ): Promise<void> {
+    const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
+    const student = await this.studentForContext(context);
+    if (!student) this.deny();
+    const item = await this.prisma.learningItem.findUnique({
+      where: { tenantId_id: { tenantId, id: learningItemId } },
+      include: { learningUnit: true },
+    });
+    if (!item || (item.type !== 'ASSIGNMENT' && item.type !== 'ASSESSMENT')) this.deny();
+    const courseSubject = await this.prisma.courseSubject.findFirst({
+      where: {
         tenantId,
-        intentId: intent.id,
-        bytes: validated.bytes,
-      });
-      if (
-        staged.sizeBytes !== validated.authoritativeSizeBytes ||
-        staged.sizeBytes > MAX_FILE_SIZE_BYTES
-      ) {
-        throw new BadRequestException('The authoritative stored size is invalid.');
-      }
-      stagedKey = staged.storageKey;
-      const sha256 = createHash('sha256').update(validated.bytes).digest('hex');
-      const existing = await this.prisma.storedBlob.findFirst({
-        where: {
-          tenantId,
-          sha256,
-          storedSizeBytes: BigInt(validated.authoritativeSizeBytes),
-          lifecycle: 'AVAILABLE',
-        },
-      });
-      let storedBlobId = existing?.id;
-      let isNewBlob = false;
-      if (!storedBlobId) {
-        storedBlobId = randomUUID();
-        finalKey = `tenants/${createHash('sha256').update(tenantId).digest('hex')}/blobs/${storedBlobId}`;
-        await this.provider.promote({ stagingKey: stagedKey, finalKey });
-        stagedKey = undefined;
-        isNewBlob = true;
-      } else {
-        await this.provider.remove(stagedKey);
-        stagedKey = undefined;
-      }
-      try {
-        const result = await this.finalizeUpload({
-          context,
-          intentId: intent.id,
-          tenantId,
-          validated,
-          sha256,
-          storedBlobId,
-          storageKey: finalKey ?? existing?.storageKey,
-          isNewBlob,
-          reference,
-        });
-        await this.audit.record({
-          action: isNewBlob ? 'FILE_STORED' : 'FILE_DEDUPLICATED',
-          context,
-          resourceId: result.id,
-          resourceType: 'FileObject',
-          ...(reference.learningItemId
-            ? { courseSubjectId: (await this.prisma.learningItem.findUniqueOrThrow({ where: { tenantId_id: { tenantId, id: reference.learningItemId } } })).courseSubjectId }
-            : {}),
-        });
-        return result;
-      } catch (error) {
-        if (isNewBlob && this.isUniqueViolation(error)) {
-          if (finalKey) await this.provider.remove(finalKey);
-          const winner = await this.prisma.storedBlob.findFirst({
-            where: {
-              tenantId,
-              sha256,
-              storedSizeBytes: BigInt(validated.authoritativeSizeBytes),
-              lifecycle: 'AVAILABLE',
-            },
-          });
-          if (winner) {
-            return this.finalizeUpload({
-              context,
-              intentId: intent.id,
-              tenantId,
-              validated,
-              sha256,
-              storedBlobId: winner.id,
-              storageKey: winner.storageKey,
-              isNewBlob: false,
-              reference,
-            });
-          }
-        }
-        if (isNewBlob && finalKey) await this.provider.remove(finalKey);
-        throw error;
-      }
-    } catch (error) {
-      if (stagedKey) await this.provider.remove(stagedKey);
-      await this.failIntent(context, intent.id, tenantId);
-      throw error;
+        id: item.courseSubjectId,
+        status: 'ACTIVE',
+        OR: [
+          {
+            defaultForCourse: true,
+            course: { enrollments: { some: { studentId: student.id, status: 'ACTIVE' } } },
+          },
+          { directEnrollments: { some: { studentId: student.id, status: 'ACTIVE' } } },
+        ],
+      },
+    });
+    const now = new Date();
+    const visible =
+      item.publicationStatus === 'PUBLISHED' ||
+      (item.publicationStatus === 'SCHEDULED' && item.publishAt !== null && item.publishAt <= now);
+    if (
+      !courseSubject ||
+      item.learningUnit.status !== 'ACTIVE' ||
+      (item.learningUnit.startAt && item.learningUnit.startAt > now) ||
+      (item.learningUnit.endAt && item.learningUnit.endAt < now) ||
+      !visible
+    ) {
+      this.deny();
     }
+  }
+
+  private throwValidation(error: unknown): never {
+    if (error instanceof FileValidationError) {
+      throw new BadRequestException(error.message);
+    }
+    throw error;
   }
 
   private async reserveUpload(
     context: AcademicRequestContext,
     reference: {
-      referenceType: 'LEARNING_ITEM' | 'SUBMISSION_REVISION';
+      parentType: 'LEARNING_ITEM';
       parentId: string;
-      category: LearningAttachmentPurpose | 'STUDENT_SUBMISSION';
+      category: UploadCategory;
     },
-    validated: ValidatedFile,
-  ): Promise<{ id: string }> {
+    metadata: ReturnType<typeof validateUploadMetadata>,
+  ): Promise<{ id: string; expiresAt: Date }> {
     const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
-    await this.provider.assertPhysicalCapacity(validated.authoritativeSizeBytes);
+    await this.provider.assertPhysicalCapacity(metadata.declaredSizeBytes);
     const intentId = randomUUID();
-    const size = BigInt(validated.authoritativeSizeBytes);
+    const expiresAt = new Date(Date.now() + EXPIRY_MS);
+    const size = BigInt(metadata.declaredSizeBytes);
     await this.prisma.$transaction(async (tx) => {
       await this.ensureScopeRows(tenantId, tx);
       const global = await tx.storageQuotaPolicy.findUniqueOrThrow({
@@ -463,48 +646,56 @@ export class StorageService implements LearningAttachmentPort {
           id: intentId,
           tenantId,
           createdByIdentityUserId: context.principal.identityUserId,
-          parentType: reference.referenceType,
+          parentType: reference.parentType,
           parentId: reference.parentId,
           category: reference.category,
-          expectedFilename: validated.normalizedFilename,
+          expectedFilename: metadata.normalizedFilename,
           expectedSizeBytes: size,
-          expectedMime: validated.declaredMime,
+          expectedMime: metadata.declaredMime,
           reservedBytes: size,
           stagingKey: `tenants/${createHash('sha256').update(tenantId).digest('hex')}/pending/${intentId}`,
-          expiresAt: new Date(Date.now() + EXPIRY_MS),
+          expiresAt,
         },
       });
     });
-    return { id: intentId };
+    return { id: intentId, expiresAt };
   }
 
   private async finalizeUpload(input: {
     context: AcademicRequestContext;
-    intentId: string;
-    tenantId: string;
+    intent: {
+      id: string;
+      tenantId: string;
+      parentType: string;
+      parentId: string;
+      category: PrismaStorageCategory;
+      expectedFilename: string;
+      expectedSizeBytes: bigint;
+      expectedMime: string;
+      reservedBytes: bigint;
+      stagingKey: string;
+      status: string;
+      expiresAt: Date;
+      finalizedFileObjectId: string | null;
+    };
     validated: ValidatedFile;
-    sha256: string;
     storedBlobId: string;
     storageKey: string | undefined;
     isNewBlob: boolean;
-    reference: {
-      referenceType: 'LEARNING_ITEM' | 'SUBMISSION_REVISION';
-      parentId: string;
-      category: LearningAttachmentPurpose | 'STUDENT_SUBMISSION';
-      learningItemId?: string;
-      submissionRevisionId?: string;
-    };
   }): Promise<StoredFileResult> {
     if (!input.storageKey) throw new Error('Stored blob key is missing.');
+    if (input.intent.status !== 'STAGED') {
+      throw new ConflictException('Upload intent is not staged for completion.');
+    }
     const now = new Date();
     const record = await this.prisma.$transaction(async (tx) => {
       if (input.isNewBlob) {
         await tx.storedBlob.create({
           data: {
             id: input.storedBlobId,
-            tenantId: input.tenantId,
+            tenantId: input.intent.tenantId,
             storageKey: input.storageKey as string,
-            sha256: input.sha256,
+            sha256: input.validated.sha256,
             storedSizeBytes: BigInt(input.validated.authoritativeSizeBytes),
             detectedMime: input.validated.detectedMime,
             detectedExtension: input.validated.extension,
@@ -519,7 +710,7 @@ export class StorageService implements LearningAttachmentPort {
       const file = await tx.fileObject.create({
         data: {
           id: randomUUID(),
-          tenantId: input.tenantId,
+          tenantId: input.intent.tenantId,
           storedBlobId: input.storedBlobId,
           originalFilename: input.validated.originalFilename,
           normalizedFilename: input.validated.normalizedFilename,
@@ -528,34 +719,39 @@ export class StorageService implements LearningAttachmentPort {
           declaredMime: input.validated.declaredMime,
           detectedMime: input.validated.detectedMime,
           extension: input.validated.extension,
-          category: input.reference.category,
+          category: input.intent.category,
           uploadedByIdentityUserId: input.context.principal.identityUserId,
           lifecycle: 'AVAILABLE',
           validatedAt: now,
         },
       });
-      await tx.fileReference.create({
-        data: {
-          id: randomUUID(),
-          tenantId: input.tenantId,
-          fileObjectId: file.id,
-          referenceType: input.reference.referenceType,
-          category: input.reference.category,
-          learningItemId: input.reference.learningItemId ?? null,
-          submissionRevisionId: input.reference.submissionRevisionId ?? null,
-          createdByIdentityUserId: input.context.principal.identityUserId,
-        },
-      });
+      if (input.intent.category !== 'STUDENT_SUBMISSION') {
+        await tx.fileReference.create({
+          data: {
+            id: randomUUID(),
+            tenantId: input.intent.tenantId,
+            fileObjectId: file.id,
+            referenceType: 'LEARNING_ITEM',
+            category: input.intent.category,
+            learningItemId: input.intent.parentId,
+            createdByIdentityUserId: input.context.principal.identityUserId,
+          },
+        });
+      }
       await this.releaseAndAccount(
         tx,
-        input.tenantId,
-        input.intentId,
+        input.intent.tenantId,
+        input.intent.id,
         input.validated.authoritativeSizeBytes,
         input.isNewBlob,
       );
       await tx.uploadIntent.update({
-        where: { tenantId_id: { tenantId: input.tenantId, id: input.intentId } },
-        data: { status: 'FINALIZED', finalizedAt: now },
+        where: { tenantId_id: { tenantId: input.intent.tenantId, id: input.intent.id } },
+        data: {
+          status: 'FINALIZED',
+          finalizedAt: now,
+          finalizedFileObjectId: file.id,
+        },
       });
       return file;
     });
@@ -572,21 +768,20 @@ export class StorageService implements LearningAttachmentPort {
     const intent = await tx.uploadIntent.findUniqueOrThrow({
       where: { tenantId_id: { tenantId, id: intentId } },
     });
-    if (intent.status !== 'RESERVED') throw new ConflictException('Upload intent is no longer available.');
+    if (intent.status !== 'STAGED') throw new ConflictException('Upload intent is no longer available.');
     const reservedBytes = this.toSafeNumber(intent.reservedBytes);
-      await this.adjustAccount(tx, tenantId, 1, newBlob ? 1 : 0, newBlob ? sizeBytes : 0, -reservedBytes);
+    await this.adjustAccount(tx, tenantId, 1, newBlob ? 1 : 0, newBlob ? sizeBytes : 0, -reservedBytes);
   }
 
   private async failIntent(
-    _context: AcademicRequestContext,
-    intentId: string,
     tenantId: string,
+    intentId: string,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const intent = await tx.uploadIntent.findUnique({
         where: { tenantId_id: { tenantId, id: intentId } },
       });
-      if (!intent || intent.status !== 'RESERVED') return;
+      if (!intent || (intent.status !== 'RESERVED' && intent.status !== 'STAGED')) return;
       const reserved = this.toSafeNumber(intent.reservedBytes);
       await this.adjustAccount(tx, tenantId, 0, 0, 0, -reserved);
       await tx.uploadIntent.update({
@@ -594,6 +789,32 @@ export class StorageService implements LearningAttachmentPort {
         data: { status: 'FAILED' },
       });
     });
+  }
+
+  private async expireIntent(
+    tenantId: string,
+    intentId: string,
+    stagingKey: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const intent = await tx.uploadIntent.findUnique({
+        where: { tenantId_id: { tenantId, id: intentId } },
+      });
+      if (!intent || (intent.status !== 'RESERVED' && intent.status !== 'STAGED')) return;
+      await this.adjustAccount(
+        tx,
+        tenantId,
+        0,
+        0,
+        0,
+        -this.toSafeNumber(intent.reservedBytes),
+      );
+      await tx.uploadIntent.update({
+        where: { tenantId_id: { tenantId, id: intentId } },
+        data: { status: 'EXPIRED' },
+      });
+    });
+    await this.provider.remove(stagingKey);
   }
 
   private async adjustAccount(

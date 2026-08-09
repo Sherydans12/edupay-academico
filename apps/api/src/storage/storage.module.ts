@@ -5,7 +5,10 @@ import { SecurityFoundationModule } from '../security/security-foundation.module
 import { LEARNING_ATTACHMENT_PORT } from '../learning/learning-attachment.port';
 import { LEARNING_STUDENT_WORK_PORT } from '../learning/learning-student-work.port';
 import { SubmissionService } from './submission.service';
-import { StorageController } from './storage.controller';
+import {
+  BoundedMultipartUploadInterceptor,
+  StorageController,
+} from './storage.controller';
 import { StorageService } from './storage.service';
 import { SubmissionController } from './submission.controller';
 import { LocalPrivateStorageAdapter } from './local-private-storage.adapter';
@@ -22,6 +25,7 @@ import { PRIVATE_STORAGE_PROVIDER } from './private-storage.port';
     },
     StorageService,
     SubmissionService,
+    BoundedMultipartUploadInterceptor,
     {
       provide: LEARNING_STUDENT_WORK_PORT,
       useExisting: SubmissionService,

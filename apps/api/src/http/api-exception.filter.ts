@@ -14,16 +14,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const context = host.switchToHttp();
     const request = context.getRequest<Request>();
     const response = context.getResponse<Response>();
-    const status =
-      exception instanceof HttpException ? exception.getStatus() : 500;
+    const status = this.status(exception);
     const exceptionResponse =
       exception instanceof HttpException ? exception.getResponse() : undefined;
 
     const body: ApiErrorEnvelope = {
       error: {
-        code: this.errorCode(status),
+        code: this.errorCode(status, exception),
         details: this.errorDetails(exceptionResponse),
-        message: this.safeMessage(status, exceptionResponse),
+        message: this.safeMessage(status, exceptionResponse, exception),
         requestId: request.requestId ?? 'unavailable',
       },
     };
@@ -31,9 +30,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
     response.status(status).json(body);
   }
 
-  private errorCode(status: number): string {
+  private errorCode(status: number, exception: unknown): string {
+    if (this.isMultipartLimit(exception)) return 'FILE_TOO_LARGE';
     const codes: Partial<Record<number, string>> = {
       [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
+      [HttpStatus.PAYLOAD_TOO_LARGE]: 'FILE_TOO_LARGE',
       [HttpStatus.UNAUTHORIZED]: 'TOKEN_INVALID',
       [HttpStatus.FORBIDDEN]: 'FORBIDDEN',
       [HttpStatus.NOT_FOUND]: 'NOT_FOUND',
@@ -63,7 +64,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
   private safeMessage(
     status: number,
     exceptionResponse: string | object | undefined,
+    exception: unknown,
   ): string {
+    if (this.isMultipartLimit(exception) || status === HttpStatus.PAYLOAD_TOO_LARGE) {
+      return 'The file is too large.';
+    }
     if (status >= 500) {
       return 'The request could not be completed.';
     }
@@ -81,5 +86,19 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
 
     return 'The request could not be completed.';
+  }
+
+  private status(exception: unknown): number {
+    if (this.isMultipartLimit(exception)) return HttpStatus.BAD_REQUEST;
+    return exception instanceof HttpException ? exception.getStatus() : 500;
+  }
+
+  private isMultipartLimit(exception: unknown): boolean {
+    return (
+      typeof exception === 'object' &&
+      exception !== null &&
+      'code' in exception &&
+      (exception as { code?: unknown }).code === 'LIMIT_FILE_SIZE'
+    );
   }
 }

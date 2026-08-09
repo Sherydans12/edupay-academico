@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 
 export const MAX_FILE_SIZE_BYTES = 25_000_000;
@@ -23,15 +26,18 @@ const allowedTypes = {
   '.zip': 'application/zip',
 } as const;
 
-export type ValidatedFile = {
+export type UploadMetadata = {
   readonly originalFilename: string;
   readonly normalizedFilename: string;
   readonly extension: string;
   readonly declaredMime: string;
-  readonly detectedMime: string;
   readonly declaredSizeBytes: number;
+};
+
+export type ValidatedFile = UploadMetadata & {
+  readonly detectedMime: string;
   readonly authoritativeSizeBytes: number;
-  readonly bytes: Buffer;
+  readonly sha256: string;
 };
 
 export class FileValidationError extends Error {
@@ -46,37 +52,16 @@ export class FileValidationError extends Error {
   }
 }
 
-export function validateUploadFile(input: {
+export function validateUploadMetadata(input: {
   filename: string;
   mimeType: string;
   sizeBytes: number;
-  contentBase64: string;
-}): ValidatedFile {
+}): UploadMetadata & { readonly detectedMime: string } {
   if (input.sizeBytes > MAX_FILE_SIZE_BYTES) {
     throw new FileValidationError('FILE_TOO_LARGE', 'The file is too large.');
   }
   if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes < 0) {
     throw new FileValidationError('FILE_TYPE_NOT_ALLOWED', 'Invalid file size.');
-  }
-  if (
-    !input.contentBase64 ||
-    input.contentBase64.length % 4 === 1 ||
-    !/^[A-Za-z0-9+/]*={0,2}$/.test(input.contentBase64)
-  ) {
-    throw new FileValidationError(
-      'FILE_CONTENT_MISMATCH',
-      'The uploaded content is not valid base64.',
-    );
-  }
-  const bytes = Buffer.from(input.contentBase64, 'base64');
-  if (bytes.length !== input.sizeBytes) {
-    throw new FileValidationError(
-      'FILE_CONTENT_MISMATCH',
-      'The authoritative file size does not match the declared size.',
-    );
-  }
-  if (bytes.length > MAX_FILE_SIZE_BYTES) {
-    throw new FileValidationError('FILE_TOO_LARGE', 'The file is too large.');
   }
 
   const originalFilename = input.filename.trim();
@@ -91,16 +76,157 @@ export function validateUploadFile(input: {
     );
   }
 
-  validateContent(extension, bytes);
   return {
     originalFilename,
     normalizedFilename,
     extension,
     declaredMime,
-    detectedMime: expectedMime,
     declaredSizeBytes: input.sizeBytes,
-    authoritativeSizeBytes: bytes.length,
-    bytes,
+    detectedMime: expectedMime,
+  };
+}
+
+/**
+ * Bounded-memory validation helper for unit tests and trusted local fixtures.
+ * The application upload path uses validateUploadFilePath instead.
+ */
+export function validateUploadBytes(input: {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  bytes: Buffer;
+}): ValidatedFile {
+  const metadata = validateUploadMetadata(input);
+  if (input.bytes.length !== metadata.declaredSizeBytes) {
+    throw new FileValidationError(
+      'FILE_CONTENT_MISMATCH',
+      'The authoritative file size does not match the declared size.',
+    );
+  }
+  const hasContentTypesPart = input.bytes.includes(Buffer.from('[Content_Types].xml'));
+  const expectedPart =
+    metadata.extension === '.docx'
+      ? 'word/'
+      : metadata.extension === '.xlsx'
+        ? 'xl/'
+        : metadata.extension === '.pptx'
+          ? 'ppt/'
+          : undefined;
+  validateContent(
+    metadata.extension,
+    input.bytes,
+    input.bytes,
+    hasContentTypesPart,
+    expectedPart ? input.bytes.includes(Buffer.from(expectedPart)) : false,
+    input.bytes.reduce((count, byte) => count + (byte === 0 ? 1 : 0), 0),
+    input.bytes.length,
+  );
+  return {
+    ...metadata,
+    authoritativeSizeBytes: input.bytes.length,
+    sha256: createHash('sha256').update(input.bytes).digest('hex'),
+  };
+}
+
+/**
+ * Validates a Multer disk-staged file without converting the upload to a JSON
+ * string or buffering a collection of files in application memory.
+ */
+export async function validateUploadFilePath(input: {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  filePath: string;
+}): Promise<ValidatedFile> {
+  const metadata = validateUploadMetadata(input);
+  const fileStats = await stat(input.filePath);
+  if (!fileStats.isFile() || fileStats.size !== metadata.declaredSizeBytes) {
+    throw new FileValidationError(
+      'FILE_CONTENT_MISMATCH',
+      'The authoritative file size does not match the declared size.',
+    );
+  }
+
+  const hash = createHash('sha256');
+  const firstBytes: Buffer[] = [];
+  let firstLength = 0;
+  let tail = Buffer.alloc(0);
+  let searchCarry = Buffer.alloc(0);
+  let hasContentTypesPart = false;
+  let hasExpectedPackagePart = false;
+  let nulCount = 0;
+  const decoder = metadata.extension === '.txt'
+    ? new TextDecoder('utf-8', { fatal: true })
+    : undefined;
+  let bytesRead = 0;
+
+  try {
+    for await (const chunk of createReadStream(input.filePath, {
+      highWaterMark: 64 * 1024,
+    })) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytesRead += bytes.length;
+      hash.update(bytes);
+
+      if (firstLength < 12) {
+        const prefix = bytes.subarray(0, 12 - firstLength);
+        firstBytes.push(prefix);
+        firstLength += prefix.length;
+      }
+      tail = Buffer.concat([tail, bytes]).subarray(-65_557);
+
+      if (metadata.extension === '.zip' || metadata.extension.endsWith('x')) {
+        const sample = Buffer.concat([searchCarry, bytes]);
+        hasContentTypesPart ||= sample.includes(Buffer.from('[Content_Types].xml'));
+        const expectedPart =
+          metadata.extension === '.docx'
+            ? 'word/'
+            : metadata.extension === '.xlsx'
+              ? 'xl/'
+              : metadata.extension === '.pptx'
+                ? 'ppt/'
+                : undefined;
+        if (expectedPart) {
+          hasExpectedPackagePart ||= sample.includes(Buffer.from(expectedPart));
+        }
+        searchCarry = sample.subarray(-64);
+      }
+
+      if (decoder) {
+        decoder.decode(bytes, { stream: true });
+        for (const byte of bytes) if (byte === 0) nulCount += 1;
+      }
+    }
+    if (decoder) decoder.decode();
+  } catch (error) {
+    if (error instanceof FileValidationError) throw error;
+    throw new FileValidationError(
+      'FILE_CONTENT_MISMATCH',
+      'The file could not be read for validation.',
+    );
+  }
+
+  if (bytesRead !== metadata.declaredSizeBytes) {
+    throw new FileValidationError(
+      'FILE_CONTENT_MISMATCH',
+      'The authoritative file size does not match the declared size.',
+    );
+  }
+  const first = Buffer.concat(firstBytes);
+  validateContent(
+    metadata.extension,
+    first,
+    tail,
+    hasContentTypesPart,
+    hasExpectedPackagePart,
+    nulCount,
+    bytesRead,
+  );
+
+  return {
+    ...metadata,
+    authoritativeSizeBytes: bytesRead,
+    sha256: hash.digest('hex'),
   };
 }
 
@@ -123,66 +249,56 @@ function normalizeFilename(filename: string): string {
   return safe.slice(0, 255);
 }
 
-function validateContent(extension: string, bytes: Buffer): void {
-  if (extension === '.pdf' && !bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+function validateContent(
+  extension: string,
+  first: Buffer,
+  tail: Buffer,
+  hasContentTypesPart = false,
+  hasExpectedPackagePart = false,
+  nulCount = 0,
+  sizeBytes = first.length,
+): void {
+  if (extension === '.pdf' && !first.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
     mismatch();
   }
   if (
     (extension === '.jpg' || extension === '.jpeg') &&
-    !(bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    !(first[0] === 0xff && first[1] === 0xd8 && first[2] === 0xff)
   ) {
     mismatch();
   }
   if (
     extension === '.png' &&
-    !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    !first.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
   ) {
     mismatch();
   }
   if (
     extension === '.webp' &&
-    !(bytes.subarray(0, 4).toString() === 'RIFF' &&
-      bytes.subarray(8, 12).toString() === 'WEBP')
+    !(first.subarray(0, 4).toString() === 'RIFF' &&
+      first.subarray(8, 12).toString() === 'WEBP')
   ) {
     mismatch();
   }
-  if (extension === '.txt') {
-    try {
-      new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-      mismatch();
-    }
-    const nulCount = bytes.reduce((count, byte) => count + (byte === 0 ? 1 : 0), 0);
-    if (bytes.length > 0 && nulCount / bytes.length > 0.01) mismatch();
+  if (extension === '.txt' && sizeBytes > 0 && nulCount / sizeBytes > 0.01) {
+    mismatch();
   }
   if (extension === '.zip' || extension.endsWith('x')) {
-    validateZip(bytes);
-    if (extension === '.docx') requirePackage(bytes, 'word/');
-    if (extension === '.xlsx') requirePackage(bytes, 'xl/');
-    if (extension === '.pptx') requirePackage(bytes, 'ppt/');
-  }
-  if (extension === '.doc' || extension === '.xls' || extension === '.ppt') {
-    if (!bytes.subarray(0, 8).equals(Buffer.from([208, 207, 17, 224, 161, 177, 26, 225]))) {
+    if (!first.subarray(0, 4).equals(Buffer.from([80, 75, 3, 4]))) mismatch();
+    if (
+      !tail.includes(Buffer.from([80, 75, 5, 6])) &&
+      !tail.includes(Buffer.from([80, 75, 6, 6]))
+    ) {
+      mismatch();
+    }
+    if (extension.endsWith('x') && (!hasContentTypesPart || !hasExpectedPackagePart)) {
       mismatch();
     }
   }
-}
-
-function validateZip(bytes: Buffer): void {
-  if (!bytes.subarray(0, 4).equals(Buffer.from([80, 75, 3, 4]))) mismatch();
-  const tailStart = Math.max(0, bytes.length - 65_557);
-  const tail = bytes.subarray(tailStart);
-  if (
-    !tail.includes(Buffer.from([80, 75, 5, 6])) &&
-    !tail.includes(Buffer.from([80, 75, 6, 6]))
-  ) {
-    mismatch();
-  }
-}
-
-function requirePackage(bytes: Buffer, part: string): void {
-  if (!bytes.includes(Buffer.from('[Content_Types].xml')) || !bytes.includes(Buffer.from(part))) {
-    mismatch();
+  if (extension === '.doc' || extension === '.xls' || extension === '.ppt') {
+    if (!first.subarray(0, 8).equals(Buffer.from([208, 207, 17, 224, 161, 177, 26, 225]))) {
+      mismatch();
+    }
   }
 }
 

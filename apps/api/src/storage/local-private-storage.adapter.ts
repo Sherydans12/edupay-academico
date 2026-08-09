@@ -6,7 +6,7 @@ import {
   readFile,
   rm,
   statfs,
-  writeFile,
+  stat,
 } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -44,14 +44,17 @@ export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
   async stage(input: {
     tenantId: string;
     intentId: string;
-    bytes: Buffer;
+    sourcePath: string;
   }): Promise<{ storageKey: string; sizeBytes: number }> {
-    await this.assertPhysicalCapacity(input.bytes.length);
+    const sourceStats = await stat(input.sourcePath);
+    if (!sourceStats.isFile()) throw new Error('The staged upload is not a file.');
+    await this.assertPhysicalCapacity(sourceStats.size);
     const storageKey = `tenants/${keyPart(input.tenantId)}/pending/${keyPart(input.intentId)}`;
     const target = this.absolute(storageKey);
     await mkdir(join(target, '..'), { recursive: true });
-    await writeFile(target, input.bytes, { flag: 'wx' });
-    return { storageKey, sizeBytes: input.bytes.length };
+    await copyFile(input.sourcePath, target, 1);
+    await rm(input.sourcePath, { force: true });
+    return { storageKey, sizeBytes: sourceStats.size };
   }
 
   async promote(input: { stagingKey: string; finalKey: string }): Promise<void> {

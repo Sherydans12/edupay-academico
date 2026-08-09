@@ -184,12 +184,13 @@ No physical object becomes downloadable through a domain resource until an avail
 3. Authorize the actor, target parent resource, purpose/category, lifecycle action, and file-count rules.
 4. Validate filename/extension, declared MIME, declared size, and policy version. Reject a declared size above 25 MB.
 5. Atomically reserve the declared bytes against both tenant and global scopes and create an expiring `UploadIntent` bound to actor, tenant, parent, and purpose.
-6. Upload to a private server-generated staging key through the storage abstraction. A signed upload, if used, is short-lived and constrained to that key and expected size.
-7. Finalize server-side: obtain authoritative size, stream SHA-256 calculation, detect actual type/signature/structure, enforce the 25 MB limit again, and apply the scanning gate once its policy is decided. The object is unavailable during this step.
-8. Recheck both quotas using authoritative bytes. Within a transaction, find or create the tenant-local `StoredBlob`, handle the unique-key race, create `FileObject` and `FileReference`, convert/release the reservation, and update usage/file counts.
-9. If the blob already exists in the tenant, reuse it and remove the staged duplicate after verification; physical `usedBytes` does not increase. Never search or deduplicate across tenants.
-10. Promote a new staged object to its immutable final key and mark it available using an idempotent state transition. Because PostgreSQL and object storage do not share a transaction, retries and reconciliation complete or compensate partial states without exposing an unvalidated file.
-11. Audit intent creation outcome, validation rejection, quota rejection, successful availability, deduplication outcome at a non-sensitive level, and important failure/cleanup operations.
+6. Return an opaque `uploadIntentId` and safe upload instructions. The control plane is JSON metadata only; it contains no file bytes.
+7. Transfer exactly one file through `POST /api/v1/file-upload-intents/{intentId}/content` as `multipart/form-data` with the `file` field. The initial local adapter uses bounded disk staging, not an in-memory multipart buffer.
+8. Finalize server-side: obtain authoritative size, stream SHA-256 calculation, detect actual type/signature/structure, enforce the 25 MB limit again, and apply the scanning gate once its policy is decided. The object is unavailable during this step.
+9. Recheck both quotas using authoritative bytes. Within a transaction, find or create the tenant-local `StoredBlob`, handle the unique-key race, create `FileObject` and any parent `FileReference`, convert/release the reservation, and update usage/file counts.
+10. If the blob already exists in the tenant, reuse it and remove the staged duplicate after verification; physical `usedBytes` does not increase. Never search or deduplicate across tenants.
+11. Promote a new staged object to its immutable final key and mark it available using an idempotent state transition. Because PostgreSQL and object storage do not share a transaction, retries and reconciliation complete or compensate partial states without exposing an unvalidated file.
+12. Audit intent creation outcome, validation rejection, quota rejection, successful availability, deduplication outcome at a non-sensitive level, and important failure/cleanup operations.
 
 Expired reservations are released idempotently. Abandoned staged objects remain accounted while present and are cleaned according to an operational cleanup interval; retention/deletion rules for valid domain files remain unresolved.
 
@@ -257,7 +258,7 @@ and presigned URLs remain outside the contract:
 | Method and route | Purpose | Minimum authorization |
 | --- | --- | --- |
 | `POST /api/v1/file-upload-intents` | Preflight validation, authorization, and dual-scope reservation | Actor may attach to the referenced parent |
-| `POST /api/v1/file-upload-intents/{intentId}/complete` | Authoritative validation, deduplication, metadata/reference creation, and accounting | Intent actor or explicit authorized server workflow |
+| `POST /api/v1/file-upload-intents/{intentId}/content` | One-file multipart transfer followed by authoritative validation, deduplication, metadata/reference creation, and accounting | Intent actor or explicit authorized server workflow |
 | `GET /api/v1/files/{fileObjectId}` | Authorized logical metadata | Parent-resource read permission |
 | `GET /api/v1/files/{fileObjectId}/download` | Authorized stream or short-lived redirect | Parent-resource download permission |
 | `POST /api/v1/learning-items/{learningItemId}/attachments` | Validate and attach a LearningItem source/material file | Assigned teacher or `TENANT_ADMIN` |
@@ -270,6 +271,8 @@ and presigned URLs remain outside the contract:
 | `PATCH /api/v1/platform/storage/quotas/{scope}` | Change a configured quota/threshold policy | Explicit audited platform policy authority; exact role policy remains open |
 
 No upload contract accepts `tenantId`, storage key, detected type, or trusted checksum from the client. A parent selector is authorization input only and is resolved inside trusted tenant context.
+
+The upload-intent creation request is JSON metadata (`parentType`, `parentId`, `category`, `filename`, `mimeType`, and `sizeBytes`). The content endpoint is documented in OpenAPI as `multipart/form-data` with one binary `file` field and no JSON/base64 representation. Submission mutations accept only finalized opaque `fileObjectIds`.
 
 Expected safe error codes include `FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`, `FILE_CONTENT_MISMATCH`, `UPLOAD_INTENT_EXPIRED`, `TENANT_STORAGE_QUOTA_EXCEEDED`, `GLOBAL_STORAGE_QUOTA_EXCEEDED`, `PHYSICAL_STORAGE_SAFETY_GUARD`, `FILE_NOT_AVAILABLE`, and a non-enumerating authorization/not-found result. Responses include the request ID but not provider details or another scope's remaining capacity.
 

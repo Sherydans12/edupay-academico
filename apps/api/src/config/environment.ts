@@ -92,6 +92,7 @@ const environmentSchema = z
       .max(30_000)
       .default(5_000),
     STORAGE_ROOT: z.string().min(1).optional(),
+    STORAGE_TEMP_ROOT: z.string().min(1).optional(),
     STORAGE_MIN_FREE_BYTES: optionalStorageNumber.pipe(z.number().int().min(0).optional()),
     STORAGE_MIN_FREE_PERCENTAGE: optionalStorageNumber.pipe(z.number().min(0).max(100).optional()),
   })

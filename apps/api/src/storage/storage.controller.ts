@@ -1,31 +1,110 @@
 import {
+  BadRequestException,
   Body,
+  CallHandler,
   Controller,
+  ExecutionContext,
   Get,
+  Injectable,
   Param,
   ParseUUIDPipe,
   Post,
   Res,
+  NestInterceptor,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
-import type { LearningAttachmentUpload } from '@edupay/contracts';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import {
-  learningAttachmentUploadSchema,
+  createUploadIntentSchema,
+  storageFileSchema,
   storagePolicySchema,
   storageUsageSchema,
-  storageFileSchema,
+  uploadIntentSchema,
 } from '@edupay/contracts';
+import type { CreateUploadIntent } from '@edupay/contracts';
+import { rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Response } from 'express';
+import { catchError, defer, type Observable } from 'rxjs';
 
 import { TenantCapability } from '../authorization/authorization.types';
 import { RequireCapabilities } from '../authorization/require-capabilities.decorator';
 import { ContractBody, ContractResponse } from '../http/zod-response.interceptor';
 import { ZodValidationPipe } from '../http/zod-validation.pipe';
-import { CurrentRequestContext } from '../tenant/current-request-context.service';
 import type { AcademicRequestContext } from '../academic/academic-context';
+import { CurrentRequestContext } from '../tenant/current-request-context.service';
 import { StorageService } from './storage.service';
+import { MAX_FILE_SIZE_BYTES } from './file-validation';
 
 const uuid = new ParseUUIDPipe({ version: '4' });
+const multipartTempRoot =
+  process.env.STORAGE_TEMP_ROOT ??
+  join(process.env.STORAGE_ROOT ?? join(process.cwd(), 'var', 'private-storage'), 'tmp');
+const boundedMultipart = FileInterceptor('file', {
+  dest: multipartTempRoot,
+  limits: {
+    fileSize: MAX_FILE_SIZE_BYTES,
+    files: 1,
+    fields: 0,
+  },
+});
+
+type MultipartFile = {
+  readonly path: string;
+  readonly originalname: string;
+  readonly mimetype: string;
+};
+
+@Injectable()
+export class BoundedMultipartUploadInterceptor implements NestInterceptor {
+  private readonly multerInterceptor: NestInterceptor;
+
+  constructor(
+    private readonly storage: StorageService,
+    private readonly current: CurrentRequestContext,
+  ) {
+    const Interceptor = boundedMultipart;
+    this.multerInterceptor = new Interceptor();
+  }
+
+  async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
+    try {
+      const delegated = await this.multerInterceptor.intercept(context, next);
+      return delegated.pipe(
+        catchError((error: unknown) =>
+          defer(async () => {
+            try {
+              await this.releaseFailedIntent(context);
+            } finally {
+              throw error;
+            }
+          }),
+        ),
+      );
+    } catch (error) {
+      await this.releaseFailedIntent(context);
+      throw error;
+    }
+  }
+
+  private async releaseFailedIntent(context: ExecutionContext): Promise<void> {
+    const request = context.switchToHttp().getRequest<{
+      params?: { intentId?: string };
+    }>();
+    const intentId = request.params?.intentId;
+    if (intentId) await this.storage.releaseFailedUploadIntent(this.context(), intentId);
+  }
+
+  private context(): AcademicRequestContext {
+    return {
+      principal: this.current.principal(),
+      requestId: this.current.requestId(),
+      tenant: this.current.tenant(),
+    };
+  }
+}
 
 @ApiTags('Storage')
 @Controller()
@@ -48,20 +127,42 @@ export class StorageController {
     return this.storage.getPolicy(this.context());
   }
 
-  @Post('learning-items/:learningItemId/attachments')
-  @ContractBody(learningAttachmentUploadSchema)
-  @ContractResponse(storageFileSchema)
-  attach(
-    @Param('learningItemId', uuid) learningItemId: string,
-    @Body(new ZodValidationPipe(learningAttachmentUploadSchema))
-    input: LearningAttachmentUpload,
+  @Post('file-upload-intents')
+  @ContractBody(createUploadIntentSchema)
+  @ContractResponse(uploadIntentSchema)
+  createIntent(
+    @Body(new ZodValidationPipe(createUploadIntentSchema)) input: CreateUploadIntent,
   ): Promise<object> {
-    return this.storage.attachLearningFile(
-      this.context(),
-      learningItemId,
-      input.purpose,
-      input,
-    );
+    return this.storage.createUploadIntent(this.context(), input);
+  }
+
+  @Post('file-upload-intents/:intentId/content')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @UseInterceptors(BoundedMultipartUploadInterceptor)
+  @ContractResponse(storageFileSchema)
+  async completeIntent(
+    @Param('intentId', uuid) intentId: string,
+    @UploadedFile() file: MultipartFile | undefined,
+  ): Promise<object> {
+    if (!file) {
+      throw new BadRequestException('A single multipart file is required.');
+    }
+    try {
+      return await this.storage.completeUpload(this.context(), intentId, {
+        filePath: file.path,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+      });
+    } finally {
+      await rm(file.path, { force: true });
+    }
   }
 
   @Get('learning-items/:learningItemId/attachments')

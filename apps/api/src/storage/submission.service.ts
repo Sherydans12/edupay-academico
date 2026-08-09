@@ -50,71 +50,67 @@ export class SubmissionService {
     const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
     const student = await this.requireStudent(context);
     const item = await this.requireEligibleVisibleItem(context, learningItemId, student.id);
-    const existing = await this.prisma.submission.findUnique({
-      where: { tenantId_studentId_learningItemId: { tenantId, studentId: student.id, learningItemId } },
-    });
-    if (existing && existing.status !== 'CHANGES_REQUESTED') {
-      throw new ConflictException(
-        'A new revision is allowed only after the teacher requests changes.',
-      );
-    }
-    const now = new Date();
-    const revisionNumber = existing
-      ? (await this.prisma.submissionRevision.aggregate({
-          where: { tenantId, submissionId: existing.id },
-          _max: { revisionNumber: true },
-        }))._max.revisionNumber! + 1
-      : 1;
-    const submission = existing
-      ? existing
-      : await this.prisma.submission.create({
-          data: {
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.submission.findUnique({
+        where: {
+          tenantId_studentId_learningItemId: {
             tenantId,
             studentId: student.id,
-            learningItemId: item.id,
-            status: 'PENDING',
+            learningItemId,
           },
-        });
-    const revision = await this.prisma.submissionRevision.create({
-      data: {
-        tenantId,
-        submissionId: submission.id,
-        revisionNumber,
-        studentComment: input.studentComment ?? null,
-        submittedAt: now,
-        effectiveDueAt: item.dueAt ?? now,
-        isLate: item.dueAt ? now.getTime() > item.dueAt.getTime() : false,
-        createdByIdentityUserId: context.principal.identityUserId,
-      },
-    });
-    try {
-      for (const file of input.files) {
-        await this.storage.storeSubmissionFile(context, revision.id, file);
+        },
+      });
+      if (existing && existing.status !== 'CHANGES_REQUESTED') {
+        throw new ConflictException(
+          'A new revision is allowed only after the teacher requests changes.',
+        );
       }
-      await this.prisma.submission.update({
+      const now = new Date();
+      const revisionNumber = existing
+        ? ((await tx.submissionRevision.aggregate({
+            where: { tenantId, submissionId: existing.id },
+            _max: { revisionNumber: true },
+          }))._max.revisionNumber ?? 0) + 1
+        : 1;
+      const submission = existing ?? await tx.submission.create({
+        data: {
+          tenantId,
+          studentId: student.id,
+          learningItemId: item.id,
+          status: 'PENDING',
+        },
+      });
+      const revision = await tx.submissionRevision.create({
+        data: {
+          tenantId,
+          submissionId: submission.id,
+          revisionNumber,
+          studentComment: input.studentComment ?? null,
+          submittedAt: now,
+          effectiveDueAt: item.dueAt ?? now,
+          isLate: item.dueAt ? now.getTime() > item.dueAt.getTime() : false,
+          createdByIdentityUserId: context.principal.identityUserId,
+        },
+      });
+      await this.storage.attachSubmissionFiles(tx, context, {
+        revisionId: revision.id,
+        learningItemId: item.id,
+        fileObjectIds: input.fileObjectIds,
+      });
+      await tx.submission.update({
         where: { tenantId_id: { tenantId, id: submission.id } },
         data: { status: 'SUBMITTED' },
       });
-    } catch (error) {
-      await this.storage.removeRevisionArtifacts(context, revision.id);
-      await this.prisma.submissionRevision.delete({
-        where: { tenantId_id: { tenantId, id: revision.id } },
-      });
-      if (!existing) {
-        await this.prisma.submission.delete({
-          where: { tenantId_id: { tenantId, id: submission.id } },
-        });
-      }
-      throw error;
-    }
+      return { submissionId: submission.id, resubmission: Boolean(existing) };
+    });
     await this.audit.record({
-      action: existing ? 'SUBMISSION_RESUBMITTED' : 'SUBMISSION_SUBMITTED',
+      action: outcome.resubmission ? 'SUBMISSION_RESUBMITTED' : 'SUBMISSION_SUBMITTED',
       context,
-      resourceId: submission.id,
+      resourceId: outcome.submissionId,
       resourceType: 'Submission',
       courseSubjectId: item.courseSubjectId,
     });
-    return this.getById(context, submission.id);
+    return this.getById(context, outcome.submissionId);
   }
 
   async getByLearningItem(
