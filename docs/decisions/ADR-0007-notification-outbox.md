@@ -1,6 +1,6 @@
 # ADR-0007: notification abstraction and outbox
 
-Status: Proposed  
+Status: Proposed; MVP details accepted by [ADR-0014](ADR-0014-academic-notifications-and-delivery.md)
 Date: 2026-08-08
 
 ## Context

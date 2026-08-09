@@ -31,9 +31,14 @@ file flows, deadline/late rules, teacher reviews, comments, change requests,
 resubmissions, and audit events. Responsive UX, notifications, and operational
 hardening remain follow-on work.
 
-## Phase 5 — notifications and EduPay synchronization
+## Phase 5 — notifications and EduPay synchronization (notifications implemented baseline)
 
-Implement the approved outbox/worker path, in-app notifications, Resend adapter, delivery observability, and the explicit student/course synchronization contract. Keep sync failure independent from manual academic operations.
+The approved notification baseline is implemented by ADR-0014: a PostgreSQL
+transactional outbox, independently runnable worker, in-app API, Academic-only
+Resend adapter, versioned templates, bounded retries, and Learning/
+Submission/review integration. The explicit student/course synchronization
+contract remains separate work. Keep sync failure independent from manual
+academic operations.
 
 ## Phase 6 — hardening and pilot
 

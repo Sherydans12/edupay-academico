@@ -137,6 +137,30 @@ enum ReviewAction {
   CHANGES_REQUESTED
 }
 
+enum NotificationEventType {
+  ASSIGNMENT_PUBLISHED
+  ASSESSMENT_PUBLISHED
+  ANNOUNCEMENT_PUBLISHED
+  SUBMISSION_RECEIVED
+  RESUBMISSION_RECEIVED
+  SUBMISSION_REVIEWED
+  CHANGES_REQUESTED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  RETRY
+  FAILED
+  SKIPPED
+}
+
 model Tenant {
   id        String   @id @db.VarChar(128)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -162,6 +186,9 @@ model Tenant {
   submissions                Submission[]
   submissionRevisions        SubmissionRevision[]
   reviews                    Review[]
+  notificationEvents         NotificationEvent[]
+  notificationDeliveries     NotificationDelivery[]
+  inAppNotifications         InAppNotification[]
 
   @@map("tenants")
 }
@@ -625,6 +652,84 @@ model Review {
   @@id([tenantId, id])
   @@index([tenantId, submissionRevisionId, createdAt])
   @@map("reviews")
+}
+
+model NotificationEvent {
+  id            String               @db.VarChar(220)
+  tenantId      String               @map("tenant_id") @db.VarChar(128)
+  eventType     NotificationEventType @map("event_type")
+  aggregateType String               @map("aggregate_type") @db.VarChar(80)
+  aggregateId   String               @map("aggregate_id") @db.VarChar(128)
+  payload       Json                 @db.JsonB
+  occurredAt    DateTime             @map("occurred_at") @db.Timestamptz(3)
+  notBefore     DateTime             @map("not_before") @db.Timestamptz(3)
+  requestId     String?              @map("request_id") @db.VarChar(128)
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  deliveries NotificationDelivery[]
+
+  @@id([tenantId, id])
+  @@index([tenantId, eventType, notBefore])
+  @@index([tenantId, aggregateType, aggregateId])
+  @@map("notification_events")
+}
+
+model NotificationDelivery {
+  id                      String                    @db.Uuid
+  tenantId                String                    @map("tenant_id") @db.VarChar(128)
+  eventId                 String                    @map("event_id") @db.VarChar(220)
+  recipientKey            String                    @map("recipient_key") @db.VarChar(220)
+  recipientIdentityUserId String?                   @map("recipient_identity_user_id") @db.VarChar(128)
+  recipientEmail          String?                   @map("recipient_email") @db.VarChar(320)
+  channel                 NotificationChannel
+  templateVersion         String                    @map("template_version") @db.VarChar(40)
+  idempotencyKey          String                    @unique @map("idempotency_key") @db.VarChar(500)
+  status                  NotificationDeliveryStatus @default(PENDING)
+  attemptCount            Int                       @default(0) @map("attempt_count")
+  nextAttemptAt           DateTime                  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedAt                DateTime?                 @map("locked_at") @db.Timestamptz(3)
+  lastAttemptAt           DateTime?                 @map("last_attempt_at") @db.Timestamptz(3)
+  sentAt                  DateTime?                 @map("sent_at") @db.Timestamptz(3)
+  providerMessageId       String?                   @map("provider_message_id") @db.VarChar(200)
+  lastErrorCategory       String?                   @map("last_error_category") @db.VarChar(80)
+  lastErrorMessage        String?                   @map("last_error_message") @db.VarChar(500)
+  skipReason              String?                   @map("skip_reason") @db.VarChar(120)
+  createdAt               DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  event       NotificationEvent  @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Restrict)
+  inApp       InAppNotification?
+
+  @@id([tenantId, id])
+  @@unique([tenantId, eventId, recipientKey, channel, templateVersion])
+  @@index([tenantId, status, nextAttemptAt, id])
+  @@index([tenantId, recipientIdentityUserId, channel, status])
+  @@map("notification_deliveries")
+}
+
+model InAppNotification {
+  id                   String   @db.Uuid
+  tenantId             String   @map("tenant_id") @db.VarChar(128)
+  notificationDeliveryId String @map("notification_delivery_id") @db.Uuid
+  recipientIdentityUserId String @map("recipient_identity_user_id") @db.VarChar(128)
+  type                 NotificationEventType
+  title                String   @db.VarChar(200)
+  body                 String   @db.VarChar(500)
+  targetPath           String   @map("target_path") @db.VarChar(500)
+  eventId              String   @map("event_id") @db.VarChar(220)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  readAt               DateTime? @map("read_at") @db.Timestamptz(3)
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  delivery NotificationDelivery @relation(fields: [tenantId, notificationDeliveryId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, notificationDeliveryId])
+  @@index([tenantId, recipientIdentityUserId, createdAt, id])
+  @@index([tenantId, recipientIdentityUserId, readAt])
+  @@map("in_app_notifications")
 }
 
 model BlobDerivative {

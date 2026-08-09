@@ -15,8 +15,8 @@ Status: decision register; resolved rows are recorded for traceability and all r
 | D-09 | **Resolved 2026-08-08 by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md):** no persisted student drafts; `SUBMITTED -> REVIEWED` or `SUBMITTED -> CHANGES_REQUESTED -> SUBMITTED`; reviewed work cannot be freely reopened | Defines file mutability and user expectations | Product + teaching lead | Resolved for MVP |
 | D-10 | **Resolved 2026-08-08 by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md):** absolute instants, initial America/Santiago operational configuration, server late calculation, immutable due-date snapshots, late submissions accepted | Determines late flags and edge-case correctness | Product + school pilot | Resolved for MVP |
 | D-11 | Malware scanning, retention, deletion/legal hold, export, and cleanup durations. Initial size/type/quota policy is resolved by ADR-0005. | Security, cost, and compliance impact | Security + operations | Phase 4/6 |
-| D-12 | Queue/worker technology and delivery retry policy | Enables reliable notifications/sync without coupling requests | Platform + operations | Phase 5 |
-| D-13 | Notification event catalog, preferences, and email copy | Defines user-visible behavior and Resend configuration | Product + communications | Phase 5 |
+| D-12 | **Resolved 2026-08-09 by [ADR-0014](../decisions/ADR-0014-academic-notifications-and-delivery.md):** PostgreSQL transactional outbox, independently runnable worker, `FOR UPDATE SKIP LOCKED`-equivalent claiming, bounded configurable retries, and terminal failure state | Enables reliable notifications without coupling requests to Resend | Platform + operations | Resolved for MVP; operational hardening remains in Phase 6 |
+| D-13 | **Resolved 2026-08-09 by [ADR-0014](../decisions/ADR-0014-academic-notifications-and-delivery.md):** MVP event/channel catalog, no preferences center, operational Spanish email templates, optional announcement in-app notification, and no reminder/chat/content-change email scope | Defines user-visible behavior and Academic Resend configuration | Product + communications | Resolved for MVP; future preference/retention decisions remain open |
 | D-14 | **Resolved 2026-08-08 by [ADR-0011](../decisions/ADR-0011-api-and-shared-contract-strategy.md):** REST/JSON `/api/v1`, camelCase, opaque IDs, ISO 8601, stable errors, OpenAPI boundary, Zod 4 schemas in `packages/contracts`, thin hand-written client, opaque cursor envelope, endpoint-specific idempotency | Affects monorepo packages and frontend/backend coupling | Engineering | Resolved for Phase 1 |
 | D-15 | Production hosting, region, backups, RTO/RPO, and support | Determines operating cost and release readiness | Platform + operations | Phase 6 |
 | D-16 | Colegio Conquistadores brand assets, localization, and theme-admin scope | Affects design tokens and first-pilot UX | Product + design + tenant | Phase 3 |
@@ -35,7 +35,7 @@ Status: decision register; resolved rows are recorded for traceability and all r
 - Learning publication and edit semantics are fixed for this MVP by [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md).
 - Submission, revision, correction, and deadline semantics are fixed for this MVP by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md).
 
-These resolutions do not close D-05, D-06, D-11, D-12, D-13, D-15, D-16, D-17, or D-18. Malware scanning, retention, deletion, legal hold, export, and cleanup remain open.
+These resolutions do not close D-05, D-06, D-11, D-15, D-16, D-17, or D-18. Malware scanning, retention, deletion, legal hold, export, cleanup, hosting, and notification retention remain open.
 
 ## Decision protocol
 

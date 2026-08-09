@@ -40,6 +40,7 @@ import {
   mapLearningUnit,
   mapLearningUnitWithItems,
 } from './learning.mapper';
+import { NotificationService } from '../notifications/notification.service';
 
 type LearningUnitWithSubject = LearningUnit & {
   courseSubject: { status: string };
@@ -57,6 +58,7 @@ export class LearningService {
     private readonly audit: AcademicAuditPort,
     @Inject(LEARNING_STUDENT_WORK_PORT)
     private readonly studentWork: LearningStudentWorkPort,
+    private readonly notifications: NotificationService,
   ) {}
 
   async learningRoute(
@@ -530,15 +532,33 @@ export class LearningService {
     }
     if (current.publicationStatus === 'PUBLISHED') return mapLearningItem(current);
     const now = new Date();
-    const record = await this.prisma.learningItem.update({
-      where: { tenantId_id: { tenantId: scope.tenantId, id } },
-      data: {
-        publicationStatus: 'PUBLISHED',
-        publishAt: null,
-        publishedAt: now,
-        publishedByIdentityUserId: context.principal.identityUserId,
-        updatedByIdentityUserId: context.principal.identityUserId,
-      },
+    const record = await this.prisma.$transaction(async (tx) => {
+      const published = await tx.learningItem.update({
+        where: { tenantId_id: { tenantId: scope.tenantId, id } },
+        data: {
+          publicationStatus: 'PUBLISHED',
+          publishAt: null,
+          publishedAt: now,
+          publishedByIdentityUserId: context.principal.identityUserId,
+          updatedByIdentityUserId: context.principal.identityUserId,
+        },
+      });
+      if (published.type !== 'MATERIAL') {
+        await this.notifications.createLearningPublicationIntent(tx, {
+          tenantId: scope.tenantId,
+          learningItemId: published.id,
+          eventType:
+            published.type === 'ASSIGNMENT'
+              ? 'ASSIGNMENT_PUBLISHED'
+              : published.type === 'ASSESSMENT'
+                ? 'ASSESSMENT_PUBLISHED'
+                : 'ANNOUNCEMENT_PUBLISHED',
+          occurredAt: now,
+          notBefore: now,
+          requestId: context.requestId,
+        });
+      }
+      return published;
     });
     await this.recordAudit(
       context,

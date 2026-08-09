@@ -64,6 +64,9 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
   });
 
   beforeEach(async () => {
+    await prisma.inAppNotification.deleteMany();
+    await prisma.notificationDelivery.deleteMany();
+    await prisma.notificationEvent.deleteMany();
     await prisma.review.deleteMany();
     await prisma.fileReference.deleteMany();
     await prisma.fileObject.deleteMany();
@@ -256,6 +259,31 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
     expect(created.status).toBe('SUBMITTED');
     expect(created.revisions[0].isLate).toBe(true);
     expect(created.revisions[0].files).toHaveLength(2);
+    expect(
+      await prisma.notificationEvent.count({
+        where: { tenantId: 'submission-a', eventType: 'SUBMISSION_RECEIVED' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.notificationDelivery.count({
+        where: {
+          tenantId: 'submission-a',
+          channel: 'IN_APP',
+          status: 'DELIVERED',
+          event: { eventType: 'SUBMISSION_RECEIVED' },
+        },
+      }),
+    ).toBe(1);
+
+    await api(setup.teacherToken)
+      .post(`/api/v1/submission-revisions/${created.revisions[0].id}/reviews`)
+      .send({ action: 'COMMENTED', comment: 'A note without state change.' })
+      .expect(201);
+    expect(
+      await prisma.notificationEvent.count({
+        where: { tenantId: 'submission-a', aggregateType: 'Review' },
+      }),
+    ).toBe(0);
 
     const otherStudent = await post(admin, '/api/v1/students', { firstName: 'Other', lastName: 'Student' });
     await prisma.student.update({
@@ -273,6 +301,21 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
       .post(`/api/v1/submission-revisions/${created.revisions[0].id}/reviews`)
       .send({ action: 'CHANGES_REQUESTED', comment: 'Please correct the document.' })
       .expect(201);
+    expect(
+      await prisma.notificationEvent.count({
+        where: { tenantId: 'submission-a', eventType: 'CHANGES_REQUESTED' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.notificationDelivery.count({
+        where: {
+          tenantId: 'submission-a',
+          channel: 'EMAIL',
+          status: 'PENDING',
+          event: { eventType: 'CHANGES_REQUESTED' },
+        },
+      }),
+    ).toBe(1);
     const revisedFile = await uploadStudentFile(setup.studentToken, setup.item.id, 'corrected.pdf', pdf('corrected'));
     const revised = (await api(setup.studentToken)
       .post(`/api/v1/submissions/${created.id}/revisions`)
@@ -280,11 +323,21 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
       .expect(201)).body;
     expect(revised.revisions).toHaveLength(2);
     expect(revised.revisions[0].files[0].id).not.toBe(revised.revisions[1].files[0].id);
+    expect(
+      await prisma.notificationEvent.count({
+        where: { tenantId: 'submission-a', eventType: 'RESUBMISSION_RECEIVED' },
+      }),
+    ).toBe(1);
 
     await api(setup.teacherToken)
       .post(`/api/v1/submission-revisions/${revised.revisions[1].id}/reviews`)
       .send({ action: 'REVIEWED', comment: 'Reviewed.' })
       .expect(201);
+    expect(
+      await prisma.notificationEvent.count({
+        where: { tenantId: 'submission-a', eventType: 'SUBMISSION_REVIEWED' },
+      }),
+    ).toBe(1);
     await api(setup.studentToken)
       .post(`/api/v1/submissions/${created.id}/revisions`)
       .send({ fileObjectIds: [revisedFile.id] })
@@ -380,8 +433,16 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
     const course = await post(admin, '/api/v1/courses', { academicYearId: year.id, label: `Course ${tenantId}`, status: 'ACTIVE' });
     const subject = await post(admin, '/api/v1/subjects', { name: `Subject ${tenantId}` });
     const courseSubject = await post(admin, '/api/v1/course-subjects', { courseId: course.id, subjectId: subject.id });
-    const teacher = await post(admin, '/api/v1/teachers', { firstName: 'Teacher', lastName: tenantId });
-    const student = await post(admin, '/api/v1/students', { firstName: 'Student', lastName: tenantId });
+    const teacher = await post(admin, '/api/v1/teachers', {
+      firstName: 'Teacher',
+      lastName: tenantId,
+      email: `teacher-${tenantId}@example.test`,
+    });
+    const student = await post(admin, '/api/v1/students', {
+      firstName: 'Student',
+      lastName: tenantId,
+      email: `student-${tenantId}@example.test`,
+    });
     await prisma.teacher.update({ where: { tenantId_id: { tenantId, id: teacher.id } }, data: { identityUserId: teacherIdentity } });
     await prisma.student.update({ where: { tenantId_id: { tenantId, id: student.id } }, data: { identityUserId: studentIdentity } });
     await post(admin, '/api/v1/course-subject-teachers', { courseSubjectId: courseSubject.id, teacherIds: [teacher.id] });
