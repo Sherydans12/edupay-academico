@@ -2,6 +2,13 @@
 
 Status: implemented high-risk Académico consumer boundary
 
+Cross-service contract reference: EduPay Identity
+`docs/decisions/ADR-0010-academico-restricted-service-auth.md` and the
+restricted backend verification section of Identity
+`docs/architecture/api-contracts.md`. Académico's implementation and this note
+consume that service-authentication and response contract without sharing
+Identity persistence.
+
 ## Runtime architecture
 
 EduPay Académico uses one server-only HTTP client for the restricted EduPay
