@@ -5,7 +5,7 @@ import { AcademicApiError, type AcademicApiClient } from '@/api/academic-client'
 import { StudentAssignmentScreen, StudentSubjectScreen } from '@/features/student-screens';
 import { TeacherSubjectScreen } from '@/features/teacher-screens';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante/asignaturas' }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante/asignaturas', useRouter: () => ({ push: () => undefined }) }));
 
 afterEach(cleanup);
 

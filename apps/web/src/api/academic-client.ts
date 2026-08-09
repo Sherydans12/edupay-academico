@@ -43,15 +43,21 @@ import {
   createSubmissionRevisionSchema,
   createSubmissionSchema,
   createUploadIntentSchema,
+  inAppNotificationSchema,
+  markedNotificationsSchema,
+  notificationPageSchema,
   storageFileSchema,
   storagePolicySchema,
   storageUsageSchema,
   submissionSchema,
+  unreadNotificationCountSchema,
   uploadIntentSchema,
   type CreateReview,
   type CreateSubmission,
   type CreateSubmissionRevision,
   type CreateUploadIntent,
+  type InAppNotification,
+  type NotificationPage,
   type StorageFile,
   type StoragePolicy,
   type StorageUsage,
@@ -503,6 +509,22 @@ export class AcademicApiClient {
 
   archiveLearningItem(id: string) {
     return this.request(`learning-items/${id}/archive`, learningItemSchema, { method: 'POST' });
+  }
+
+  listNotifications(cursor?: string, limit = 20): Promise<NotificationPage> {
+    return this.request(addQuery('notifications', { cursor, limit }), notificationPageSchema);
+  }
+
+  getUnreadNotificationCount(): Promise<{ count: number }> {
+    return this.request('notifications/unread-count', unreadNotificationCountSchema);
+  }
+
+  markNotificationRead(notificationId: string): Promise<InAppNotification> {
+    return this.request(`notifications/${notificationId}/read`, inAppNotificationSchema, { method: 'PATCH' });
+  }
+
+  markAllNotificationsRead(): Promise<{ updatedCount: number }> {
+    return this.request('notifications/read-all', markedNotificationsSchema, { method: 'POST' });
   }
 
   reorderLearningItems(learningUnitId: string, input: ReorderLearning) {

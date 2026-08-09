@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { StudentAcademicSubjectsScreen, TeacherAcademicSubjectsScreen } from '@/features/academic-context-screens';
 import type { AcademicApiClient } from '@/api/academic-client';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante/asignaturas' }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante/asignaturas', useRouter: () => ({ push: () => undefined }) }));
 
 const id = '00000000-0000-4000-8000-000000000001';
 const timestamp = '2026-08-08T12:00:00+00:00';

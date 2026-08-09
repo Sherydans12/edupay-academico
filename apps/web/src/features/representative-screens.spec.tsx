@@ -5,7 +5,7 @@ import { StudentDashboardScreen } from '@/features/student-screens';
 import { TeacherDashboardScreen } from '@/features/teacher-screens';
 import type { AcademicApiClient } from '@/api/academic-client';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante' }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante', useRouter: () => ({ push: () => undefined }) }));
 
 describe('representative workspaces', () => {
   const subject = { id: '00000000-0000-4000-8000-000000000001', courseId: '00000000-0000-4000-8000-000000000002', subjectId: '00000000-0000-4000-8000-000000000003', defaultForCourse: true, sortOrder: 0, status: 'ACTIVE' as const, course: { id: '00000000-0000-4000-8000-000000000002', academicYearId: '00000000-0000-4000-8000-000000000004', label: '7º Básico A', status: 'ACTIVE' as const, createdAt: '2026-08-08T12:00:00+00:00', updatedAt: '2026-08-08T12:00:00+00:00' }, subject: { id: '00000000-0000-4000-8000-000000000003', name: 'Lenguaje y Comunicación', status: 'ACTIVE' as const, createdAt: '2026-08-08T12:00:00+00:00', updatedAt: '2026-08-08T12:00:00+00:00' }, createdAt: '2026-08-08T12:00:00+00:00', updatedAt: '2026-08-08T12:00:00+00:00' };

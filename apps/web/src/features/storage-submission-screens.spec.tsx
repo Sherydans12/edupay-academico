@@ -5,7 +5,7 @@ import { AcademicApiError, type AcademicApiClient } from '@/api/academic-client'
 import { StudentAssignmentScreen } from '@/features/student-screens';
 import { SubmissionReviewScreen, TeacherReviewsScreen, TeacherSubjectScreen } from '@/features/teacher-screens';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante/asignaturas' }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante/asignaturas', useRouter: () => ({ push: () => undefined }) }));
 afterEach(cleanup);
 
 const subjectId = '00000000-0000-4000-8000-000000000101';
