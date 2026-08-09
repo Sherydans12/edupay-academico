@@ -98,3 +98,6 @@ export type CreateSubmissionRevision = z.infer<
   typeof createSubmissionRevisionSchema
 >;
 export type CreateReview = z.infer<typeof createReviewSchema>;
+export type Submission = z.infer<typeof submissionSchema>;
+export type SubmissionRevision = z.infer<typeof submissionRevisionSchema>;
+export type SubmissionReview = z.infer<typeof submissionReviewSchema>;

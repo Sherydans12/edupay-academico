@@ -39,6 +39,24 @@ import {
   learningUnitSchema,
   reorderLearningSchema,
   scheduleLearningItemSchema,
+  createReviewSchema,
+  createSubmissionRevisionSchema,
+  createSubmissionSchema,
+  createUploadIntentSchema,
+  storageFileSchema,
+  storagePolicySchema,
+  storageUsageSchema,
+  submissionSchema,
+  uploadIntentSchema,
+  type CreateReview,
+  type CreateSubmission,
+  type CreateSubmissionRevision,
+  type CreateUploadIntent,
+  type StorageFile,
+  type StoragePolicy,
+  type StorageUsage,
+  type Submission,
+  type UploadIntent,
   updateLearningItemSchema,
   updateLearningUnitSchema,
   type CreateAcademicYear,
@@ -71,10 +89,83 @@ import type { IdentitySessionAdapter } from '@/auth/current-session';
 type Schema<T> = z.ZodType<T>;
 type FetchLike = typeof fetch;
 
+export interface MultipartUploadOptions {
+  url: string;
+  token: string;
+  requestId: string;
+  fieldName: string;
+  file: File;
+  onProgress?: (progress: number) => void;
+  signal?: AbortSignal;
+}
+
+export interface MultipartUploadResult {
+  status: number;
+  body: unknown;
+}
+
+export type MultipartUploadImpl = (
+  options: MultipartUploadOptions,
+) => Promise<MultipartUploadResult>;
+
+/**
+ * The only browser transport for file bytes. It intentionally owns the
+ * XMLHttpRequest details so components only deal with progress and state.
+ */
+export const uploadMultipartWithXhr: MultipartUploadImpl = (options) => new Promise((resolve, reject) => {
+  const xhr = new XMLHttpRequest();
+  const formData = new FormData();
+  formData.append(options.fieldName, options.file, options.file.name);
+  let settled = false;
+
+  const cleanup = () => {
+    options.signal?.removeEventListener('abort', abort);
+  };
+  const settle = (callback: () => void) => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    callback();
+  };
+  const abort = () => {
+    xhr.abort();
+    settle(() => {
+      const error = new Error('UPLOAD_ABORTED');
+      (error as Error & { code?: string }).code = 'UPLOAD_ABORTED';
+      reject(error);
+    });
+  };
+
+  xhr.open('POST', options.url);
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.setRequestHeader('Authorization', `Bearer ${options.token}`);
+  xhr.setRequestHeader('X-Request-Id', options.requestId);
+  xhr.upload.addEventListener('progress', (event) => {
+    if (event.lengthComputable) options.onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+  });
+  xhr.onload = () => settle(() => {
+    const text = xhr.responseText;
+    let body: unknown;
+    try { body = text ? JSON.parse(text) : undefined; } catch { body = undefined; }
+    resolve({ status: xhr.status, body });
+  });
+  xhr.onerror = () => settle(() => reject(new Error('NETWORK_ERROR')));
+  xhr.onabort = () => {
+    if (!settled) abort();
+  };
+  if (options.signal?.aborted) {
+    abort();
+    return;
+  }
+  options.signal?.addEventListener('abort', abort, { once: true });
+  xhr.send(formData);
+});
+
 export interface AcademicApiClientOptions {
   baseUrl: string;
   fetchImpl?: FetchLike;
   sessionAdapter?: IdentitySessionAdapter | null;
+  multipartUploadImpl?: MultipartUploadImpl;
 }
 
 export class AcademicApiError extends Error {
@@ -125,14 +216,26 @@ export class AcademicApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: FetchLike;
   private readonly sessionAdapter: IdentitySessionAdapter | null;
+  private readonly multipartUploadImpl: MultipartUploadImpl;
 
   constructor(options: AcademicApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.sessionAdapter = options.sessionAdapter ?? null;
+    this.multipartUploadImpl = options.multipartUploadImpl ?? uploadMultipartWithXhr;
   }
 
-  private async request<T>(path: string, schema: Schema<T>, init: RequestInit = {}, retried = false): Promise<T> {
+  private buildUrl(path: string): string {
+    if (/^https?:\/\//i.test(path)) return path;
+    if (path.startsWith('/')) {
+      return /^https?:\/\//i.test(this.baseUrl)
+        ? new URL(path, this.baseUrl).toString()
+        : path;
+    }
+    return `${this.baseUrl}/${path.replace(/^\//, '')}`;
+  }
+
+  private async requestRaw(path: string, init: RequestInit = {}, retried = false): Promise<Response> {
     const requestId = newRequestId();
     const token = await this.sessionAdapter?.getAccessToken();
     if (!token) throw new UnauthenticatedError();
@@ -141,11 +244,11 @@ export class AcademicApiClient {
     headers.set('Accept', 'application/json');
     headers.set('Authorization', `Bearer ${token}`);
     headers.set('X-Request-Id', requestId);
-    if (init.body) headers.set('Content-Type', 'application/json');
+    if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
 
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/${path.replace(/^\//, '')}`, { ...init, headers });
+      response = await this.fetchImpl(this.buildUrl(path), { ...init, headers });
     } catch {
       throw new AcademicApiError({
         code: 'NETWORK_ERROR', details: [], message: 'No pudimos conectar con Académico. Revisa tu conexión e inténtalo nuevamente.', requestId, status: 0,
@@ -154,13 +257,13 @@ export class AcademicApiClient {
 
     if (response.status === 401 && !retried && this.sessionAdapter) {
       const refreshed = await this.sessionAdapter.refreshAccessToken();
-      if (refreshed) return this.request(path, schema, init, true);
+      if (refreshed) return this.requestRaw(path, init, true);
       await this.sessionAdapter.clearSession?.();
       throw new UnauthenticatedError('Tu sesión expiró. Vuelve a iniciar sesión en EduPay Identity.');
     }
 
-    const payload: unknown = await response.json().catch(() => undefined);
     if (!response.ok) {
+      const payload: unknown = await response.json().catch(() => undefined);
       const parsed = apiErrorEnvelopeSchema.safeParse(payload);
       throw new AcademicApiError({
         code: parsed.success ? parsed.data.error.code : response.status === 403 ? 'FORBIDDEN' : 'REQUEST_FAILED',
@@ -170,10 +273,94 @@ export class AcademicApiClient {
         status: response.status,
       });
     }
+    return response;
+  }
+
+  private async request<T>(path: string, schema: Schema<T>, init: RequestInit = {}): Promise<T> {
+    const response = await this.requestRaw(path, init);
+    const payload: unknown = await response.json().catch(() => undefined);
     return schema.parse(payload);
   }
 
+  private async multipartError(status: number, body: unknown, requestId: string): Promise<never> {
+    const parsed = apiErrorEnvelopeSchema.safeParse(body);
+    throw new AcademicApiError({
+      code: parsed.success ? parsed.data.error.code : status === 403 ? 'FORBIDDEN' : 'REQUEST_FAILED',
+      details: parsed.success ? parsed.data.error.details : [],
+      message: parsed.success ? parsed.data.error.message : 'No pudimos completar la carga del archivo.',
+      requestId: parsed.success ? parsed.data.error.requestId : requestId,
+      status,
+    });
+  }
+
   getTenant() { return this.request('tenant', tenantSchema); }
+  getStorageUsage(): Promise<StorageUsage> { return this.request('storage/usage', storageUsageSchema); }
+  getStoragePolicy(): Promise<StoragePolicy> { return this.request('storage/policy', storagePolicySchema); }
+
+  createUploadIntent(input: CreateUploadIntent): Promise<UploadIntent> {
+    return this.request('file-upload-intents', uploadIntentSchema, {
+      method: 'POST',
+      body: JSON.stringify(createUploadIntentSchema.parse(input)),
+    });
+  }
+
+  async completeUploadIntent(
+    intent: UploadIntent,
+    file: File,
+    onProgress?: (progress: number) => void,
+    signal?: AbortSignal,
+    retried = false,
+  ): Promise<StorageFile> {
+    const token = await this.sessionAdapter?.getAccessToken();
+    if (!token) throw new UnauthenticatedError();
+    const requestId = newRequestId();
+    let result: MultipartUploadResult;
+    try {
+      const multipartOptions: MultipartUploadOptions = {
+        file,
+        fieldName: intent.upload.fieldName,
+        requestId,
+        token,
+        url: this.buildUrl(intent.upload.path),
+      };
+      if (onProgress) multipartOptions.onProgress = onProgress;
+      if (signal) multipartOptions.signal = signal;
+      result = await this.multipartUploadImpl(multipartOptions);
+    } catch (error) {
+      if (error instanceof AcademicApiError) throw error;
+      const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : '';
+      if (code === 'UPLOAD_ABORTED') {
+        throw new AcademicApiError({ code, details: [], message: 'La carga se canceló.', requestId, status: 0 });
+      }
+      throw new AcademicApiError({ code: 'NETWORK_ERROR', details: [], message: 'No pudimos conectar con Académico. Revisa tu conexión e inténtalo nuevamente.', requestId, status: 0 });
+    }
+    if (result.status === 401 && !retried && this.sessionAdapter) {
+      const refreshed = await this.sessionAdapter.refreshAccessToken();
+      if (refreshed) return this.completeUploadIntent(intent, file, onProgress, signal, true);
+      await this.sessionAdapter.clearSession?.();
+      throw new UnauthenticatedError('Tu sesión expiró. Vuelve a iniciar sesión en EduPay Identity.');
+    }
+    if (result.status < 200 || result.status >= 300) await this.multipartError(result.status, result.body, requestId);
+    return storageFileSchema.parse(result.body);
+  }
+
+  listLearningAttachments(learningItemId: string): Promise<StorageFile[]> {
+    return this.request(`learning-items/${learningItemId}/attachments`, storageFileSchema.array());
+  }
+
+  async downloadFile(fileObjectId: string): Promise<{ blob: Blob; filename: string | null }> {
+    const response = await this.requestRaw(`files/${fileObjectId}/download`, {
+      headers: { Accept: 'application/octet-stream' },
+    });
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename: string | null = null;
+    const encoded = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const fallback = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1];
+    if (encoded) {
+      try { filename = decodeURIComponent(encoded); } catch { filename = encoded; }
+    } else if (fallback) filename = fallback;
+    return { blob: await response.blob(), filename };
+  }
   listAcademicYears(cursor?: string) { return this.request(addQuery('academic-years', { cursor, limit: 50 }), academicYearPageSchema); }
   createAcademicYear(input: CreateAcademicYear) { return this.request('academic-years', academicYearSchema, { method: 'POST', body: JSON.stringify(createAcademicYearSchema.parse(input)) }); }
   updateAcademicYear(id: string, input: UpdateAcademicYear) { return this.request(`academic-years/${id}`, academicYearSchema, { method: 'PATCH', body: JSON.stringify(updateAcademicYearSchema.parse(input)) }); }
@@ -229,6 +416,39 @@ export class AcademicApiClient {
 
   getLearningItem(id: string) {
     return this.request(`learning-items/${id}`, learningItemSchema);
+  }
+
+  getOwnSubmission(learningItemId: string): Promise<Submission> {
+    return this.request(`learning-items/${learningItemId}/submission`, submissionSchema);
+  }
+
+  getSubmission(submissionId: string): Promise<Submission> {
+    return this.request(`submissions/${submissionId}`, submissionSchema);
+  }
+
+  listSubmissions(learningItemId: string): Promise<Submission[]> {
+    return this.request(`learning-items/${learningItemId}/submissions`, submissionSchema.array());
+  }
+
+  submitLearningItem(learningItemId: string, input: CreateSubmission): Promise<Submission> {
+    return this.request(`learning-items/${learningItemId}/submission`, submissionSchema, {
+      method: 'POST',
+      body: JSON.stringify(createSubmissionSchema.parse(input)),
+    });
+  }
+
+  submitSubmissionRevision(submissionId: string, input: CreateSubmissionRevision): Promise<Submission> {
+    return this.request(`submissions/${submissionId}/revisions`, submissionSchema, {
+      method: 'POST',
+      body: JSON.stringify(createSubmissionRevisionSchema.parse(input)),
+    });
+  }
+
+  reviewSubmissionRevision(revisionId: string, input: CreateReview): Promise<Submission> {
+    return this.request(`submission-revisions/${revisionId}/reviews`, submissionSchema, {
+      method: 'POST',
+      body: JSON.stringify(createReviewSchema.parse(input)),
+    });
   }
 
   createLearningUnit(input: CreateLearningUnit) {
@@ -310,4 +530,16 @@ export type LearningApiClient = Pick<
   | 'publishLearningItem'
   | 'archiveLearningItem'
   | 'reorderLearningItems'
+  | 'getStorageUsage'
+  | 'getStoragePolicy'
+  | 'createUploadIntent'
+  | 'completeUploadIntent'
+  | 'listLearningAttachments'
+  | 'downloadFile'
+  | 'getOwnSubmission'
+  | 'getSubmission'
+  | 'listSubmissions'
+  | 'submitLearningItem'
+  | 'submitSubmissionRevision'
+  | 'reviewSubmissionRevision'
 >;
