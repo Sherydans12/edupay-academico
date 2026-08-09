@@ -122,3 +122,6 @@ export const storagePolicySchema = z
 
 export type CreateUploadIntent = z.infer<typeof createUploadIntentSchema>;
 export type UploadIntent = z.infer<typeof uploadIntentSchema>;
+export type StorageFile = z.infer<typeof storageFileSchema>;
+export type StorageUsage = z.infer<typeof storageUsageSchema>;
+export type StoragePolicy = z.infer<typeof storagePolicySchema>;

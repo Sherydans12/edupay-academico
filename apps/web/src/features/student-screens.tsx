@@ -9,7 +9,8 @@ import { AcademicApiError, type AcademicApiClient } from '@/api/academic-client'
 import { createAcademicApiClient } from '@/api/client-factory';
 import { AppShell } from '@/components/app-shell';
 import { Icon } from '@/components/icons';
-import { SubmissionIntegrationPlaceholder } from '@/components/submission-integration-placeholder';
+import { LearningAttachmentList } from '@/components/learning-attachment-list';
+import { StudentSubmissionWorkflow } from '@/components/student-submission-workflow';
 import { LearningRoute, PageHeading, SubjectCard } from '@/components/page-primitives';
 import { useTrustedCurrentSession, type TrustedCurrentSession } from '@/auth/current-session';
 import { demoSessions } from '@/demo/demo-data';
@@ -216,8 +217,9 @@ export function StudentAssignmentScreen({ api, courseSubjectId, learningItemId, 
       {data.item.instructions ? <section><h2>Instrucciones</h2><div className="learning-rich-text">{data.item.instructions}</div></section> : null}
       {data.item.content ? <section><h2>Contenido</h2><div className="learning-rich-text">{data.item.content}</div></section> : null}
       {data.item.body ? <section><h2>Mensaje</h2><div className="learning-rich-text">{data.item.body}</div></section> : null}
+      {data.item.type !== 'ANNOUNCEMENT' ? <LearningAttachmentList api={client} learningItemId={data.item.id} /> : null}
       {data.item.dueAt ? <Alert title="Fecha de entrega" tone="warning">{formatInstant(data.item.dueAt)}. La hora y la condición de atraso serán determinadas por el servidor.</Alert> : null}
-    </article><aside>{data.item.type === 'ASSIGNMENT' || data.item.type === 'ASSESSMENT' ? <SubmissionIntegrationPlaceholder itemType={data.item.type} /> : <Card className="item-side-note"><Icon name="layers" /><h2>Contenido publicado</h2><p>Este tipo de contenido no solicita una entrega.</p></Card>}</aside></div>
+      </article><aside>{data.item.type === 'ASSIGNMENT' || data.item.type === 'ASSESSMENT' ? <StudentSubmissionWorkflow api={client} item={data.item} /> : <Card className="item-side-note"><Icon name="layers" /><h2>Contenido publicado</h2><p>Este tipo de contenido no solicita una entrega.</p></Card>}</aside></div>
   </> : <EmptyState icon={<Icon name="document" />} title="Contenido no disponible" description="Este contenido no está publicado para ti, fue archivado o el enlace ya no es válido." />}</DataState></StudentShell>;
 }
 

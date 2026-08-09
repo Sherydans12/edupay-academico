@@ -65,11 +65,33 @@ function DataState({ children, error, loading, onRetry }: { children: ReactNode;
   return children;
 }
 
+function StorageUsageOverview({ api }: { api: AcademicApiClient }) {
+  const [usage, setUsage] = useState<Awaited<ReturnType<AcademicApiClient['getStorageUsage']>> | null>(null);
+  const [policy, setPolicy] = useState<Awaited<ReturnType<AcademicApiClient['getStoragePolicy']>> | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    if (typeof api.getStorageUsage !== 'function') return;
+    let mounted = true;
+    void Promise.all([api.getStorageUsage(), api.getStoragePolicy()]).then(([nextUsage, nextPolicy]) => { if (mounted) { setUsage(nextUsage); setPolicy(nextPolicy); } }).catch(() => { if (mounted) setError(true); });
+    return () => { mounted = false; };
+  }, [api]);
+  if (!usage && !error) return null;
+  if (error) return <Alert title="No pudimos cargar el almacenamiento" tone="info">La información de archivos permanece protegida y no afecta las descargas autorizadas.</Alert>;
+  if (!usage) return null;
+  const tone = usage.state === 'FULL' || usage.state === 'CRITICAL' ? 'warning' : usage.state === 'NORMAL' ? 'success' : 'info';
+  return <section aria-labelledby="storage-usage-title" className="academic-panel storage-usage-panel"><div className="section-heading"><div><h2 id="storage-usage-title">Almacenamiento del tenant</h2><p>Cuota agregada para operación académica. Esta vista no lista archivos ni sustituye la autorización de cada descarga.</p></div><Badge tone={tone}>{usage.state}</Badge></div><div className="storage-usage-grid"><div><strong>{usage.allocationPercentage}%</strong><span>asignación</span></div><div><strong>{usage.fileCount}</strong><span>archivos</span></div><div><strong>{usage.blobCount}</strong><span>blobs físicos</span></div></div><div aria-label={`Asignación de almacenamiento: ${usage.allocationPercentage}%`} className="storage-meter"><span style={{ width: `${usage.allocationPercentage}%` }} /></div><dl className="storage-usage-details"><div><dt>Usado</dt><dd>{formatBytes(usage.usedBytes)}</dd></div><div><dt>Reservado</dt><dd>{formatBytes(usage.reservedBytes)}</dd></div><div><dt>Disponible</dt><dd>{formatBytes(usage.availableBytes)}</dd></div><div><dt>Cuota del tenant</dt><dd>{formatBytes(usage.quotaBytes)}</dd></div></dl>{policy ? <p className="integration-note"><Icon name="layers" />Máximo por archivo: {formatBytes(policy.maxFileSizeBytes)} · {policy.allowedExtensions.join(', ')}</p> : null}</section>;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1_000_000) return `${Math.round(bytes / 1_000)} kB`;
+  return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
+}
+
 function statusLabel(status: string) {
   return status === 'ACTIVE' ? 'Activo' : status === 'DRAFT' ? 'Borrador' : status === 'CLOSED' ? 'Cerrado' : 'Archivado';
 }
 
-function AdminOverview({ data }: { data: AdminData }) {
+function AdminOverview({ api, data }: { api: AcademicApiClient; data: AdminData }) {
   const currentYear = data.academicYears.find((year) => year.status === 'ACTIVE') ?? data.academicYears[0];
   return <>
     <Alert title="Datos académicos reales" tone="success">Esta vista usa registros del Academic Structure API. Credenciales, membresías y sesiones siguen perteneciendo a EduPay Identity.</Alert>
@@ -82,6 +104,7 @@ function AdminOverview({ data }: { data: AdminData }) {
       <Card><div className="admin-card-heading"><div><span className="admin-icon"><Icon name="layers" /></span><div><h2>Estructura académica</h2><p>{data.academicYears.length} años · {data.courses.length} cursos · {data.subjects.length} materias catalogadas</p></div></div><Badge tone="info">API</Badge></div></Card>
       <Card><div className="admin-card-heading"><div><span className="admin-icon"><Icon name="people" /></span><div><h2>Personas y acceso académico</h2><p>{data.students.length} estudiantes · {data.teachers.length} docentes con registros separados de Identity</p></div></div><Badge tone="info">API</Badge></div></Card>
     </div>
+    <StorageUsageOverview api={api} />
   </>;
 }
 
@@ -137,5 +160,5 @@ function PersonList({ empty, items }: { empty: string; items: Array<{ id: string
 export function AcademicAdminScreen({ api, session = demoSessions.admin, view }: { api?: AcademicApiClient; session?: TrustedCurrentSession; view: AdminView }) {
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const { data, error, loading, reload } = useAdminData(client);
-  return <AppShell dataMode="real" session={session}><PageHeading description={view === 'overview' ? 'Una vista práctica del estado académico del tenant.' : view === 'structure' ? 'Configura años, cursos, roster y CourseSubjects sin salir del espacio académico.' : 'Administra registros académicos y relaciones de acceso dentro del tenant.'} title={view === 'overview' ? 'Administración académica' : view === 'structure' ? 'Estructura académica' : 'Personas y asignaciones'} /><DataState error={error} loading={loading} onRetry={() => void reload()}>{view === 'overview' ? <AdminOverview data={data} /> : view === 'structure' ? <StructureView api={client} data={data} onSaved={() => void reload()} /> : <PeopleView api={client} data={data} onSaved={() => void reload()} />}</DataState></AppShell>;
+  return <AppShell dataMode="real" session={session}><PageHeading description={view === 'overview' ? 'Una vista práctica del estado académico del tenant.' : view === 'structure' ? 'Configura años, cursos, roster y CourseSubjects sin salir del espacio académico.' : 'Administra registros académicos y relaciones de acceso dentro del tenant.'} title={view === 'overview' ? 'Administración académica' : view === 'structure' ? 'Estructura académica' : 'Personas y asignaciones'} /><DataState error={error} loading={loading} onRetry={() => void reload()}>{view === 'overview' ? <AdminOverview api={client} data={data} /> : view === 'structure' ? <StructureView api={client} data={data} onSaved={() => void reload()} /> : <PeopleView api={client} data={data} onSaved={() => void reload()} />}</DataState></AppShell>;
 }

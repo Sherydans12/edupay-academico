@@ -1,11 +1,9 @@
 /**
- * UI-only seam for the Storage/Submission bounded context.
- *
- * The Learning frontend does not invent payloads or persistence for this
- * context. The parallel integration can provide these operations once its
- * reviewed contracts are available.
+ * Compatibility marker for the Learning surfaces that used the original
+ * placeholder seam. The concrete operations now live on AcademicApiClient
+ * and are validated against the shared contracts.
  */
-export const STORAGE_SUBMISSION_SEAM_STATE = 'NOT_CONNECTED' as const;
+export const STORAGE_SUBMISSION_SEAM_STATE = 'CONNECTED' as const;
 
 export interface StorageSubmissionAdapter {
   readonly state: typeof STORAGE_SUBMISSION_SEAM_STATE;

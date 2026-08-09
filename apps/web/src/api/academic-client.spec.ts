@@ -8,6 +8,10 @@ const year = { id, label: '2026', startDate: '2026-03-01', endDate: '2026-12-31'
 const unitId = '00000000-0000-4000-8000-000000000002';
 const learningItem = { id: '00000000-0000-4000-8000-000000000003', courseSubjectId: id, learningUnitId: unitId, type: 'ASSIGNMENT' as const, title: 'Entrega', description: null, content: null, instructions: 'Resuelve la actividad.', body: null, sortOrder: 0, publicationStatus: 'DRAFT' as const, publishAt: null, publishedAt: null, publishedByIdentityUserId: null, dueAt: '2026-08-12T20:00:00+00:00', createdByIdentityUserId: 'teacher-1', updatedByIdentityUserId: null, createdAt: timestamp, updatedAt: timestamp };
 const learningUnit = { id: unitId, courseSubjectId: id, title: 'Unidad', description: 'Descripción', sortOrder: 0, startAt: null, endAt: null, status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp };
+const uploadIntentId = '00000000-0000-4000-8000-000000000020';
+const storageFile = { id: '00000000-0000-4000-8000-000000000021', originalFilename: 'trabajo.pdf', sizeBytes: 12, declaredMime: 'application/pdf', detectedMime: 'application/pdf', extension: '.pdf', category: 'STUDENT_SUBMISSION' as const, createdAt: timestamp };
+const uploadIntent = { id: uploadIntentId, parentType: 'LEARNING_ITEM' as const, parentId: learningItem.id, category: 'STUDENT_SUBMISSION' as const, filename: 'trabajo.pdf', mimeType: 'application/pdf', sizeBytes: 12, status: 'RESERVED' as const, expiresAt: '2026-08-08T12:15:00+00:00', upload: { method: 'POST' as const, path: `/api/v1/file-upload-intents/${uploadIntentId}/content`, fieldName: 'file' as const, maxSizeBytes: 25_000_000 as const } };
+const submission = { id: '00000000-0000-4000-8000-000000000022', studentId: id, learningItemId: learningItem.id, status: 'SUBMITTED' as const, createdAt: timestamp, updatedAt: timestamp, revisions: [] };
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -82,5 +86,48 @@ describe('AcademicApiClient', () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(1, expect.stringContaining('/learning-units'), expect.objectContaining({ method: 'POST' }));
     expect(fetchImpl).toHaveBeenNthCalledWith(2, expect.stringContaining(`/learning-items/${learningItem.id}/schedule`), expect.objectContaining({ method: 'POST' }));
     expect(fetchImpl).toHaveBeenNthCalledWith(3, expect.stringContaining(`/learning-units/${unitId}/items/reorder`), expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('uses the returned upload path and sends one multipart file without embedding bytes in JSON', async () => {
+    let intentBody = '';
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      intentBody = String(init?.body ?? '');
+      return response(uploadIntent, 201);
+    });
+    const multipartUploadImpl = vi.fn(async (options) => {
+      expect(options.url).toBe(`http://localhost:3001${uploadIntent.upload.path}`);
+      expect(options.fieldName).toBe('file');
+      expect(options.file).toBeInstanceOf(File);
+      return { status: 201, body: storageFile };
+    });
+    const client = new AcademicApiClient({ baseUrl: 'http://localhost:3001/api/v1', fetchImpl, multipartUploadImpl, sessionAdapter: session });
+    const file = new File(['%PDF'], 'trabajo.pdf', { type: 'application/pdf' });
+
+    await expect(client.createUploadIntent({ category: 'STUDENT_SUBMISSION', filename: file.name, mimeType: file.type, parentId: learningItem.id, parentType: 'LEARNING_ITEM', sizeBytes: file.size })).resolves.toMatchObject({ id: uploadIntentId });
+    await expect(client.completeUploadIntent(uploadIntent, file)).resolves.toMatchObject({ id: storageFile.id });
+    expect(intentBody).not.toContain('base64');
+    expect(intentBody).not.toContain('%PDF');
+    expect(multipartUploadImpl).toHaveBeenCalledOnce();
+  });
+
+  it('calls submission, revision, review, and authorized download endpoints', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response(submission, 201))
+      .mockResolvedValueOnce(response(submission, 201))
+      .mockResolvedValueOnce(response(submission, 201))
+      .mockResolvedValueOnce(new Response('private file bytes', { status: 200, headers: { 'Content-Disposition': "attachment; filename*=UTF-8''trabajo.pdf", 'Content-Type': 'application/pdf' } }));
+    const client = new AcademicApiClient({ baseUrl: 'http://localhost:3001/api/v1', fetchImpl, sessionAdapter: session });
+
+    await client.submitLearningItem(learningItem.id, { fileObjectIds: [storageFile.id] });
+    await client.submitSubmissionRevision(submission.id, { fileObjectIds: [storageFile.id], studentComment: 'Nueva versión' });
+    await client.reviewSubmissionRevision('00000000-0000-4000-8000-000000000023', { action: 'CHANGES_REQUESTED', comment: 'Corrige la conclusión.' });
+    const downloaded = await client.downloadFile(storageFile.id);
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, expect.stringContaining(`/learning-items/${learningItem.id}/submission`), expect.objectContaining({ method: 'POST' }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, expect.stringContaining(`/submissions/${submission.id}/revisions`), expect.objectContaining({ method: 'POST' }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, expect.stringContaining('/submission-revisions/00000000-0000-4000-8000-000000000023/reviews'), expect.objectContaining({ method: 'POST' }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(4, expect.stringContaining(`/files/${storageFile.id}/download`), expect.objectContaining({ headers: expect.anything() }));
+    expect(downloaded.filename).toBe('trabajo.pdf');
+    await expect(downloaded.blob.text()).resolves.toContain('private file bytes');
   });
 });

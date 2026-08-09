@@ -39,13 +39,14 @@ describe('real Learning screens', () => {
     expect(screen.queryByText('Borrador privado')).toBeNull();
   });
 
-  it('renders actual item detail and keeps the submission control unconnected', async () => {
+  it('renders actual item detail with the connected submission workflow', async () => {
     render(<StudentAssignmentScreen api={api({ getStudentContextSubjects: vi.fn(async () => [subject]), getLearningItem: vi.fn(async () => assignment) })} courseSubjectId={subjectId} learningItemId={assignment.id} />);
 
     expect(await screen.findByRole('heading', { name: 'Actividad real' })).toBeTruthy();
     expect(screen.getByText('Instrucciones reales.')).toBeTruthy();
     expect(screen.getAllByText(/^Vence 12-08-2026/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/aún no conectado/i)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Tu entrega' })).toBeTruthy();
+    expect(screen.queryByText(/aún no conectado/i)).toBeNull();
     expect((screen.getByRole('button', { name: /enviar trabajo/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
