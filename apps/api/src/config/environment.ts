@@ -50,6 +50,11 @@ const postgresUrl = z.string().refine(
   { message: 'must be a PostgreSQL connection URL' },
 );
 
+const optionalStorageNumber = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z.coerce.number().optional(),
+);
+
 const environmentSchema = z
   .object({
     NODE_ENV: z
@@ -86,6 +91,9 @@ const environmentSchema = z
       .min(500)
       .max(30_000)
       .default(5_000),
+    STORAGE_ROOT: z.string().min(1).optional(),
+    STORAGE_MIN_FREE_BYTES: optionalStorageNumber.pipe(z.number().int().min(0).optional()),
+    STORAGE_MIN_FREE_PERCENTAGE: optionalStorageNumber.pipe(z.number().min(0).max(100).optional()),
   })
   .superRefine((environment, context) => {
     if (environment.NODE_ENV !== 'production') {
@@ -97,6 +105,18 @@ const environmentSchema = z
         context.addIssue({
           code: 'custom',
           message: 'must use HTTPS in production',
+          path: [key],
+        });
+      }
+    }
+    for (const key of [
+      'STORAGE_MIN_FREE_BYTES',
+      'STORAGE_MIN_FREE_PERCENTAGE',
+    ] as const) {
+      if (environment[key] === undefined) {
+        context.addIssue({
+          code: 'custom',
+          message: 'must be configured in production',
           path: [key],
         });
       }

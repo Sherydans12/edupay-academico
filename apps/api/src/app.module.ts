@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { LearningModule } from './learning/learning.module';
 import { PersistenceModule } from './persistence/persistence.module';
 import { SecurityFoundationModule } from './security/security-foundation.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { SecurityFoundationModule } from './security/security-foundation.module'
     SecurityFoundationModule,
     AcademicModule,
     LearningModule,
+    StorageModule,
     HealthModule,
   ],
 })

@@ -1,6 +1,6 @@
 # Proposed implementation phases
 
-Status: proposed work decomposition; application code intentionally not started
+Status: implementation baseline; storage and student submissions are now implemented on the approved foundations
 
 ## Phase 0 — architecture approval and repository bootstrap
 
@@ -24,9 +24,12 @@ Implement CourseSubject learning units, typed learning items, attachments,
 ordering, draft/published/archived behavior, teacher authoring, and student
 navigation. Integrate tenant theme tokens through the design-system boundary.
 
-## Phase 4 — submissions and review
+## Phase 4 — submissions and review (implemented baseline)
 
-Implement the approved submission/revision model, private file flows, deadline/late rules, teacher reviews, comments, change requests, resubmissions, audit events, and responsive upload/review UX.
+The API baseline implements the approved submission/revision model, private
+file flows, deadline/late rules, teacher reviews, comments, change requests,
+resubmissions, and audit events. Responsive UX, notifications, and operational
+hardening remain follow-on work.
 
 ## Phase 5 — notifications and EduPay synchronization
 

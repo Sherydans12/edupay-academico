@@ -4,6 +4,8 @@ export interface LearningAttachmentTarget {
   readonly purpose: 'MATERIAL' | 'ASSIGNMENT_SOURCE' | 'ASSESSMENT_SOURCE';
 }
 
+export const LEARNING_ATTACHMENT_PORT = Symbol('LEARNING_ATTACHMENT_PORT');
+
 /**
  * Storage owns FileObject/FileReference persistence. Learning intentionally
  * exposes only this future integration seam and has no upload or file-path

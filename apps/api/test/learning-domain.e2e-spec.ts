@@ -81,6 +81,16 @@ describe.runIf(testDatabaseUrl)(
     beforeEach(async () => {
       identityStatus.active = true;
       audit.events.length = 0;
+      await prisma.review.deleteMany();
+      await prisma.fileReference.deleteMany();
+      await prisma.fileObject.deleteMany();
+      await prisma.uploadIntent.deleteMany();
+      await prisma.blobDerivative.deleteMany();
+      await prisma.submissionRevision.deleteMany();
+      await prisma.submission.deleteMany();
+      await prisma.storedBlob.deleteMany();
+      await prisma.storageUsageAccount.deleteMany();
+      await prisma.storageQuotaPolicy.deleteMany();
       await prisma.learningItem.deleteMany();
       await prisma.learningUnit.deleteMany();
       await prisma.courseSubjectTeacher.deleteMany();

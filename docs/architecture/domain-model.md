@@ -34,8 +34,9 @@ erDiagram
     LEARNING_UNIT ||--o{ LEARNING_ITEM : contains
     LEARNING_ITEM ||--o{ SUBMISSION : receives
     STUDENT ||--o{ SUBMISSION : creates
-    SUBMISSION ||--o{ SUBMISSION_FILE : includes
-    SUBMISSION ||--o{ REVIEW : receives
+    SUBMISSION ||--o{ SUBMISSION_REVISION : contains
+    SUBMISSION_REVISION ||--o{ FILE_REFERENCE : includes
+    SUBMISSION_REVISION ||--o{ REVIEW : receives
 ```
 
 ## Entity rules
@@ -61,7 +62,10 @@ These are boundaries for implementation discussion, not a final persistence desi
 - **CourseSubject**: course-specific teaching context, teacher assignments, student direct enrollments, and learning-unit ordering.
 - **Learning unit**: ordered learning items and visibility state.
 - **Learning item**: typed content and work configuration.
-- **Submission**: the student work record, files, comments, and review history.
+- **Submission**: one student’s logical work for one eligible LearningItem.
+- **SubmissionRevision**: immutable submitted evidence, files, comment,
+  server timestamp, deadline snapshot, and late flag.
+- **Review**: teacher comment/action attached to one immutable revision.
 
 Cross-aggregate operations should use application services and explicit transactions/events rather than hidden database coupling.
 

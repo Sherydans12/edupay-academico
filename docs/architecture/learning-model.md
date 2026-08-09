@@ -45,7 +45,8 @@ A typed unit with common metadata:
 - `DRAFT`, `SCHEDULED`, `PUBLISHED`, and `ARCHIVED` publication lifecycle;
 - optional availability dates;
 - created/updated metadata;
-- attachment references where applicable.
+- attachment references where applicable. Storage owns the immutable
+  FileObject/FileReference records; LearningItems never store filesystem paths.
 
 ## Item types
 
@@ -70,7 +71,9 @@ Proposed baseline:
 
 Publication and sensitive edit confirmation are defined by
 [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md).
-Submission revision, replacement, and deadline policy remain unresolved.
+LearningItem submissions are defined by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md):
+only published ASSIGNMENT and ASSESSMENT items accept student work, and the
+LearningItem dueAt is copied into each immutable revision as effectiveDueAt.
 
 ## Ordering and presentation
 

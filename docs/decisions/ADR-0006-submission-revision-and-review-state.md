@@ -1,6 +1,6 @@
 # ADR-0006: submission revision and review state
 
-Status: Proposed; product/teaching decision required before Phase 4  
+Status: Superseded by [ADR-0013](ADR-0013-submissions-and-storage-mvp-semantics.md)
 Date: 2026-08-08
 
 ## Context

@@ -11,3 +11,8 @@ for coherent academic-year dates, non-negative CourseSubject ordering, and one
 active CourseSubject/enrollment/teacher assignment per relationship key.
 Inactive and archived rows remain available as academic history, and a later
 active relationship can be created without rewriting that history.
+
+The storage/submission migration adds tenant-composite `StoredBlob`,
+`FileObject`, `FileReference`, quota/accounting, upload-intent, submission,
+revision, and review tables. Submission revisions reference immutable file
+records and preserve the server deadline snapshot required by ADR-0013.

@@ -1,8 +1,17 @@
 # File storage architecture
 
-Status: accepted storage baseline; implementation remains gated by the documented phases and dependencies
+Status: accepted storage baseline; MVP implementation uses the provider abstraction with a private local filesystem adapter
 
 This document is governed by [ADR-0005](../decisions/ADR-0005-private-object-storage-abstraction.md). It refines the existing private, provider-agnostic object-storage boundary without changing the service, database, identity, tenant, learning, or submission architectures.
+
+The MVP implementation keeps provider operations behind `PrivateStorageProvider`.
+The local adapter stores server-generated keys below a private configured root,
+stages bytes, promotes validated bytes to immutable blob keys, and streams
+authorized downloads through the API. It never returns a public path. An
+S3-compatible adapter can replace it without changing domain records or
+authorization. Filesystem uploads fail closed unless both physical free-space
+guard settings are configured; their numerical production values remain an
+operations decision.
 
 ## 1. Scope and responsibility split
 
@@ -240,7 +249,10 @@ Additional controls:
 
 ## 10. API proposal
 
-These routes follow the proposed `/api/v1` convention and remain contract proposals until ADR-0008 is accepted:
+These routes follow the accepted `/api/v1` convention from ADR-0011. The MVP
+also exposes JSON base64 upload bodies for the local adapter; this is a
+transport convenience, not a public storage protocol. Provider-specific paths
+and presigned URLs remain outside the contract:
 
 | Method and route | Purpose | Minimum authorization |
 | --- | --- | --- |
@@ -248,6 +260,11 @@ These routes follow the proposed `/api/v1` convention and remain contract propos
 | `POST /api/v1/file-upload-intents/{intentId}/complete` | Authoritative validation, deduplication, metadata/reference creation, and accounting | Intent actor or explicit authorized server workflow |
 | `GET /api/v1/files/{fileObjectId}` | Authorized logical metadata | Parent-resource read permission |
 | `GET /api/v1/files/{fileObjectId}/download` | Authorized stream or short-lived redirect | Parent-resource download permission |
+| `POST /api/v1/learning-items/{learningItemId}/attachments` | Validate and attach a LearningItem source/material file | Assigned teacher or `TENANT_ADMIN` |
+| `GET /api/v1/learning-items/{learningItemId}/attachments` | List authorized LearningItem attachments | Parent-resource read permission |
+| `POST /api/v1/learning-items/{learningItemId}/submission` | Create first revision or permitted resubmission | Entitled student |
+| `GET /api/v1/submissions/{submissionId}` | View one submission and revision/review history | Owner, assigned teacher, or `TENANT_ADMIN` |
+| `POST /api/v1/submission-revisions/{revisionId}/reviews` | Comment, review, or request changes | Assigned teacher |
 | `GET /api/v1/storage/usage` | Current tenant usage view shaped to role | `TENANT_ADMIN` detailed; `TEACHER` summary |
 | `GET /api/v1/platform/storage/usage` | Global and per-tenant operational usage | Explicit audited `SYSTEM_ADMIN` support context |
 | `PATCH /api/v1/platform/storage/quotas/{scope}` | Change a configured quota/threshold policy | Explicit audited platform policy authority; exact role policy remains open |

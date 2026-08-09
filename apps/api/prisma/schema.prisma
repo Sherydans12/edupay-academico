@@ -60,6 +60,83 @@ enum LearningItemPublicationStatus {
   ARCHIVED
 }
 
+enum StorageScopeType {
+  GLOBAL
+  TENANT
+}
+
+enum StorageQuotaState {
+  NORMAL
+  INFO
+  WARNING
+  CRITICAL
+  FULL
+}
+
+enum StorageCategory {
+  LEARNING_MATERIAL
+  ASSIGNMENT_SOURCE
+  ASSESSMENT_SOURCE
+  STUDENT_SUBMISSION
+  GENERATED_DERIVATIVE
+  OTHER_SYSTEM
+}
+
+enum StoredBlobLifecycle {
+  PENDING
+  VALIDATING
+  AVAILABLE
+  REJECTED
+  DELETION_PENDING
+}
+
+enum StorageValidationStatus {
+  NOT_VALIDATED
+  VALID
+  INVALID
+}
+
+enum StorageScanStatus {
+  NOT_SCANNED
+  PENDING
+  CLEAR
+  INFECTED
+  FAILED
+}
+
+enum FileObjectLifecycle {
+  PENDING
+  AVAILABLE
+  REJECTED
+  DELETION_PENDING
+}
+
+enum FileReferenceType {
+  LEARNING_ITEM
+  SUBMISSION_REVISION
+}
+
+enum UploadIntentStatus {
+  RESERVED
+  STAGED
+  FINALIZED
+  FAILED
+  EXPIRED
+}
+
+enum SubmissionStatus {
+  PENDING
+  SUBMITTED
+  REVIEWED
+  CHANGES_REQUESTED
+}
+
+enum ReviewAction {
+  COMMENTED
+  REVIEWED
+  CHANGES_REQUESTED
+}
+
 model Tenant {
   id        String   @id @db.VarChar(128)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -76,6 +153,15 @@ model Tenant {
   courseSubjectTeachers     CourseSubjectTeacher[]
   learningUnits             LearningUnit[]
   learningItems             LearningItem[]
+  storageQuotaPolicies      StorageQuotaPolicy[]
+  storageUsageAccounts      StorageUsageAccount[]
+  storedBlobs                StoredBlob[]
+  fileObjects                FileObject[]
+  fileReferences             FileReference[]
+  uploadIntents              UploadIntent[]
+  submissions                Submission[]
+  submissionRevisions        SubmissionRevision[]
+  reviews                    Review[]
 
   @@map("tenants")
 }
@@ -138,6 +224,7 @@ model Student {
   tenant             Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   courseEnrollments  CourseEnrollment[]
   subjectEnrollments StudentSubjectEnrollment[]
+  submissions         Submission[]
 
   @@id([tenantId, id])
   @@unique([tenantId, identityUserId])
@@ -162,6 +249,7 @@ model Teacher {
 
   tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   assignments CourseSubjectTeacher[]
+  reviews     Review[]
 
   @@id([tenantId, id])
   @@unique([tenantId, identityUserId])
@@ -319,9 +407,238 @@ model LearningItem {
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   courseSubject CourseSubject @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
   learningUnit LearningUnit @relation(fields: [tenantId, learningUnitId, courseSubjectId], references: [tenantId, id, courseSubjectId], onDelete: Restrict)
+  fileReferences FileReference[]
+  submissions    Submission[]
 
   @@id([tenantId, id])
   @@index([tenantId, courseSubjectId, publicationStatus, sortOrder, id])
   @@index([tenantId, learningUnitId, sortOrder, id])
   @@map("learning_items")
+}
+
+model StorageQuotaPolicy {
+  id                       String           @id @default(uuid()) @db.Uuid
+  scopeKey                 String           @unique @map("scope_key") @db.VarChar(160)
+  scopeType                StorageScopeType @map("scope_type")
+  tenantId                 String?          @map("tenant_id") @db.VarChar(128)
+  quotaBytes               BigInt           @map("quota_bytes")
+  infoThresholdPercent     Float            @default(75) @map("info_threshold_percent")
+  warningThresholdPercent  Float            @default(90) @map("warning_threshold_percent")
+  criticalThresholdPercent Float            @default(95) @map("critical_threshold_percent")
+  version                  Int              @default(1)
+  effectiveAt              DateTime         @default(now()) @map("effective_at") @db.Timestamptz(3)
+  changedByIdentityUserId  String?          @map("changed_by_identity_user_id") @db.VarChar(128)
+  auditReason              String?          @map("audit_reason") @db.VarChar(500)
+  createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([scopeType, tenantId])
+  @@index([tenantId, scopeType])
+  @@map("storage_quota_policies")
+}
+
+model StorageUsageAccount {
+  id               String           @id @default(uuid()) @db.Uuid
+  scopeKey         String           @unique @map("scope_key") @db.VarChar(160)
+  scopeType        StorageScopeType @map("scope_type")
+  tenantId         String?          @map("tenant_id") @db.VarChar(128)
+  usedBytes        BigInt           @default(0) @map("used_bytes")
+  reservedBytes    BigInt           @default(0) @map("reserved_bytes")
+  fileCount        Int              @default(0) @map("file_count")
+  blobCount        Int              @default(0) @map("blob_count")
+  version          Int              @default(1)
+  lastReconciledAt DateTime?        @map("last_reconciled_at") @db.Timestamptz(3)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([scopeType, tenantId])
+  @@index([tenantId, scopeType])
+  @@map("storage_usage_accounts")
+}
+
+model StoredBlob {
+  id                String                  @default(uuid()) @db.Uuid
+  tenantId          String                  @map("tenant_id") @db.VarChar(128)
+  storageKey        String                  @unique @map("storage_key") @db.VarChar(500)
+  sha256            String                  @db.Char(64)
+  storedSizeBytes   BigInt                  @map("stored_size_bytes")
+  detectedMime      String                  @map("detected_mime") @db.VarChar(160)
+  detectedExtension String                  @map("detected_extension") @db.VarChar(16)
+  lifecycle         StoredBlobLifecycle     @default(PENDING)
+  validationStatus  StorageValidationStatus @default(NOT_VALIDATED) @map("validation_status")
+  scanStatus        StorageScanStatus      @default(NOT_SCANNED) @map("scan_status")
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  validatedAt       DateTime?               @map("validated_at") @db.Timestamptz(3)
+  availableAt       DateTime?               @map("available_at") @db.Timestamptz(3)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  fileObjects FileObject[]
+  sourceDerivatives BlobDerivative[] @relation("source_blob")
+  derivativeOf BlobDerivative[] @relation("derivative_blob")
+
+  @@id([tenantId, id])
+  @@unique([tenantId, sha256, storedSizeBytes])
+  @@index([tenantId, lifecycle])
+  @@map("stored_blobs")
+}
+
+model FileObject {
+  id                       String              @default(uuid()) @db.Uuid
+  tenantId                 String              @map("tenant_id") @db.VarChar(128)
+  storedBlobId             String              @map("stored_blob_id") @db.Uuid
+  originalFilename         String              @map("original_filename") @db.VarChar(255)
+  normalizedFilename       String              @map("normalized_filename") @db.VarChar(255)
+  declaredSizeBytes        BigInt              @map("declared_size_bytes")
+  authoritativeSizeBytes   BigInt              @map("authoritative_size_bytes")
+  declaredMime             String              @map("declared_mime") @db.VarChar(160)
+  detectedMime             String              @map("detected_mime") @db.VarChar(160)
+  extension                String              @db.VarChar(16)
+  category                 StorageCategory
+  uploadedByIdentityUserId String              @map("uploaded_by_identity_user_id") @db.VarChar(128)
+  isImmutableEvidence      Boolean             @default(true) @map("is_immutable_evidence")
+  lifecycle                FileObjectLifecycle @default(AVAILABLE)
+  createdAt                DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  validatedAt              DateTime?           @map("validated_at") @db.Timestamptz(3)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  storedBlob     StoredBlob      @relation(fields: [tenantId, storedBlobId], references: [tenantId, id], onDelete: Restrict)
+  fileReferences FileReference[]
+
+  @@id([tenantId, id])
+  @@index([tenantId, category, lifecycle])
+  @@index([tenantId, storedBlobId])
+  @@map("file_objects")
+}
+
+model FileReference {
+  id                       String              @default(uuid()) @db.Uuid
+  tenantId                 String              @map("tenant_id") @db.VarChar(128)
+  fileObjectId             String              @map("file_object_id") @db.Uuid
+  referenceType            FileReferenceType   @map("reference_type")
+  category                 StorageCategory
+  learningItemId           String?             @map("learning_item_id") @db.Uuid
+  submissionRevisionId     String?             @map("submission_revision_id") @db.Uuid
+  displayOrder             Int                 @default(0) @map("display_order")
+  createdByIdentityUserId  String              @map("created_by_identity_user_id") @db.VarChar(128)
+  createdAt                DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  fileObject         FileObject          @relation(fields: [tenantId, fileObjectId], references: [tenantId, id], onDelete: Restrict)
+  learningItem       LearningItem?       @relation(fields: [tenantId, learningItemId], references: [tenantId, id], onDelete: Restrict)
+  submissionRevision SubmissionRevision? @relation(fields: [tenantId, submissionRevisionId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, fileObjectId])
+  @@index([tenantId, learningItemId])
+  @@index([tenantId, submissionRevisionId])
+  @@map("file_references")
+}
+
+model UploadIntent {
+  id                       String             @default(uuid()) @db.Uuid
+  tenantId                 String             @map("tenant_id") @db.VarChar(128)
+  createdByIdentityUserId  String             @map("created_by_identity_user_id") @db.VarChar(128)
+  parentType               FileReferenceType  @map("parent_type")
+  parentId                 String             @map("parent_id") @db.Uuid
+  category                 StorageCategory
+  expectedFilename         String             @map("expected_filename") @db.VarChar(255)
+  expectedSizeBytes        BigInt             @map("expected_size_bytes")
+  expectedMime             String             @map("expected_mime") @db.VarChar(160)
+  reservedBytes            BigInt             @map("reserved_bytes")
+  stagingKey               String             @unique @map("staging_key") @db.VarChar(500)
+  status                   UploadIntentStatus @default(RESERVED)
+  expiresAt                DateTime           @map("expires_at") @db.Timestamptz(3)
+  createdAt                DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  finalizedAt              DateTime?          @map("finalized_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, status, expiresAt])
+  @@map("upload_intents")
+}
+
+model Submission {
+  id             String           @default(uuid()) @db.Uuid
+  tenantId       String           @map("tenant_id") @db.VarChar(128)
+  studentId      String           @map("student_id") @db.Uuid
+  learningItemId String           @map("learning_item_id") @db.Uuid
+  status         SubmissionStatus @default(PENDING)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  student      Student             @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
+  learningItem LearningItem         @relation(fields: [tenantId, learningItemId], references: [tenantId, id], onDelete: Restrict)
+  revisions    SubmissionRevision[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, studentId, learningItemId])
+  @@index([tenantId, learningItemId, status, updatedAt])
+  @@index([tenantId, studentId, updatedAt])
+  @@map("submissions")
+}
+
+model SubmissionRevision {
+  id                       String   @default(uuid()) @db.Uuid
+  tenantId                 String   @map("tenant_id") @db.VarChar(128)
+  submissionId             String   @map("submission_id") @db.Uuid
+  revisionNumber           Int      @map("revision_number")
+  studentComment           String?  @map("student_comment") @db.Text
+  submittedAt              DateTime @map("submitted_at") @db.Timestamptz(3)
+  effectiveDueAt           DateTime @map("effective_due_at") @db.Timestamptz(3)
+  isLate                   Boolean  @map("is_late")
+  createdByIdentityUserId  String   @map("created_by_identity_user_id") @db.VarChar(128)
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  submission     Submission          @relation(fields: [tenantId, submissionId], references: [tenantId, id], onDelete: Restrict)
+  fileReferences FileReference[]
+  reviews        Review[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, submissionId, revisionNumber])
+  @@index([tenantId, submissionId, revisionNumber])
+  @@map("submission_revisions")
+}
+
+model Review {
+  id                       String       @default(uuid()) @db.Uuid
+  tenantId                 String       @map("tenant_id") @db.VarChar(128)
+  submissionRevisionId     String       @map("submission_revision_id") @db.Uuid
+  reviewerTeacherId        String?      @map("reviewer_teacher_id") @db.Uuid
+  reviewerIdentityUserId   String       @map("reviewer_identity_user_id") @db.VarChar(128)
+  action                   ReviewAction
+  comment                  String?      @db.Text
+  createdAt                DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  submissionRevision SubmissionRevision @relation(fields: [tenantId, submissionRevisionId], references: [tenantId, id], onDelete: Restrict)
+  reviewerTeacher    Teacher?           @relation(fields: [tenantId, reviewerTeacherId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, submissionRevisionId, createdAt])
+  @@map("reviews")
+}
+
+model BlobDerivative {
+  id               String   @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.VarChar(128)
+  sourceBlobId     String   @map("source_blob_id") @db.Uuid
+  derivativeBlobId String   @map("derivative_blob_id") @db.Uuid
+  profile          String   @db.VarChar(120)
+  profileVersion   String   @map("profile_version") @db.VarChar(40)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sourceBlob     StoredBlob @relation("source_blob", fields: [tenantId, sourceBlobId], references: [tenantId, id], onDelete: Restrict)
+  derivativeBlob StoredBlob @relation("derivative_blob", fields: [tenantId, derivativeBlobId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, sourceBlobId, profile, profileVersion])
+  @@index([tenantId, derivativeBlobId])
+  @@map("blob_derivatives")
 }

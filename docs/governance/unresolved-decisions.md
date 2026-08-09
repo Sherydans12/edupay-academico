@@ -11,9 +11,9 @@ Status: decision register; resolved rows are recorded for traceability and all r
 | D-05 | Academic source-of-truth by field | Prevents sync from overwriting manual changes | EduPay integration owner | Phase 2 |
 | D-06 | Sync mode, frequency, and conflict/reconciliation flow | Determines worker, idempotency, and operational design | EduPay integration owner | Phase 2/5 |
 | D-07 | **Resolved 2026-08-08 by [ADR-0010](../decisions/ADR-0010-course-subject-and-lifecycle.md):** reusable Subject catalog entries are distinct from course-specific CourseSubjects; teacher, learning, and direct student relationships target CourseSubject; lifecycle enums are fixed stable strings | Prevents incompatible UI and schema assumptions | Product + school pilot | Resolved for Phase 1 |
-| D-08 | Submission model: revisions versus independent attempts | Directly affects data model, UX, review history, and notifications | Product + teaching lead | Phase 4 |
-| D-09 | Submission draft, replacement, and post-review rules | Defines file mutability and user expectations | Product + teaching lead | Phase 4 |
-| D-10 | Deadline timezone and change policy | Determines late flags and edge-case correctness | Product + school pilot | Phase 4 |
+| D-08 | **Resolved 2026-08-08 by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md):** one logical Submission per student and eligible LearningItem with immutable revisions; ASSIGNMENT and ASSESSMENT only | Directly affects data model, UX, review history, and notifications | Product + teaching lead | Resolved for MVP |
+| D-09 | **Resolved 2026-08-08 by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md):** no persisted student drafts; `SUBMITTED -> REVIEWED` or `SUBMITTED -> CHANGES_REQUESTED -> SUBMITTED`; reviewed work cannot be freely reopened | Defines file mutability and user expectations | Product + teaching lead | Resolved for MVP |
+| D-10 | **Resolved 2026-08-08 by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md):** absolute instants, initial America/Santiago operational configuration, server late calculation, immutable due-date snapshots, late submissions accepted | Determines late flags and edge-case correctness | Product + school pilot | Resolved for MVP |
 | D-11 | Malware scanning, retention, deletion/legal hold, export, and cleanup durations. Initial size/type/quota policy is resolved by ADR-0005. | Security, cost, and compliance impact | Security + operations | Phase 4/6 |
 | D-12 | Queue/worker technology and delivery retry policy | Enables reliable notifications/sync without coupling requests | Platform + operations | Phase 5 |
 | D-13 | Notification event catalog, preferences, and email copy | Defines user-visible behavior and Resend configuration | Product + communications | Phase 5 |
@@ -32,9 +32,10 @@ Status: decision register; resolved rows are recorded for traceability and all r
 - Existing EduPay administrative authentication remains a separate trust domain. User impersonation is out of scope for the MVP.
 - Course/subject terminology and lifecycle are fixed by [ADR-0010](../decisions/ADR-0010-course-subject-and-lifecycle.md): `Subject` is a reusable catalog entry; `CourseSubject` is the course-specific teaching/learning context; teacher, learning, and direct student relationships target `CourseSubject`.
 - API/shared-contract strategy is fixed by [ADR-0011](../decisions/ADR-0011-api-and-shared-contract-strategy.md): REST/JSON `/api/v1`, camelCase, opaque IDs, ISO 8601 timestamps, stable errors, OpenAPI boundary, Zod 4 schemas in `packages/contracts`, a thin hand-written client, an opaque cursor envelope, and endpoint-specific idempotency.
-- Learning publication and edit semantics are fixed for this MVP by [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md). This does not close D-08, D-09, or D-10.
+- Learning publication and edit semantics are fixed for this MVP by [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md).
+- Submission, revision, correction, and deadline semantics are fixed for this MVP by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md).
 
-These resolutions do not close D-05, D-06, D-08, D-09, D-10, D-11, D-12, D-13, D-15, D-16, D-17, or D-18. Submission revision, replacement, draft, and post-review behavior remains a later-phase product/teaching decision.
+These resolutions do not close D-05, D-06, D-11, D-12, D-13, D-15, D-16, D-17, or D-18. Malware scanning, retention, deletion, legal hold, export, and cleanup remain open.
 
 ## Decision protocol
 
