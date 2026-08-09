@@ -340,6 +340,7 @@ export type CreateSubject = z.infer<typeof createSubjectSchema>;
 export type UpdateSubject = z.infer<typeof updateSubjectSchema>;
 export type CreateCourseSubject = z.infer<typeof createCourseSubjectSchema>;
 export type UpdateCourseSubject = z.infer<typeof updateCourseSubjectSchema>;
+export type CourseSubject = z.infer<typeof courseSubjectSchema>;
 export type CreateCourseEnrollment = z.infer<
   typeof createCourseEnrollmentSchema
 >;

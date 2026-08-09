@@ -211,3 +211,9 @@ export type CreateLearningItem = z.infer<typeof createLearningItemSchema>;
 export type UpdateLearningItem = z.infer<typeof updateLearningItemSchema>;
 export type ScheduleLearningItem = z.infer<typeof scheduleLearningItemSchema>;
 export type ReorderLearning = z.infer<typeof reorderLearningSchema>;
+export type LearningUnit = z.infer<typeof learningUnitSchema>;
+export type LearningItem = z.infer<typeof learningItemSchema>;
+export type LearningUnitWithItems = z.infer<typeof learningUnitWithItemsSchema>;
+export type CourseSubjectLearningRoute = z.infer<
+  typeof courseSubjectLearningRouteSchema
+>;

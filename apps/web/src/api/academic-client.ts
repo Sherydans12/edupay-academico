@@ -32,6 +32,15 @@ import {
   updateSubjectSchema,
   updateTeacherSchema,
   assignCourseSubjectTeachersSchema,
+  courseSubjectLearningRouteSchema,
+  createLearningItemSchema,
+  createLearningUnitSchema,
+  learningItemSchema,
+  learningUnitSchema,
+  reorderLearningSchema,
+  scheduleLearningItemSchema,
+  updateLearningItemSchema,
+  updateLearningUnitSchema,
   type CreateAcademicYear,
   type CreateCourse,
   type CreateCourseEnrollment,
@@ -41,6 +50,12 @@ import {
   type CreateSubject,
   type CreateTeacher,
   type AssignCourseSubjectTeachers,
+  type CreateLearningItem,
+  type CreateLearningUnit,
+  type ReorderLearning,
+  type ScheduleLearningItem,
+  type UpdateLearningItem,
+  type UpdateLearningUnit,
   type UpdateAcademicYear,
   type UpdateCourse,
   type UpdateCourseSubject,
@@ -195,4 +210,104 @@ export class AcademicApiClient {
   getStudentContextSubjects() { return this.request('student-context/course-subjects', courseSubjectSchema.array()); }
   getTeacherContextSubjects() { return this.request('teacher-context/course-subjects', courseSubjectSchema.array()); }
   getTeacherCourseSubjectRoster(id: string) { return this.request(`course-subjects/${id}/roster`, courseSubjectRosterItemSchema.array()); }
+
+  getLearningRoute(courseSubjectId: string) {
+    return this.request(`course-subjects/${courseSubjectId}/learning`, courseSubjectLearningRouteSchema);
+  }
+
+  listLearningUnits(courseSubjectId: string) {
+    return this.request(`course-subjects/${courseSubjectId}/learning-units`, learningUnitSchema.array());
+  }
+
+  getLearningUnit(id: string) {
+    return this.request(`learning-units/${id}`, learningUnitSchema);
+  }
+
+  listLearningItems(learningUnitId: string) {
+    return this.request(`learning-units/${learningUnitId}/items`, learningItemSchema.array());
+  }
+
+  getLearningItem(id: string) {
+    return this.request(`learning-items/${id}`, learningItemSchema);
+  }
+
+  createLearningUnit(input: CreateLearningUnit) {
+    return this.request('learning-units', learningUnitSchema, {
+      method: 'POST',
+      body: JSON.stringify(createLearningUnitSchema.parse(input)),
+    });
+  }
+
+  updateLearningUnit(id: string, input: UpdateLearningUnit) {
+    return this.request(`learning-units/${id}`, learningUnitSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateLearningUnitSchema.parse(input)),
+    });
+  }
+
+  archiveLearningUnit(id: string) {
+    return this.request(`learning-units/${id}/archive`, learningUnitSchema, { method: 'POST' });
+  }
+
+  reorderLearningUnits(courseSubjectId: string, input: ReorderLearning) {
+    return this.request(`course-subjects/${courseSubjectId}/learning-units/reorder`, learningUnitSchema.array(), {
+      method: 'POST',
+      body: JSON.stringify(reorderLearningSchema.parse(input)),
+    });
+  }
+
+  createLearningItem(learningUnitId: string, input: CreateLearningItem) {
+    return this.request(`learning-units/${learningUnitId}/items`, learningItemSchema, {
+      method: 'POST',
+      body: JSON.stringify(createLearningItemSchema.parse(input)),
+    });
+  }
+
+  updateLearningItem(id: string, input: UpdateLearningItem) {
+    return this.request(`learning-items/${id}`, learningItemSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateLearningItemSchema.parse(input)),
+    });
+  }
+
+  scheduleLearningItem(id: string, input: ScheduleLearningItem) {
+    return this.request(`learning-items/${id}/schedule`, learningItemSchema, {
+      method: 'POST',
+      body: JSON.stringify(scheduleLearningItemSchema.parse(input)),
+    });
+  }
+
+  publishLearningItem(id: string) {
+    return this.request(`learning-items/${id}/publish`, learningItemSchema, { method: 'POST' });
+  }
+
+  archiveLearningItem(id: string) {
+    return this.request(`learning-items/${id}/archive`, learningItemSchema, { method: 'POST' });
+  }
+
+  reorderLearningItems(learningUnitId: string, input: ReorderLearning) {
+    return this.request(`learning-units/${learningUnitId}/items/reorder`, learningItemSchema.array(), {
+      method: 'POST',
+      body: JSON.stringify(reorderLearningSchema.parse(input)),
+    });
+  }
 }
+
+export type LearningApiClient = Pick<
+  AcademicApiClient,
+  | 'getLearningRoute'
+  | 'listLearningUnits'
+  | 'getLearningUnit'
+  | 'listLearningItems'
+  | 'getLearningItem'
+  | 'createLearningUnit'
+  | 'updateLearningUnit'
+  | 'archiveLearningUnit'
+  | 'reorderLearningUnits'
+  | 'createLearningItem'
+  | 'updateLearningItem'
+  | 'scheduleLearningItem'
+  | 'publishLearningItem'
+  | 'archiveLearningItem'
+  | 'reorderLearningItems'
+>;

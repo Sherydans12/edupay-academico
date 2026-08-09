@@ -1,29 +1,35 @@
 import { Badge, Card } from '@edupay/ui';
+import type { CourseSubjectLearningRoute, LearningItem, LearningUnitWithItems } from '@edupay/contracts';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { Icon } from '@/components/icons';
-import type {
-  LearningItemKind,
-  LearningItemState,
-  LearningUnitViewModel,
-  SubjectViewModel,
-} from '@/demo/demo-data';
 
-const itemMeta: Record<LearningItemKind, { icon: 'book' | 'clipboard' | 'document' | 'message'; label: string }> = {
-  announcement: { icon: 'message', label: 'Anuncio' },
-  assessment: { icon: 'document', label: 'Evaluación en documento' },
-  assignment: { icon: 'clipboard', label: 'Actividad' },
-  material: { icon: 'book', label: 'Material' },
+type ItemIconName = 'book' | 'clipboard' | 'document' | 'message';
+
+const itemMeta: Record<LearningItem['type'], { icon: ItemIconName; label: string }> = {
+  ANNOUNCEMENT: { icon: 'message', label: 'Anuncio' },
+  ASSESSMENT: { icon: 'document', label: 'Evaluación en documento' },
+  ASSIGNMENT: { icon: 'clipboard', label: 'Actividad' },
+  MATERIAL: { icon: 'book', label: 'Material' },
 };
 
-const stateMeta: Record<LearningItemState, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' }> = {
-  attention: { label: 'Requiere atención', tone: 'warning' },
-  complete: { label: 'Visto', tone: 'success' },
-  current: { label: 'En curso', tone: 'info' },
-  draft: { label: 'Borrador visual', tone: 'neutral' },
-  upcoming: { label: 'Próximamente', tone: 'neutral' },
+const publicationMeta: Record<LearningItem['publicationStatus'], { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' }> = {
+  ARCHIVED: { label: 'Archivado', tone: 'neutral' },
+  DRAFT: { label: 'Borrador', tone: 'neutral' },
+  PUBLISHED: { label: 'Publicado', tone: 'success' },
+  SCHEDULED: { label: 'Programado', tone: 'info' },
 };
+
+export interface SubjectCardViewModel {
+  accent: 'blue' | 'turquoise' | 'purple' | 'yellow';
+  code: string;
+  href: string;
+  id: string;
+  subtitle: string;
+  title: string;
+  routeLabel?: string;
+}
 
 export function PageHeading({
   action,
@@ -45,7 +51,7 @@ export function PageHeading({
   );
 }
 
-export function SubjectCard({ subject }: { subject: SubjectViewModel }) {
+export function SubjectCard({ subject }: { subject: SubjectCardViewModel }) {
   return (
     <Link className={`subject-card subject-card--${subject.accent}`} href={subject.href}>
       <div className="subject-card__head">
@@ -54,75 +60,109 @@ export function SubjectCard({ subject }: { subject: SubjectViewModel }) {
       </div>
       <div className="subject-card__body">
         <h3>{subject.title}</h3>
-        <p>{subject.teacher}</p>
+        <p>{subject.subtitle}</p>
       </div>
-      <div className="subject-progress">
-        <div><span>Continuidad</span><strong>{subject.progress}%</strong></div>
-        <div aria-label={`${subject.progress}% de continuidad`} aria-valuemax={100} aria-valuemin={0} aria-valuenow={subject.progress} className="progress-track" role="progressbar">
-          <span style={{ width: `${subject.progress}%` }} />
-        </div>
+      <div className="subject-card__route">
+        <span><Icon name="layers" />Ruta de aprendizaje</span>
+        <strong>{subject.routeLabel ?? 'Abrir espacio'}</strong>
       </div>
-      <p className="subject-card__next">{subject.nextAction}</p>
     </Link>
   );
 }
 
+function itemDescription(item: LearningItem) {
+  return item.description ?? item.instructions ?? item.body ?? item.content ?? 'Contenido disponible en este espacio.';
+}
+
+function formatDueAt(value: string) {
+  return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function isEffectivelyVisible(item: LearningItem, now = Date.now()) {
+  return item.publicationStatus === 'PUBLISHED' ||
+    (item.publicationStatus === 'SCHEDULED' && item.publishAt !== null && new Date(item.publishAt).getTime() <= now);
+}
+
+function itemStatus(item: LearningItem, audience: 'student' | 'teacher') {
+  if (audience === 'student' && item.publicationStatus === 'SCHEDULED' && isEffectivelyVisible(item)) {
+    return { label: 'Disponible', tone: 'success' as const };
+  }
+  return publicationMeta[item.publicationStatus];
+}
+
 export function LearningRoute({
   audience,
+  courseSubjectId,
+  onItemSelect,
+  onUnitSelect,
   units,
 }: {
   audience: 'student' | 'teacher';
-  units: LearningUnitViewModel[];
+  courseSubjectId?: string;
+  onItemSelect?: (item: LearningItem, unit: LearningUnitWithItems) => ReactNode;
+  onUnitSelect?: (unit: LearningUnitWithItems, index: number) => ReactNode;
+  units: CourseSubjectLearningRoute['units'];
 }) {
+  const visibleUnits = audience === 'student'
+    ? units.filter((unit) => unit.status === 'ACTIVE')
+    : units;
+
   return (
     <div className="learning-route">
-      {units.map((unit, unitIndex) => (
-        <section className="learning-unit" key={unit.id}>
-          <div className="learning-unit__marker" aria-hidden="true">
-            <span>{unitIndex + 1}</span>
-          </div>
-          <div className="learning-unit__content">
-            <header>
-              <div>
-                <h2>{unit.title}</h2>
-                <p>{unit.description}</p>
-              </div>
-              <Badge tone={unitIndex === 1 ? 'info' : 'neutral'}>{unit.progressLabel}</Badge>
-            </header>
-            <div className="learning-items">
-              {unit.items.map((item) => {
-                const kind = itemMeta[item.kind];
-                const state = stateMeta[item.state];
-                const href = audience === 'student' && item.id === 'item-6'
-                  ? '/estudiante/asignaturas/lenguaje/resena-literaria'
-                  : audience === 'teacher' && item.id === 'item-6'
-                    ? '/docente/asignaturas/lenguaje'
-                    : undefined;
-                const content = (
-                  <>
-                    <span className={`learning-item__icon learning-item__icon--${item.kind}`}><Icon name={kind.icon} /></span>
-                    <span className="learning-item__copy">
-                      <small>{kind.label}</small>
-                      <strong>{item.title}</strong>
-                      <span>{item.description}</span>
-                    </span>
-                    <span className="learning-item__meta">
-                      <Badge tone={state.tone}>{state.label}</Badge>
-                      {item.dueLabel ? <small><Icon name="clock" />{item.dueLabel}</small> : null}
-                    </span>
-                    {href ? <Icon className="learning-item__chevron" name="chevron-right" /> : null}
-                  </>
-                );
-                return href ? (
-                  <Link className="learning-item" href={href} key={item.id}>{content}</Link>
-                ) : (
-                  <div className="learning-item" key={item.id}>{content}</div>
-                );
-              })}
+      {visibleUnits.map((unit, unitIndex) => {
+        const visibleItems = audience === 'student' ? unit.items.filter((item) => isEffectivelyVisible(item)) : unit.items;
+        return (
+          <section className="learning-unit" key={unit.id}>
+            <div className="learning-unit__marker" aria-hidden="true">
+              <span>{unitIndex + 1}</span>
             </div>
-          </div>
-        </section>
-      ))}
+            <div className="learning-unit__content">
+              <header>
+                <div>
+                  <h2>{unit.title}</h2>
+                  <p>{unit.description ?? 'Sin descripción para esta unidad.'}</p>
+                </div>
+                <div className="learning-unit__header-actions">
+                  <Badge tone={unit.status === 'ACTIVE' ? 'info' : 'neutral'}>
+                    {unit.status === 'ACTIVE' ? `${visibleItems.length} contenido${visibleItems.length === 1 ? '' : 's'}` : unit.status === 'DRAFT' ? 'Borrador' : 'Archivada'}
+                  </Badge>
+                  {onUnitSelect?.(unit, unitIndex)}
+                </div>
+              </header>
+              {visibleItems.length ? (
+                <div className="learning-items">
+                  {visibleItems.map((item, itemIndex) => {
+                    const kind = itemMeta[item.type];
+                    const state = itemStatus(item, audience);
+                    const href = audience === 'student' && courseSubjectId
+                      ? `/estudiante/asignaturas/${courseSubjectId}/items/${item.id}`
+                      : undefined;
+                    const actions = onItemSelect?.(item, unit);
+                    const content = (
+                      <>
+                        <span className={`learning-item__icon learning-item__icon--${item.type.toLowerCase()}`}><Icon name={kind.icon} /></span>
+                        <span className="learning-item__copy">
+                          <small>{kind.label}</small>
+                          <strong>{item.title}</strong>
+                          <span>{itemDescription(item)}</span>
+                        </span>
+                        <span className="learning-item__meta">
+                          <Badge tone={state.tone}>{state.label}</Badge>
+                          {item.dueAt ? <small><Icon name="clock" />Vence {formatDueAt(item.dueAt)}</small> : null}
+                          {item.publicationStatus === 'SCHEDULED' && item.publishAt ? <small><Icon name="calendar" />{isEffectivelyVisible(item) ? audience === 'student' ? 'Programado · disponible desde ' : 'Disponible desde ' : 'Disponible el '}{formatDueAt(item.publishAt)}</small> : null}
+                        </span>
+                        {actions ? <span className="learning-item__actions">{actions}</span> : href ? <Icon className="learning-item__chevron" name="chevron-right" /> : null}
+                      </>
+                    );
+                    return href ? <Link className="learning-item" href={href} key={item.id}>{content}</Link> : <div className="learning-item" key={item.id} data-item-index={itemIndex}>{content}</div>;
+                  })}
+                </div>
+              ) : <p className="learning-route__empty">Aún no hay contenido visible en esta unidad.</p>}
+            </div>
+          </section>
+        );
+      })}
+      {!visibleUnits.length ? <p className="learning-route__empty">Aún no hay contenido visible en esta ruta.</p> : null}
     </div>
   );
 }

@@ -5,6 +5,9 @@ import { AcademicApiClient, AcademicApiError, UnauthenticatedError } from '@/api
 const id = '00000000-0000-4000-8000-000000000001';
 const timestamp = '2026-08-08T12:00:00+00:00';
 const year = { id, label: '2026', startDate: '2026-03-01', endDate: '2026-12-31', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp };
+const unitId = '00000000-0000-4000-8000-000000000002';
+const learningItem = { id: '00000000-0000-4000-8000-000000000003', courseSubjectId: id, learningUnitId: unitId, type: 'ASSIGNMENT' as const, title: 'Entrega', description: null, content: null, instructions: 'Resuelve la actividad.', body: null, sortOrder: 0, publicationStatus: 'DRAFT' as const, publishAt: null, publishedAt: null, publishedByIdentityUserId: null, dueAt: '2026-08-12T20:00:00+00:00', createdByIdentityUserId: 'teacher-1', updatedByIdentityUserId: null, createdAt: timestamp, updatedAt: timestamp };
+const learningUnit = { id: unitId, courseSubjectId: id, title: 'Unidad', description: 'Descripción', sortOrder: 0, startAt: null, endAt: null, status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp };
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -55,5 +58,29 @@ describe('AcademicApiClient', () => {
 
     await expect(client.listAcademicYears()).rejects.toBeInstanceOf(UnauthenticatedError);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('reads the Learning route using the shared response contract', async () => {
+    const fetchImpl = vi.fn(async () => response({ courseSubjectId: id, units: [{ ...learningUnit, items: [learningItem] }] }));
+    const client = new AcademicApiClient({ baseUrl: 'http://localhost:3001/api/v1', fetchImpl, sessionAdapter: session });
+
+    await expect(client.getLearningRoute(id)).resolves.toMatchObject({ courseSubjectId: id, units: [{ items: [learningItem] }] });
+    expect(fetchImpl).toHaveBeenCalledWith(`http://localhost:3001/api/v1/course-subjects/${id}/learning`, expect.anything());
+  });
+
+  it('sends typed Learning mutations through the existing request/session boundary', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response(learningUnit, 201))
+      .mockResolvedValueOnce(response({ ...learningItem, publicationStatus: 'SCHEDULED', publishAt: '2099-08-12T20:00:00+00:00' }))
+      .mockResolvedValueOnce(response([learningItem]));
+    const client = new AcademicApiClient({ baseUrl: 'http://localhost:3001/api/v1', fetchImpl, sessionAdapter: session });
+
+    await client.createLearningUnit({ courseSubjectId: id, title: 'Unidad', sortOrder: 0 });
+    await client.scheduleLearningItem(learningItem.id, { confirmSensitiveChange: false, publishAt: '2099-08-12T20:00:00+00:00' });
+    await client.reorderLearningItems(unitId, { orderedIds: [learningItem.id] });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, expect.stringContaining('/learning-units'), expect.objectContaining({ method: 'POST' }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, expect.stringContaining(`/learning-items/${learningItem.id}/schedule`), expect.objectContaining({ method: 'POST' }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, expect.stringContaining(`/learning-units/${unitId}/items/reorder`), expect.objectContaining({ method: 'POST' }));
   });
 });
