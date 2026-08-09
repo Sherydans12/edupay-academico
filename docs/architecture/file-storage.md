@@ -251,9 +251,9 @@ Additional controls:
 ## 10. API proposal
 
 These routes follow the accepted `/api/v1` convention from ADR-0011. The MVP
-also exposes JSON base64 upload bodies for the local adapter; this is a
-transport convenience, not a public storage protocol. Provider-specific paths
-and presigned URLs remain outside the contract:
+does not expose JSON or base64 upload bodies. File bytes use only the dedicated
+one-file multipart content endpoint; provider-specific paths and presigned URLs
+remain outside the contract:
 
 | Method and route | Purpose | Minimum authorization |
 | --- | --- | --- |

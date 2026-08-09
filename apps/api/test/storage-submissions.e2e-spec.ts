@@ -274,6 +274,12 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
         },
       }),
     ).toBe(1);
+    const receivedEvent = await prisma.notificationEvent.findFirst({
+      where: { tenantId: 'submission-a', eventType: 'SUBMISSION_RECEIVED' },
+    });
+    expect(receivedEvent?.payload).toMatchObject({
+      targetPath: `/docente/revisiones/${created.id}`,
+    });
 
     await api(setup.teacherToken)
       .post(`/api/v1/submission-revisions/${created.revisions[0].id}/reviews`)
@@ -306,6 +312,12 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
         where: { tenantId: 'submission-a', eventType: 'CHANGES_REQUESTED' },
       }),
     ).toBe(1);
+    const changesRequestedEvent = await prisma.notificationEvent.findFirst({
+      where: { tenantId: 'submission-a', eventType: 'CHANGES_REQUESTED' },
+    });
+    expect(changesRequestedEvent?.payload).toMatchObject({
+      targetPath: `/estudiante/asignaturas/${setup.item.courseSubjectId}/items/${setup.item.id}`,
+    });
     expect(
       await prisma.notificationDelivery.count({
         where: {
@@ -328,6 +340,12 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
         where: { tenantId: 'submission-a', eventType: 'RESUBMISSION_RECEIVED' },
       }),
     ).toBe(1);
+    const resubmissionEvent = await prisma.notificationEvent.findFirst({
+      where: { tenantId: 'submission-a', eventType: 'RESUBMISSION_RECEIVED' },
+    });
+    expect(resubmissionEvent?.payload).toMatchObject({
+      targetPath: `/docente/revisiones/${created.id}`,
+    });
 
     await api(setup.teacherToken)
       .post(`/api/v1/submission-revisions/${revised.revisions[1].id}/reviews`)
@@ -338,6 +356,12 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
         where: { tenantId: 'submission-a', eventType: 'SUBMISSION_REVIEWED' },
       }),
     ).toBe(1);
+    const reviewedEvent = await prisma.notificationEvent.findFirst({
+      where: { tenantId: 'submission-a', eventType: 'SUBMISSION_REVIEWED' },
+    });
+    expect(reviewedEvent?.payload).toMatchObject({
+      targetPath: `/estudiante/asignaturas/${setup.item.courseSubjectId}/items/${setup.item.id}`,
+    });
     await api(setup.studentToken)
       .post(`/api/v1/submissions/${created.id}/revisions`)
       .send({ fileObjectIds: [revisedFile.id] })

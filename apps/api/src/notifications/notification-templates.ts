@@ -2,6 +2,31 @@ import type { NotificationEventType } from '../generated/prisma/client';
 
 export const ACADEMIC_NOTIFICATION_TEMPLATE_VERSION = 'v1';
 
+/**
+ * Notification links are persisted and later rendered by the worker, so they
+ * must stay inside the current application even if a future caller supplies
+ * an unexpected value. Backslashes are rejected because browsers can treat
+ * them as URL separators in otherwise relative-looking paths.
+ */
+export function isSafeApplicationPath(value: string): boolean {
+  if (
+    !value.startsWith('/') ||
+    value.startsWith('//') ||
+    value.includes('\\') ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    return false;
+  }
+  try {
+    return (
+      new URL(value, 'https://edupay-academico.invalid').origin ===
+      'https://edupay-academico.invalid'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export interface AcademicNotificationPayload {
   readonly courseSubjectId: string;
   readonly learningItemId: string;
@@ -74,7 +99,7 @@ export function renderAcademicEmail(
   publicBaseUrl: string,
 ): AcademicEmailContent {
   const copy = notificationCopy(eventType, payload);
-  const safePath = payload.targetPath.startsWith('/') && !payload.targetPath.startsWith('//')
+  const safePath = isSafeApplicationPath(payload.targetPath)
     ? payload.targetPath
     : '/';
   const link = new URL(safePath, publicBaseUrl).toString();

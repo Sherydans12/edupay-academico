@@ -22,6 +22,7 @@ import { TenantQueryScope } from '../persistence/tenant-query-scope';
 import {
   ACADEMIC_NOTIFICATION_TEMPLATE_VERSION,
   notificationCopy,
+  isSafeApplicationPath,
   type AcademicNotificationPayload,
 } from './notification-templates';
 
@@ -132,7 +133,7 @@ export class NotificationService {
       learningItemId: item.id,
       learningItemTitle: item.title,
       subjectName: item.courseSubject.subject.name,
-      targetPath: `/docente/revisiones?learningItemId=${item.id}`,
+      targetPath: `/docente/revisiones/${revision.submissionId}`,
       submissionId: revision.submissionId,
       submissionRevisionId: revision.id,
     };
@@ -343,6 +344,9 @@ export class NotificationService {
     recipients: readonly Recipient[],
     channels?: readonly NotificationChannel[],
   ): Promise<void> {
+    if (!isSafeApplicationPath(input.payload.targetPath)) {
+      throw new Error('Notification targetPath must be a safe application-relative path.');
+    }
     await tx.notificationEvent.upsert({
       where: { tenantId_id: { tenantId: input.tenantId, id: input.eventId } },
       create: {

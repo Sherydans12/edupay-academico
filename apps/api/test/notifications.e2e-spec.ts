@@ -189,6 +189,9 @@ describe.runIf(testDatabaseUrl)('Academic notifications (PostgreSQL e2e)', () =>
     const page = await api(studentToken).get('/api/v1/notifications?limit=10').expect(200);
     expect(page.body.items).toHaveLength(1);
     expect(page.body.items[0].type).toBe('ASSIGNMENT_PUBLISHED');
+    expect(page.body.items[0].targetPath).toBe(
+      `/estudiante/asignaturas/${structure.courseSubject.id}/items/${assignment.id}`,
+    );
 
     const emailBefore = await prisma.notificationDelivery.count({ where: { tenantId, channel: 'EMAIL', status: 'PENDING' } });
     expect(emailBefore).toBe(2);
