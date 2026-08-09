@@ -50,13 +50,36 @@ const postgresUrl = z.string().refine(
   { message: 'must be a PostgreSQL connection URL' },
 );
 
+const identityInternalBaseUrl = z
+  .string()
+  .url()
+  .refine(
+    (value) => {
+      const url = new URL(value);
+      return (
+        (url.protocol === 'http:' || url.protocol === 'https:') &&
+        url.username === '' &&
+        url.password === '' &&
+        url.search === '' &&
+        url.hash === ''
+      );
+    },
+    {
+      message:
+        'must be an HTTP(S) base URL without credentials, query, or fragment',
+    },
+  )
+  .transform((value) => value.replace(/\/+$/, ''));
+
 const optionalStorageNumber = z.preprocess(
-  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
   z.coerce.number().optional(),
 );
 
 const optionalNonEmptyString = z.preprocess(
-  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
   z.string().min(1).optional(),
 );
 
@@ -114,21 +137,39 @@ const environmentSchema = z
       .min(500)
       .max(30_000)
       .default(5_000),
+    IDENTITY_INTERNAL_BASE_URL: identityInternalBaseUrl,
+    IDENTITY_INTERNAL_SERVICE_TOKEN: z
+      .string()
+      .trim()
+      .min(43)
+      .max(128)
+      .regex(/^[A-Za-z0-9_-]+$/, {
+        message:
+          'must be a base64url-encoded secret containing at least 32 random bytes',
+      }),
+    IDENTITY_INTERNAL_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(30_000)
+      .default(3_000),
     STORAGE_ROOT: z.string().min(1).optional(),
     STORAGE_TEMP_ROOT: z.string().min(1).optional(),
-    STORAGE_MIN_FREE_BYTES: optionalStorageNumber.pipe(z.number().int().min(0).optional()),
-    STORAGE_MIN_FREE_PERCENTAGE: optionalStorageNumber.pipe(z.number().min(0).max(100).optional()),
+    STORAGE_MIN_FREE_BYTES: optionalStorageNumber.pipe(
+      z.number().int().min(0).optional(),
+    ),
+    STORAGE_MIN_FREE_PERCENTAGE: optionalStorageNumber.pipe(
+      z.number().min(0).max(100).optional(),
+    ),
     ACADEMIC_RESEND_API_KEY: optionalNonEmptyString,
     ACADEMIC_EMAIL_FROM: z
       .string()
       .min(1)
       .default('EduPay Académico <no-reply@example.invalid>'),
-    ACADEMIC_PUBLIC_BASE_URL: z
-      .string()
-      .url()
-      .default('http://localhost:3001'),
+    ACADEMIC_PUBLIC_BASE_URL: z.string().url().default('http://localhost:3001'),
     ACADEMIC_EMAIL_REPLY_TO: z.preprocess(
-      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
       z.email().optional(),
     ),
     ACADEMIC_EMAIL_MODE: z.enum(['resend', 'fake']).default('resend'),

@@ -26,6 +26,9 @@ This documentation governs the first implementation phase of EduPay Académico. 
 - [Tenancy and authorization foundation](governance/tenancy-authorization-foundation.md)
   records the implemented Identity consumer, request tenant context, policy,
   repository-scope, and future job-context guardrails.
+- [Identity internal bridge](governance/identity-internal-bridge.md) records the
+  implemented high-risk service-authenticated status and exact-link adapters,
+  failure behavior, configuration, and local contract fixture.
 
 ## Documentation conventions
 

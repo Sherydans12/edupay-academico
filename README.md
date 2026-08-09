@@ -80,13 +80,15 @@ composite tenant foreign keys plus reviewed PostgreSQL constraints. See the
 
 ## Configuration and trust boundaries
 
-The API validates database and EduPay Identity consumer settings at startup. In
-production, Identity issuer and JWKS URLs must use HTTPS. The API validates
+The API validates database and EduPay Identity consumer settings at startup,
+including the required server-only internal Identity base URL, service token,
+and bounded timeout. In production, Identity issuer and JWKS URLs must use HTTPS. The API validates
 asymmetric access JWTs through configured JWKS, creates immutable trusted
 principal and tenant contexts, and applies centralized capability/resource
 policies. It does not accept credentials, mint tokens, implement password
 authentication, or trust a client-provided `tenantId`. See the
-[foundation implementation note](docs/governance/tenancy-authorization-foundation.md).
+[foundation implementation note](docs/governance/tenancy-authorization-foundation.md)
+and [Identity bridge note](docs/governance/identity-internal-bridge.md).
 
 Never commit `.env` files, provider credentials, access/refresh tokens, private
 keys, or real student data. EduPay Identity and EduPay Academico remain separate

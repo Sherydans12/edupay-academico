@@ -19,6 +19,13 @@ Status: mandatory controls plus proposed operational baseline
 - Enforce the Identity access-token maximum lifetime of 10 minutes. Role and membership changes may leave an already-issued token valid only within that bounded lifetime.
 - Keep refresh-token ownership, rotation, reuse detection, token-family revocation, and logout behavior in Identity. Académico never stores refresh tokens.
 - Perform an online Identity session/membership status check for high-risk operations when current status is required.
+- Restricted internal status and exact-link calls use one server-only service
+  token, a bounded timeout, strict JSON response validation, and correlation-ID
+  propagation. They are not retried blindly.
+- Identity timeout, unavailability, service-authentication rejection, malformed
+  response, inactive state, or principal/membership/tenant mismatch fails the
+  high-risk action closed. Ordinary low-risk Academic requests do not depend on
+  an online Identity call.
 - Use secure transport and secure cookie/token handling as approved by the Identity threat model.
 
 ### Authorization and tenancy
@@ -43,6 +50,9 @@ Status: mandatory controls plus proposed operational baseline
 - Keep database, storage, Resend, Identity, and EduPay credentials in a managed secret mechanism.
 - Never store secrets in source control, logs, client bundles, or tenant configuration.
 - Rotate provider credentials and document ownership.
+- Keep `IDENTITY_INTERNAL_SERVICE_TOKEN` out of client bundles, response bodies,
+  logs, and fixtures; rotate it jointly with Identity. Prefer a private trusted
+  service-network address, or HTTPS when such a path is unavailable.
 
 ### Abuse and availability
 

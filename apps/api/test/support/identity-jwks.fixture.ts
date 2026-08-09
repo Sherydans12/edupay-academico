@@ -76,6 +76,10 @@ export class IdentityJwksFixture {
       IDENTITY_JWKS_TIMEOUT_MS: '5000',
       IDENTITY_JWKS_URI: this.jwksUri,
       IDENTITY_JWT_ALGORITHMS: 'RS256',
+      IDENTITY_INTERNAL_BASE_URL: 'http://127.0.0.1:9',
+      IDENTITY_INTERNAL_SERVICE_TOKEN:
+        'academic_test_service_token_000000000000000000000000',
+      IDENTITY_INTERNAL_TIMEOUT_MS: '3000',
       NODE_ENV: 'test',
     };
   }
