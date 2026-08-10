@@ -1,4 +1,4 @@
-# ADR-0015: single-VPS pilot deployment topology
+# ADR-0017: single-VPS pilot deployment topology
 
 Status: Proposed; does not resolve D-15
 
@@ -12,9 +12,9 @@ The functionally complete Académico and Identity services need a controlled
 Colegio Conquistadores pilot deployment. The pilot should be operable on one
 Docker/Coolify-style VPS without coupling the two services' databases or
 silently turning the local Academic filesystem adapter into a multi-node store.
-Provider, region, backup destination, RTO/RPO, support, audit retention, and
-pilot-success decisions remain open in D-15, D-17, and D-18. Malware scanning,
-retention, deletion, and legal hold remain open in D-11.
+Provider, region, backup destination, RTO/RPO, and support decisions remain
+open in D-15.
+Malware scanning, retention, deletion, and legal hold remain open in D-11.
 
 ## Proposed topology
 

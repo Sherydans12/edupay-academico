@@ -1,7 +1,8 @@
 # Pilot release checklist
 
 Status: controlled release gate. This checklist does not provide production
-credentials and does not close D-11, D-15, D-17, or D-18.
+credentials and does not close D-11 or D-15. D-17 and D-18 are resolved for the
+pilot by ADR-0019 and ADR-0020.
 
 ## Automated repository gate
 
@@ -76,9 +77,9 @@ modify it or its migrations from the Académico release process.
 - [ ] One Academic notification worker and one Identity email runner/schedule are active; no API replica starts either worker.
 - [ ] `GET /api/v1/health/live`, `GET /api/v1/health/ready`, web `/api/health`, Identity health, and worker `--check` pass.
 - [ ] Backup job, disk, database, notification, email, certificate, and terminal-failure alerts have owners.
-- [ ] Tenant/admin bootstrap is completed through approved operator tooling; no default password or public bootstrap endpoint was used.
+- [ ] One canonical tenant UUID is recorded; Identity creates the TenantRealm and first TENANT_ADMIN; Academic `pnpm bootstrap:tenant` creates the matching Tenant and storage accounting state; no default password or public bootstrap endpoint was used.
 - [ ] D-11 malware/retention/legal-hold decision is signed by the relevant owner.
-- [ ] D-17 audit/support retention and D-18 pilot success targets have named owners and are not represented as resolved by this change.
+- [ ] ADR-0019 audit/support policy and ADR-0020 pilot success targets are included in the release evidence; their operational prerequisites are verified.
 - [ ] Restore verification passed on a disposable target before pilot data is accepted.
 
 ## Container/config validation

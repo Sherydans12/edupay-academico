@@ -1,7 +1,8 @@
 # Pilot production environment matrix
 
-Status: deployment template; final hostnames, providers, regions, retention,
-and support ownership remain operator decisions under D-15, D-17, and D-18.
+Status: deployment template; final hostnames, providers, regions, and support
+ownership remain operator decisions under D-15. Pilot audit/support policy and
+success targets are fixed by ADR-0019 and ADR-0020.
 
 Do not commit the final pilot domains or secret values. Replace each
 `<placeholder>` in managed deployment configuration and record the resulting

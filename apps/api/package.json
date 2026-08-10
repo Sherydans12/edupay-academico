@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "bootstrap:tenant": "tsx src/bootstrap/tenant-bootstrap-main.ts",
     "worker": "tsx src/notifications/notification-worker-main.ts",
     "worker:check": "tsx src/notifications/notification-worker-main.ts --check",
     "prebuild": "pnpm --filter @edupay/contracts build",

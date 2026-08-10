@@ -1,8 +1,9 @@
 # Colegio Conquistadores pilot production runbook
 
 Status: proposed single-VPS operational baseline. This runbook does not close
-D-15 hosting/RTO/RPO/support, D-17 audit retention/support policy, D-18 pilot
-success targets, or D-11 malware/retention/legal hold.
+D-15 hosting/RTO/RPO/support or D-11 malware/retention/legal hold. D-17 is
+resolved for the pilot by ADR-0019 and D-18 is resolved for the pilot baseline
+by ADR-0020.
 
 ## 1. Proposed topology
 
@@ -94,7 +95,7 @@ history.
 7. Run Identity migrations, then Academic migrations, each as a single controlled job.
 8. Start Identity API, verify JWKS and liveness, then start Academic API and verify liveness/readiness.
 9. Start exactly one Academic notification worker and one Identity email runner/schedule.
-10. Run the production-safe tenant/admin bootstrap supplied by the Identity owner and the matching Academic tenant bootstrap. The current repositories do not yet contain a production-safe first-tenant bootstrap command; this is a genuine pre-pilot blocker (see §9).
+10. Run the coordinated production-safe Identity and Academic tenant/admin bootstrap described in §9.
 11. Run the controlled pilot workflow with synthetic or approved pilot data, verify audit/request correlation, and record the release evidence.
 
 ## 5. Health, readiness, and worker validation
@@ -201,31 +202,50 @@ uploads until an approved scanner/quarantine adapter and failure policy exist.
 No agent may choose retention, legal hold, deletion, or scanning behavior for
 D-11 without the relevant owner approvals.
 
-## 9. Tenant/admin bootstrap status
+## 9. Tenant/admin bootstrap procedure
 
-The intended safe sequence is:
+The operator must execute the two repository-owned bootstrap procedures in this
+order. There is no public bootstrap endpoint and no shared database.
 
-1. Allocate one canonical opaque tenant ID and approved handle.
-2. Create the Identity `TenantRealm` and tenant role catalog through an
-   Identity-owned, audited operator bootstrap.
-3. Create a pending Identity user/membership with `TENANT_ADMIN` and issue a
-   one-time activation mechanism. The operator must never set or retain a
-   permanent password.
-4. Create the independent Académico `Tenant` record with the same canonical
-   tenant ID.
-5. Give the operator the activation handoff once, have the admin choose their
-   password through Identity, and verify the first login and Academic tenant
-   context.
-6. Preserve the Identity and Academic audit/request evidence and mark the
-   one-time bootstrap complete.
+1. The operator chooses one canonical UUID and records it as the opaque tenant
+   reference for both services.
+2. Identity bootstrap creates the `TenantRealm` and first `TENANT_ADMIN` using
+   the Identity repository's owner-approved operator command. Identity creates
+   the activation mechanism; the operator does not create or retain a password.
+3. From the private Academic deployment environment, run the Academic command
+   with the exact same UUID:
+
+   ```sh
+   pnpm bootstrap:tenant -- --tenant-id <canonical-tenant-uuid>
+   ```
+
+   The accepted pilot default is 20,000,000,000 bytes. An explicitly approved
+   smaller quota may be supplied with `--quota-bytes <positive-integer>`.
+   The command creates the Academic `Tenant`, global and tenant quota policies,
+   and global and tenant usage-account rows. It is atomic and idempotent when
+   the existing state is compatible; it refuses an existing tenant quota or
+   storage scope with incompatible identity/quota/counter state. It does not
+   create Identity users, passwords, demo Students, Teachers, or any HTTP
+   route. Its structured output is non-secret bootstrap evidence; preserve it
+   with the release record without adding database URLs or credentials.
+4. The initial administrator activates their Identity account using the
+   one-time mechanism and chooses their password through Identity.
+5. The administrator logs in, verifies the Academic tenant context, and normal
+   authenticated administration begins.
+
+The coordinated first-tenant procedure is therefore:
+
+1. operator chooses one canonical UUID;
+2. Identity bootstrap creates the `TenantRealm` and first `TENANT_ADMIN`;
+3. Académico bootstrap creates the matching `Tenant` using the same UUID;
+4. the admin activates their Identity account; and
+5. normal authenticated administration begins.
 
 The current Identity API has no public tenant-creation route, and the current
 pilot smoke's SQL bootstrap deliberately creates disposable data and credentials
 for an ephemeral test. It must not be reused against the pilot database. The
-current Académico repository also has no production-safe paired bootstrap
-command. Therefore an Identity-owner-approved operator bootstrap command (or
-equivalent audited migration tooling) is a genuine blocker before real pilot
-data is created. Do not add a public bootstrap endpoint or commit a default
+Identity bootstrap remains an Identity-owned prerequisite; the Academic command
+does not replace it. Do not add a public bootstrap endpoint or commit a default
 password.
 
 ## 10. Observability and operator actions

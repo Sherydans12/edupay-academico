@@ -64,4 +64,5 @@ Identity link endpoints require a current Identity status check and an exact
 restricted-link verifier. The production verifier is intentionally
 unconfigured and fails closed until its service transport is configured.
 Relationship and identity-link mutations emit correlation-capable academic
-audit events without deciding D-17 retention or field-history policy.
+audit events under the pilot retention/support policy in ADR-0019; no blanket
+field-level history policy is introduced by this domain document.

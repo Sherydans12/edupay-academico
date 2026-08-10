@@ -20,8 +20,8 @@ Status: decision register; resolved rows are recorded for traceability and all r
 | D-14 | **Resolved 2026-08-08 by [ADR-0011](../decisions/ADR-0011-api-and-shared-contract-strategy.md):** REST/JSON `/api/v1`, camelCase, opaque IDs, ISO 8601, stable errors, OpenAPI boundary, Zod 4 schemas in `packages/contracts`, thin hand-written client, opaque cursor envelope, endpoint-specific idempotency | Affects monorepo packages and frontend/backend coupling | Engineering | Resolved for Phase 1 |
 | D-15 | Production hosting, region, backups, RTO/RPO, and support | Determines operating cost and release readiness | Platform + operations | Phase 6 |
 | D-16 | Colegio Conquistadores brand assets, localization, and theme-admin scope | Affects design tokens and first-pilot UX | Product + design + tenant | Phase 3 |
-| D-17 | Audit retention, field-level change history, and support access | Affects storage, privacy, and incident response | Security + operations | Phase 1/6 |
-| D-18 | MVP success targets and pilot cohort | Determines rollout and product validation | Product + tenant | Phase 0/6 |
+| D-17 | **Resolved 2026-08-10 by [ADR-0019](../decisions/ADR-0019-audit-retention-and-support-policy.md):** pilot security/business audit records are retained for at least 12 months; ordinary logs target no more than 90 days; support access remains explicit, tenant-bounded, audited, and non-impersonating | Affects storage, privacy, and incident response | Security + operations | Resolved for pilot policy; statutory/legal sufficiency remains outside this decision |
+| D-18 | **Resolved 2026-08-10 by [ADR-0020](../decisions/ADR-0020-pilot-scope-and-success-targets.md):** Colegio Conquistadores has a controlled 14-day pilot baseline with functional, security/data-integrity, operational, and no-P0/P1 launch criteria | Determines rollout and product validation | Product + tenant | Resolved for pilot baseline |
 | D-19 | **Resolved 2026-08-08 by [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md):** Learning unit/item publication, effective scheduled visibility, sensitive edit confirmation, CourseSubject authorization, and scoped ordering | Defines student visibility and safe content mutation before submissions exist | Product + teaching lead + security | Resolved for Learning MVP |
 
 ## Reconciliation decisions now fixed
@@ -34,8 +34,10 @@ Status: decision register; resolved rows are recorded for traceability and all r
 - API/shared-contract strategy is fixed by [ADR-0011](../decisions/ADR-0011-api-and-shared-contract-strategy.md): REST/JSON `/api/v1`, camelCase, opaque IDs, ISO 8601 timestamps, stable errors, OpenAPI boundary, Zod 4 schemas in `packages/contracts`, a thin hand-written client, an opaque cursor envelope, and endpoint-specific idempotency.
 - Learning publication and edit semantics are fixed for this MVP by [ADR-0012](../decisions/ADR-0012-learning-publication-and-edit-semantics.md).
 - Submission, revision, correction, and deadline semantics are fixed for this MVP by [ADR-0013](../decisions/ADR-0013-submissions-and-storage-mvp-semantics.md).
+- Pilot audit/support policy is fixed for the controlled pilot by [ADR-0019](../decisions/ADR-0019-audit-retention-and-support-policy.md); it is an operational product policy and not a statement of statutory or legal sufficiency.
+- Colegio Conquistadores pilot scope and success targets are fixed by [ADR-0020](../decisions/ADR-0020-pilot-scope-and-success-targets.md); no contractual uptime SLA is created.
 
-These resolutions do not close D-05, D-06, D-11, D-15, D-16, D-17, or D-18. Malware scanning, retention, deletion, legal hold, export, cleanup, hosting, and notification retention remain open.
+These resolutions do not close D-05, D-06, D-11, D-15, or D-16. Malware scanning, deletion, legal hold, export, cleanup, hosting, RTO/RPO, and provider support decisions remain open.
 
 ## Decision protocol
 

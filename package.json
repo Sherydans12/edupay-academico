@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @edupay/web --filter @edupay/api dev",
+    "bootstrap:tenant": "pnpm --filter @edupay/api bootstrap:tenant",
     "pilot:e2e": "node scripts/pilot-cross-service-smoke.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm -r --if-present typecheck",

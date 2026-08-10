@@ -1,6 +1,6 @@
 # Audit strategy
 
-Status: proposed audit model
+Status: pilot audit model; retention/support policy accepted by ADR-0019
 
 ## Two audit streams
 
@@ -47,9 +47,10 @@ Do not record credentials, refresh tokens, file contents, or unnecessary student
 - Audit events should be queryable by correlation ID for incident investigation.
 - If tamper-evidence, external retention, or WORM storage is required, that belongs in the deployment/security decision.
 
-## Unresolved decisions
+## Remaining follow-up decisions
 
-- Retention duration and deletion/legal-hold policy.
+- Deletion/legal-hold policy and any statutory or contractual retention beyond
+  the pilot policy in ADR-0019.
 - Whether before/after field values are stored for all mutations or only selected fields.
 - Whether file downloads are audited individually or through aggregate access events.
 - Whether Identity and Academic audit events are searchable in one support surface.

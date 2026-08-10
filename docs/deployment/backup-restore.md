@@ -2,7 +2,8 @@
 
 Status: provider-agnostic operational baseline. Exact off-host destination,
 retention beyond the minimum pilot window, RTO/RPO, encryption custody, and
-support ownership remain open under D-15/D-17.
+support ownership remain open under D-15; the pilot audit/support policy is
+defined by ADR-0019.
 
 ## Backup contents
 
