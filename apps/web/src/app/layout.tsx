@@ -3,6 +3,8 @@ import type { Metadata } from 'next';
 import { Montserrat } from 'next/font/google';
 import type { ReactNode } from 'react';
 
+import { IdentitySessionProvider } from '@/auth/session-provider';
+
 import '@edupay/ui/styles.css';
 import './globals.css';
 
@@ -36,7 +38,9 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 -->`,
           }}
         />
-        <TenantTheme theme="colegio-conquistadores">{children}</TenantTheme>
+        <TenantTheme theme="colegio-conquistadores">
+          <IdentitySessionProvider>{children}</IdentitySessionProvider>
+        </TenantTheme>
       </body>
     </html>
   );

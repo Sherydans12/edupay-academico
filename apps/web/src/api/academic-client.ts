@@ -52,6 +52,7 @@ import {
   submissionSchema,
   unreadNotificationCountSchema,
   uploadIntentSchema,
+  verifiedIdentityLinkSchema,
   type CreateReview,
   type CreateSubmission,
   type CreateSubmissionRevision,
@@ -86,6 +87,7 @@ import {
   type UpdateStudent,
   type UpdateSubject,
   type UpdateTeacher,
+  type VerifiedIdentityLink,
 } from '@edupay/contracts';
 import { apiErrorEnvelopeSchema, type ApiErrorDetail } from '@edupay/contracts';
 import type { z } from 'zod';
@@ -263,7 +265,18 @@ export class AcademicApiClient {
 
     if (response.status === 401 && !retried && this.sessionAdapter) {
       const refreshed = await this.sessionAdapter.refreshAccessToken();
-      if (refreshed) return this.requestRaw(path, init, true);
+      if (refreshed && this.isSafeAfterAuthenticationRefresh(init.method)) {
+        return this.requestRaw(path, init, true);
+      }
+      if (refreshed) {
+        throw new AcademicApiError({
+          code: 'AUTH_REFRESHED_RETRY_REQUIRED',
+          details: [],
+          message: 'Renovamos tu sesión, pero no repetimos esta acción para evitar duplicarla. Inténtalo nuevamente.',
+          requestId,
+          status: 401,
+        });
+      }
       await this.sessionAdapter.clearSession?.();
       throw new UnauthenticatedError('Tu sesión expiró. Vuelve a iniciar sesión en EduPay Identity.');
     }
@@ -280,6 +293,10 @@ export class AcademicApiClient {
       });
     }
     return response;
+  }
+
+  private isSafeAfterAuthenticationRefresh(method = 'GET'): boolean {
+    return ['GET', 'HEAD', 'OPTIONS', 'PUT'].includes(method.toUpperCase());
   }
 
   private async request<T>(path: string, schema: Schema<T>, init: RequestInit = {}): Promise<T> {
@@ -342,7 +359,15 @@ export class AcademicApiClient {
     }
     if (result.status === 401 && !retried && this.sessionAdapter) {
       const refreshed = await this.sessionAdapter.refreshAccessToken();
-      if (refreshed) return this.completeUploadIntent(intent, file, onProgress, signal, true);
+      if (refreshed) {
+        throw new AcademicApiError({
+          code: 'AUTH_REFRESHED_RETRY_REQUIRED',
+          details: [],
+          message: 'Renovamos tu sesión, pero no repetimos la carga para evitar duplicarla. Iníciala nuevamente.',
+          requestId,
+          status: 401,
+        });
+      }
       await this.sessionAdapter.clearSession?.();
       throw new UnauthenticatedError('Tu sesión expiró. Vuelve a iniciar sesión en EduPay Identity.');
     }
@@ -380,11 +405,21 @@ export class AcademicApiClient {
   createStudent(input: CreateStudent) { return this.request('students', studentSchema, { method: 'POST', body: JSON.stringify(createStudentSchema.parse(input)) }); }
   updateStudent(id: string, input: UpdateStudent) { return this.request(`students/${id}`, studentSchema, { method: 'PATCH', body: JSON.stringify(updateStudentSchema.parse(input)) }); }
   activateStudent(id: string) { return this.request(`students/${id}/activate`, studentSchema, { method: 'POST' }); }
+  linkStudentIdentity(id: string, input: VerifiedIdentityLink) {
+    return this.request(`students/${id}/identity-link`, studentSchema, {
+      method: 'PUT', body: JSON.stringify(verifiedIdentityLinkSchema.parse(input)),
+    });
+  }
 
   listTeachers(search?: string, cursor?: string) { return this.request(addQuery('teachers', { search, cursor, limit: 50 }), teacherPageSchema); }
   createTeacher(input: CreateTeacher) { return this.request('teachers', teacherSchema, { method: 'POST', body: JSON.stringify(createTeacherSchema.parse(input)) }); }
   updateTeacher(id: string, input: UpdateTeacher) { return this.request(`teachers/${id}`, teacherSchema, { method: 'PATCH', body: JSON.stringify(updateTeacherSchema.parse(input)) }); }
   activateTeacher(id: string) { return this.request(`teachers/${id}/activate`, teacherSchema, { method: 'POST' }); }
+  linkTeacherIdentity(id: string, input: VerifiedIdentityLink) {
+    return this.request(`teachers/${id}/identity-link`, teacherSchema, {
+      method: 'PUT', body: JSON.stringify(verifiedIdentityLinkSchema.parse(input)),
+    });
+  }
 
   listSubjects(cursor?: string) { return this.request(addQuery('subjects', { cursor, limit: 50 }), subjectPageSchema); }
   createSubject(input: CreateSubject) { return this.request('subjects', subjectSchema, { method: 'POST', body: JSON.stringify(createSubjectSchema.parse(input)) }); }

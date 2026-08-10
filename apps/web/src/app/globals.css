@@ -520,6 +520,86 @@ a.submission-row:hover { background: var(--surface-secondary); }
 .request-id { display: block; margin-top: 0.45rem; color: var(--text-secondary); font-size: 0.64rem; }
 .rotate-180 { transform: rotate(180deg); }
 
+.session-gate { min-height: 100vh; display: grid; place-items: center; padding: 1.25rem; }
+.session-gate > div { width: min(100%, 30rem); display: grid; gap: 0.75rem; color: var(--text-secondary); text-align: center; }
+.session-gate .ui-alert { width: min(100%, 38rem); }
+
+.account-page { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.52fr); align-content: center; gap: clamp(1rem, 5vw, 5rem); position: relative; overflow: hidden; background: var(--surface-background); padding: clamp(1rem, 5vw, 4rem); }
+.account-page::after { content: ''; position: absolute; z-index: 0; inset: 0 0 0 64%; background: var(--brand-primary-dark); pointer-events: none; }
+.account-page::before { content: ''; width: 22rem; height: 22rem; position: absolute; right: -8rem; top: -9rem; border: 3.8rem solid rgb(255 255 255 / 0.05); border-radius: 50%; pointer-events: none; }
+.account-shell { width: min(100%, 35rem); justify-self: end; display: grid; gap: 1.35rem; position: relative; z-index: 1; border-radius: var(--radius-lg); background: var(--surface-primary); padding: clamp(1.25rem, 4vw, 2.25rem); box-shadow: 0 18px 48px rgb(20 35 79 / 0.14); }
+.account-brand { display: flex; align-items: center; gap: 0.75rem; }
+.account-brand__mark { width: 2.75rem; height: 2.75rem; display: grid; place-items: center; flex: 0 0 auto; border: 1px dashed var(--brand-primary-medium); border-radius: 50%; color: var(--brand-primary); font-size: 0.72rem; font-weight: 850; }
+.account-brand > div { display: grid; gap: 0.12rem; }
+.account-brand strong { color: var(--brand-primary-dark); font-size: 0.78rem; }
+.account-brand span { color: var(--text-secondary); font-size: 0.68rem; }
+.account-intro h1, .account-intro p { margin: 0; }
+.account-intro h1 { max-width: 18ch; color: var(--brand-primary-dark); font-size: clamp(1.65rem, 3vw, 2.25rem); line-height: 1.12; letter-spacing: -0.035em; text-wrap: balance; }
+.account-intro p { max-width: 62ch; margin-top: 0.65rem; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.6; }
+.account-form, .account-password-fields { display: grid; gap: 1rem; }
+.account-field { display: grid; gap: 0.38rem; color: var(--text-primary); font-size: 0.75rem; font-weight: 720; }
+.account-field > span small { color: var(--text-secondary); font-weight: 500; }
+.account-field input { min-height: 46px; width: 100%; box-sizing: border-box; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-primary); color: var(--text-primary); padding: 0.7rem 0.82rem; outline: none; }
+.account-field input:hover { border-color: var(--brand-primary-medium); }
+.account-field input:focus { border-color: var(--brand-primary); outline: 3px solid var(--brand-focus); outline-offset: 2px; }
+.account-field input[aria-invalid='true'] { border-color: var(--state-error); }
+.account-field > small { color: var(--text-secondary); font-size: 0.63rem; font-weight: 500; line-height: 1.45; }
+.account-field .account-field__error { color: var(--state-error); }
+.account-submit { width: 100%; margin-top: 0.15rem; }
+.account-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem 1rem; }
+.account-links a, .account-footer a { min-height: 44px; display: inline-flex; align-items: center; color: var(--brand-primary); font-size: 0.7rem; font-weight: 750; }
+.membership-choices { display: grid; gap: 0.6rem; margin: 0; border: 0; padding: 0; }
+.membership-choices legend { margin-bottom: 0.5rem; font-size: 0.74rem; font-weight: 750; }
+.membership-choices button { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-primary); color: var(--text-primary); padding: 0.7rem 0.8rem; text-align: left; cursor: pointer; }
+.membership-choices button:hover { border-color: var(--brand-primary); background: var(--surface-selected); }
+.membership-choices button strong { font-size: 0.75rem; }
+.membership-choices button span { color: var(--text-secondary); font-size: 0.62rem; }
+.account-success { display: grid; justify-items: start; gap: 0.7rem; border-radius: var(--radius-md); background: color-mix(in srgb, var(--state-success) 8%, var(--surface-primary)); padding: 1.1rem; }
+.account-success > span { width: 2.4rem; height: 2.4rem; display: grid; place-items: center; border-radius: 50%; background: var(--state-success); color: white; font-weight: 850; }
+.account-success h2, .account-success p { margin: 0; }
+.account-success h2 { font-size: 1.1rem; }
+.account-success p { color: var(--text-secondary); font-size: 0.75rem; line-height: 1.55; }
+.account-assurance { width: min(100%, 25rem); align-self: center; display: grid; grid-template-columns: auto 1fr; gap: 0.85rem; position: relative; z-index: 1; color: white; }
+.account-assurance > span { width: 2.8rem; height: 2.8rem; display: grid; place-items: center; border: 1px solid rgb(255 255 255 / 0.38); border-radius: 50%; color: var(--brand-accent); font-weight: 900; }
+.account-assurance p { margin: 0; color: rgb(255 255 255 / 0.7); font-size: 0.75rem; line-height: 1.65; }
+.account-assurance strong { display: block; margin-bottom: 0.25rem; color: white; font-size: 0.86rem; }
+.account-footer { grid-column: 1; justify-self: end; width: min(100%, 35rem); }
+.person-access-list__actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0.5rem; }
+.provisioning-dialog { display: grid; gap: 1rem; }
+.provisioning-role { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-radius: var(--radius-md); background: var(--surface-secondary); padding: 0.7rem 0.8rem; }
+.provisioning-role > span { color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; }
+.provisioning-note, .provisioning-progress, .provisioning-partial p, .provisioning-complete > p { margin: 0; color: var(--text-secondary); font-size: 0.7rem; line-height: 1.55; }
+.provisioning-progress { border-radius: var(--radius-md); background: var(--surface-secondary); padding: 1rem; }
+.provisioning-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.6rem; }
+.provisioning-partial, .provisioning-complete { display: grid; gap: 1rem; }
+.provisioning-partial dl { display: grid; gap: 0.45rem; margin: 0; }
+.provisioning-partial dl > div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 0.7rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.45rem; }
+.provisioning-partial dt { color: var(--text-secondary); font-size: 0.64rem; }
+.provisioning-partial dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 0.68rem; font-weight: 700; }
+.activation-secret { display: grid; gap: 0.35rem; border-radius: var(--radius-md); background: var(--brand-primary-dark); color: white; padding: 1rem; }
+.activation-secret span { color: rgb(255 255 255 / 0.65); font-size: 0.62rem; }
+.activation-secret strong, .activation-secret code { margin-bottom: 0.45rem; overflow-wrap: anywhere; color: white; font-family: inherit; font-size: 0.84rem; }
+.activation-secret code { color: var(--brand-accent); font-size: 1rem; font-weight: 850; letter-spacing: 0.04em; }
+
+@media (max-width: 780px) {
+  .account-page { grid-template-columns: 1fr; align-content: start; padding: 1rem; }
+  .account-page::after { display: none; }
+  .account-shell { justify-self: center; }
+  .account-assurance { width: min(100%, 35rem); justify-self: center; border-radius: var(--radius-lg); background: var(--brand-primary-dark); padding: 1rem; }
+  .account-footer { grid-column: 1; justify-self: center; width: min(100%, 35rem); }
+  .person-access-list__actions { align-items: flex-end; flex-direction: column; }
+}
+
+@media (max-width: 420px) {
+  .account-shell { padding: 1.1rem; }
+  .account-links { align-items: stretch; flex-direction: column; }
+  .account-links a { width: 100%; }
+  .membership-choices button { align-items: flex-start; flex-direction: column; }
+  .provisioning-actions { align-items: stretch; flex-direction: column; }
+  .provisioning-actions .ui-button { width: 100%; }
+  .provisioning-partial dl > div { grid-template-columns: 1fr; gap: 0.2rem; }
+}
+
 @media (max-width: 680px) {
   .learning-editor-grid { grid-template-columns: 1fr; }
   .learning-unit-secondary-actions { margin-inline-start: 0; }

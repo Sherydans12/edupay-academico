@@ -17,7 +17,7 @@ describe('AppShell', () => {
     fireEvent.click(open);
     expect(open.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getAllByRole('button', { name: 'Cerrar navegación' })).toHaveLength(2);
-    expect(screen.getByText(/contenido local para validar/i)).toBeTruthy();
+    expect(screen.getByText(/Contenido local aislado para validar componentes/i)).toBeTruthy();
   });
 
   it('keeps the notification surface keyboard-operable in the shell', () => {

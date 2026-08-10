@@ -8,10 +8,10 @@ vi.mock('next/navigation', () => ({
 }));
 
 describe('HomePage', () => {
-  it('routes the entry point to the student demonstration workspace', async () => {
+  it('routes the entry point to the real login flow', async () => {
     HomePage();
 
     const { redirect } = await import('next/navigation');
-    expect(redirect).toHaveBeenCalledWith('/estudiante');
+    expect(redirect).toHaveBeenCalledWith('/login');
   });
 });

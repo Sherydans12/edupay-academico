@@ -1,13 +1,17 @@
+'use client';
+
 import { Alert, Button, Card } from '@edupay/ui';
 
 import { AppShell } from '@/components/app-shell';
+import { useTrustedCurrentSession } from '@/auth/current-session';
 import { Icon } from '@/components/icons';
 import { CompactStat, PageHeading } from '@/components/page-primitives';
 import { demoSessions } from '@/demo/demo-data';
 
 export function AdminOverviewScreen() {
+  const session = useTrustedCurrentSession(demoSessions.admin).session;
   return (
-    <AppShell session={demoSessions.admin}>
+    <AppShell session={session}>
       <PageHeading description="Representación ligera del espacio de configuración académica del tenant." title="Administración académica" />
       <Alert title="Separación de responsabilidades" tone="info">Este espacio no administra credenciales ni sesiones. Los flujos de membresía e invitación pertenecerán a EduPay Identity.</Alert>
       <div className="compact-stats">
@@ -25,8 +29,9 @@ export function AdminOverviewScreen() {
 }
 
 export function AdminPlaceholderScreen({ title }: { title: string }) {
+  const session = useTrustedCurrentSession(demoSessions.admin).session;
   return (
-    <AppShell session={demoSessions.admin}>
+    <AppShell session={session}>
       <PageHeading description="Navegación de administración preparada sin implementar dominio ni persistencia académica." title={title} />
       <Alert title="Representación de frontend" tone="info">Este espacio valida la jerarquía y el comportamiento responsive. Sus operaciones permanecerán inactivas hasta contar con contratos y autorización del backend.</Alert>
     </AppShell>
