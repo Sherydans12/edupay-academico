@@ -20,8 +20,8 @@ These records capture major architectural choices from the brief and architectur
 | [0012](ADR-0012-learning-publication-and-edit-semantics.md) | Learning publication and edit semantics | Accepted (2026-08-08) |
 | [0013](ADR-0013-submissions-and-storage-mvp-semantics.md) | MVP submission, revision, and deadline semantics | Accepted (2026-08-08) |
 | [0014](ADR-0014-academic-notifications-and-delivery.md) | Academic notification event catalog, transactional PostgreSQL outbox, worker, in-app delivery, and Academic Resend adapter | Accepted (2026-08-09) |
-| [0015](ADR-0015-edupay-source-of-truth-proposal.md) | EduPay source-of-truth proposal for Académico synchronization | Proposed; D-05 remains open; source checkout evidence unavailable |
-| [0016](ADR-0016-edupay-sync-strategy-proposal.md) | EduPay synchronization strategy proposal | Proposed; D-06 remains open; source capability and cadence evidence unavailable |
+| [0015](ADR-0015-edupay-source-of-truth-proposal.md) | EduPay source-of-truth proposal for Académico synchronization | Proposed; D-05 remains open; source evidence documented, owner approval required |
+| [0016](ADR-0016-edupay-sync-strategy-proposal.md) | EduPay synchronization strategy proposal | Proposed; D-06 remains open; source capability documented, owner approval required |
 
 ## ADR workflow
 
