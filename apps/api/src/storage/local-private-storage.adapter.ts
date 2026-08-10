@@ -1,15 +1,19 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import {
+  access,
   copyFile,
+  constants as fsConstants,
   mkdir,
   readFile,
   rm,
   statfs,
   stat,
 } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
+import type { Environment } from '../config/environment';
 import type { PrivateStorageProvider } from './private-storage.port';
 
 const keyPart = (value: string): string =>
@@ -17,27 +21,41 @@ const keyPart = (value: string): string =>
 
 @Injectable()
 export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
-  private readonly root = process.env.STORAGE_ROOT
-    ? join(process.env.STORAGE_ROOT)
-    : join(process.cwd(), 'var', 'private-storage');
+  private readonly root: string;
+  private readonly tempRoot: string;
+  private readonly production: boolean;
+
+  constructor(config: ConfigService<Environment, true>) {
+    const configuredRoot = config.get('STORAGE_ROOT', { infer: true });
+    const configuredTempRoot = config.get('STORAGE_TEMP_ROOT', { infer: true });
+    this.root = resolve(configuredRoot ?? join(process.cwd(), 'var', 'private-storage'));
+    this.tempRoot = resolve(configuredTempRoot ?? join(this.root, 'tmp'));
+    this.production = config.getOrThrow('NODE_ENV') === 'production';
+  }
+
+  async onModuleInit(): Promise<void> {
+    if (this.production) await this.assertReady();
+  }
+
+  async checkReadiness(): Promise<void> {
+    await this.assertReady();
+  }
 
   async assertPhysicalCapacity(additionalBytes: number): Promise<void> {
     const minFreeBytes = this.requiredNumber('STORAGE_MIN_FREE_BYTES');
     const minFreePercentage = this.requiredNumber(
       'STORAGE_MIN_FREE_PERCENTAGE',
     );
-    await mkdir(this.root, { recursive: true });
-    const filesystem = await statfs(this.root);
-    const freeBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
-    const totalBytes = Number(filesystem.blocks) * Number(filesystem.bsize);
-    const projectedFreeBytes = freeBytes - additionalBytes;
-    const projectedFreePercentage =
-      totalBytes > 0 ? (projectedFreeBytes / totalBytes) * 100 : 0;
-    if (
-      projectedFreeBytes < minFreeBytes ||
-      projectedFreePercentage < minFreePercentage
-    ) {
+    if (additionalBytes < 0 || !Number.isFinite(additionalBytes)) {
       throw new Error('PHYSICAL_STORAGE_SAFETY_GUARD');
+    }
+    if (!this.production) {
+      await mkdir(this.root, { recursive: true });
+      await mkdir(this.tempRoot, { recursive: true });
+    }
+    await this.assertVolumeCapacity(this.root, additionalBytes, minFreeBytes, minFreePercentage);
+    if (this.tempRoot !== this.root) {
+      await this.assertVolumeCapacity(this.tempRoot, additionalBytes, minFreeBytes, minFreePercentage);
     }
   }
 
@@ -83,6 +101,47 @@ export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
       throw new Error('Invalid private storage key.');
     }
     return join(this.root, storageKey);
+  }
+
+  private async assertReady(): Promise<void> {
+    if (this.root === this.tempRoot) {
+      throw new Error('STORAGE_TEMP_ROOT must be separate from STORAGE_ROOT.');
+    }
+    if (this.production && (!isAbsolute(this.root) || !isAbsolute(this.tempRoot))) {
+      throw new Error('Production storage paths must be absolute.');
+    }
+    if (this.production) {
+      this.requiredNumber('STORAGE_MIN_FREE_BYTES');
+      this.requiredNumber('STORAGE_MIN_FREE_PERCENTAGE');
+    }
+    await this.assertDirectory(this.root);
+    await this.assertDirectory(this.tempRoot);
+  }
+
+  private async assertDirectory(path: string): Promise<void> {
+    const directory = await stat(path);
+    if (!directory.isDirectory()) throw new Error('Configured storage path is not a directory.');
+    await access(path, fsConstants.R_OK | fsConstants.W_OK);
+  }
+
+  private async assertVolumeCapacity(
+    path: string,
+    additionalBytes: number,
+    minFreeBytes: number,
+    minFreePercentage: number,
+  ): Promise<void> {
+    const filesystem = await statfs(path);
+    const freeBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
+    const totalBytes = Number(filesystem.blocks) * Number(filesystem.bsize);
+    const projectedFreeBytes = freeBytes - additionalBytes;
+    const projectedFreePercentage =
+      totalBytes > 0 ? (projectedFreeBytes / totalBytes) * 100 : 0;
+    if (
+      projectedFreeBytes < minFreeBytes ||
+      projectedFreePercentage < minFreePercentage
+    ) {
+      throw new Error('PHYSICAL_STORAGE_SAFETY_GUARD');
+    }
   }
 
   private requiredNumber(name: string): number {

@@ -25,6 +25,7 @@ describe('Health endpoint (e2e)', () => {
       'IDENTITY_INTERNAL_SERVICE_TOKEN',
       'academic_test_service_token_000000000000000000000000',
     );
+    vi.stubEnv('ACADEMIC_TRUSTED_WEB_ORIGINS', 'http://localhost:3000');
 
     const { AppModule } = await import('../src/app.module');
     const testingModule = await Test.createTestingModule({
@@ -52,5 +53,39 @@ describe('Health endpoint (e2e)', () => {
       service: 'edupay-academico-api',
       status: 'ok',
     });
+  });
+
+  it('serves liveness separately from dependency readiness', async () => {
+    await request(application.getHttpServer())
+      .get('/api/v1/health/live')
+      .expect(200, { service: 'edupay-academico-api', status: 'ok' });
+
+    const response = await request(application.getHttpServer())
+      .get('/api/v1/health/ready')
+      .expect(503);
+
+    expect(response.body.error).toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'The request could not be completed.',
+    });
+  });
+
+  it('reflects only the exact configured Academic web origin for CORS', async () => {
+    const trusted = await request(application.getHttpServer())
+      .options('/api/v1/health')
+      .set('Origin', 'http://localhost:3000')
+      .set('Access-Control-Request-Method', 'GET')
+      .expect(204);
+
+    expect(trusted.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(trusted.headers['access-control-allow-origin']).not.toBe('*');
+
+    const untrusted = await request(application.getHttpServer())
+      .options('/api/v1/health')
+      .set('Origin', 'http://evil.localhost:3000')
+      .set('Access-Control-Request-Method', 'GET')
+      .expect(404);
+
+    expect(untrusted.headers['access-control-allow-origin']).toBeUndefined();
   });
 });

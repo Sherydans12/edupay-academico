@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const clientEnvironmentSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   NEXT_PUBLIC_API_BASE_URL: z
     .string()
     .url()
@@ -17,6 +18,18 @@ const clientEnvironmentSchema = z.object({
       message: 'must be an origin without a path, query, or fragment',
     })
     .transform((value) => value.replace(/\/$/, '')),
+}).superRefine((environment, context) => {
+  if (environment.NODE_ENV !== 'production') return;
+
+  for (const key of ['NEXT_PUBLIC_API_BASE_URL', 'NEXT_PUBLIC_IDENTITY_BASE_URL'] as const) {
+    if (new URL(environment[key]).protocol !== 'https:') {
+      context.addIssue({
+        code: 'custom',
+        message: 'must use HTTPS in production',
+        path: [key],
+      });
+    }
+  }
 });
 
 export type ClientEnvironment = z.infer<typeof clientEnvironmentSchema>;
@@ -38,6 +51,7 @@ export function validateClientEnvironment(
 
 export function getClientEnvironment(): ClientEnvironment {
   return validateClientEnvironment({
+    NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
     NEXT_PUBLIC_IDENTITY_BASE_URL: process.env.NEXT_PUBLIC_IDENTITY_BASE_URL,
   });

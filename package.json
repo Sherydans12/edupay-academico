@@ -18,7 +18,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:validate": "pnpm --filter @edupay/api db:validate",
-    "db:generate": "pnpm --filter @edupay/api db:generate"
+    "db:generate": "pnpm --filter @edupay/api db:generate",
+    "db:migrate:status": "pnpm --filter @edupay/api db:migrate:status",
+    "release:check": "node scripts/release-check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

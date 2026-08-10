@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isAbsolute } from 'node:path';
 
 const asymmetricJwtAlgorithms = [
   'RS256',
@@ -70,6 +71,36 @@ const identityInternalBaseUrl = z
     },
   )
   .transform((value) => value.replace(/\/+$/, ''));
+
+const trustedWebOrigins = z.string().default('').transform((value, context) => {
+  const origins = value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  const normalizedOrigins = new Set<string>();
+
+  for (const origin of origins) {
+    try {
+      const parsed = new URL(origin);
+      if (
+        !['http:', 'https:'].includes(parsed.protocol) ||
+        parsed.username ||
+        parsed.password ||
+        (parsed.pathname !== '' && parsed.pathname !== '/') ||
+        parsed.search ||
+        parsed.hash
+      ) {
+        context.addIssue({ code: 'custom', message: 'must contain exact HTTP(S) origins only' });
+        continue;
+      }
+      normalizedOrigins.add(parsed.origin);
+    } catch {
+      context.addIssue({ code: 'custom', message: 'must contain exact HTTP(S) origins only' });
+    }
+  }
+
+  return [...normalizedOrigins];
+});
 
 const optionalStorageNumber = z.preprocess(
   (value) =>
@@ -153,13 +184,14 @@ const environmentSchema = z
       .min(100)
       .max(30_000)
       .default(3_000),
+    ACADEMIC_TRUSTED_WEB_ORIGINS: trustedWebOrigins,
     STORAGE_ROOT: z.string().min(1).optional(),
     STORAGE_TEMP_ROOT: z.string().min(1).optional(),
     STORAGE_MIN_FREE_BYTES: optionalStorageNumber.pipe(
-      z.number().int().min(0).optional(),
+      z.number().finite().int().min(0).optional(),
     ),
     STORAGE_MIN_FREE_PERCENTAGE: optionalStorageNumber.pipe(
-      z.number().min(0).max(100).optional(),
+      z.number().finite().min(0).max(100).optional(),
     ),
     ACADEMIC_RESEND_API_KEY: optionalNonEmptyString,
     ACADEMIC_EMAIL_FROM: z
@@ -224,6 +256,40 @@ const environmentSchema = z
           path: [key],
         });
       }
+    }
+    if (environment.ACADEMIC_TRUSTED_WEB_ORIGINS.length === 0) {
+      context.addIssue({
+        code: 'custom',
+        message: 'must contain at least one exact trusted web origin in production',
+        path: ['ACADEMIC_TRUSTED_WEB_ORIGINS'],
+      });
+    }
+    for (const key of ['STORAGE_ROOT', 'STORAGE_TEMP_ROOT'] as const) {
+      const value = environment[key];
+      if (value === undefined) {
+        context.addIssue({
+          code: 'custom',
+          message: 'must be configured in production',
+          path: [key],
+        });
+      } else if (!isAbsolute(value)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'must be an absolute persistent path in production',
+          path: [key],
+        });
+      }
+    }
+    if (
+      environment.STORAGE_ROOT !== undefined &&
+      environment.STORAGE_TEMP_ROOT !== undefined &&
+      environment.STORAGE_ROOT === environment.STORAGE_TEMP_ROOT
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'must use a separate staging/temp path',
+        path: ['STORAGE_TEMP_ROOT'],
+      });
     }
     if (environment.ACADEMIC_EMAIL_MODE !== 'fake') {
       if (!environment.ACADEMIC_RESEND_API_KEY) {

@@ -40,6 +40,11 @@ export class NotificationWorkerService {
     return { materialized, claimed: claimed.length };
   }
 
+  async checkReadiness(): Promise<{ database: 'ok' }> {
+    await this.prisma.$queryRaw<[{ ok: number }]>`SELECT 1 AS ok`;
+    return { database: 'ok' };
+  }
+
   async runForever(): Promise<void> {
     let stopping = false;
     const stop = () => {
