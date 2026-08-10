@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "worker": "tsx src/notifications/notification-worker-main.ts",
+    "prebuild": "pnpm --filter @edupay/contracts build",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
