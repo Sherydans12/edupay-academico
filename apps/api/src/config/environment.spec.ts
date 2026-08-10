@@ -10,6 +10,9 @@ const validEnvironment = {
   IDENTITY_ISSUER: 'http://identity.local',
   IDENTITY_AUDIENCE: 'edupay-academico-api',
   IDENTITY_JWKS_URI: 'http://identity.local/.well-known/jwks.json',
+  IDENTITY_INTERNAL_BASE_URL: 'http://identity.local/',
+  IDENTITY_INTERNAL_SERVICE_TOKEN:
+    'academic_test_service_token_000000000000000000000000',
 };
 
 describe('validateEnvironment', () => {
@@ -18,6 +21,8 @@ describe('validateEnvironment', () => {
       API_PORT: 3001,
       IDENTITY_AUDIENCE: 'edupay-academico-api',
       IDENTITY_CLOCK_SKEW_SECONDS: 30,
+      IDENTITY_INTERNAL_BASE_URL: 'http://identity.local',
+      IDENTITY_INTERNAL_TIMEOUT_MS: 3000,
       IDENTITY_JWT_ALGORITHMS: ['RS256'],
       NODE_ENV: 'test',
     });
@@ -30,6 +35,12 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ NODE_ENV: 'test' })).toThrow(
       /IDENTITY_ISSUER/,
     );
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        IDENTITY_INTERNAL_SERVICE_TOKEN: '',
+      }),
+    ).toThrow(/IDENTITY_INTERNAL_SERVICE_TOKEN/);
   });
 
   it('requires HTTPS for Identity endpoints in production', () => {
@@ -51,5 +62,24 @@ describe('validateEnvironment', () => {
         IDENTITY_CLOCK_SKEW_SECONDS: '121',
       }),
     ).toThrow(/<=120/);
+  });
+
+  it('rejects unsafe internal Identity base URLs', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        IDENTITY_INTERNAL_BASE_URL:
+          'https://service-token@identity.local?token=unsafe',
+      }),
+    ).toThrow(/IDENTITY_INTERNAL_BASE_URL/);
+  });
+
+  it('requires an Identity-compatible high-entropy service token shape', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        IDENTITY_INTERNAL_SERVICE_TOKEN: 'human-password',
+      }),
+    ).toThrow(/IDENTITY_INTERNAL_SERVICE_TOKEN/);
   });
 });

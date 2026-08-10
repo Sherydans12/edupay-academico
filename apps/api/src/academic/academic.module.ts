@@ -10,10 +10,6 @@ import {
   AcademicContextController,
 } from './academic.controller';
 import { AcademicService } from './academic.service';
-import {
-  ACADEMIC_IDENTITY_LINK_VERIFIER,
-  UnconfiguredAcademicIdentityLinkVerifier,
-} from './identity-link.port';
 
 @Module({
   imports: [SecurityFoundationModule],
@@ -21,14 +17,9 @@ import {
   providers: [
     AcademicService,
     CorrelatedAcademicAuditLogger,
-    UnconfiguredAcademicIdentityLinkVerifier,
     {
       provide: ACADEMIC_AUDIT_PORT,
       useExisting: CorrelatedAcademicAuditLogger,
-    },
-    {
-      provide: ACADEMIC_IDENTITY_LINK_VERIFIER,
-      useExisting: UnconfiguredAcademicIdentityLinkVerifier,
     },
   ],
   exports: [AcademicService, ACADEMIC_AUDIT_PORT],

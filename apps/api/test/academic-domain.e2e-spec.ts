@@ -16,17 +16,9 @@ import {
   type AcademicAuditEvent,
   type AcademicAuditPort,
 } from '../src/academic/academic-audit.port';
-import {
-  ACADEMIC_IDENTITY_LINK_VERIFIER,
-  type AcademicIdentityLinkVerifier,
-} from '../src/academic/identity-link.port';
 import { configureApplication } from '../src/bootstrap/configure-application';
-import {
-  IDENTITY_SESSION_STATUS_ADAPTER,
-  type IdentitySessionStatusAdapter,
-  type IdentitySessionStatusRequest,
-} from '../src/identity/identity-adapter.port';
 import { PrismaService } from '../src/persistence/prisma.service';
+import { IdentityInternalFixture } from './support/identity-internal.fixture';
 import { IdentityJwksFixture } from './support/identity-jwks.fixture';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -35,6 +27,7 @@ describe.runIf(testDatabaseUrl)(
   'Academic Structure domain (PostgreSQL e2e)',
   () => {
     const fixture = new IdentityJwksFixture();
+    const identityInternal = new IdentityInternalFixture();
     const audit: AcademicAuditPort & { events: AcademicAuditEvent[] } = {
       events: [],
       record(event) {
@@ -42,29 +35,16 @@ describe.runIf(testDatabaseUrl)(
         return Promise.resolve();
       },
     };
-    const identityLinks: AcademicIdentityLinkVerifier = {
-      verifyExactLink: () => Promise.resolve(),
-    };
-    const identityStatus: IdentitySessionStatusAdapter & { active: boolean } = {
-      active: true,
-      checkSessionStatus(input: IdentitySessionStatusRequest) {
-        return Promise.resolve({
-          active: this.active,
-          identityUserId: input.identityUserId,
-          membershipActive: this.active,
-          membershipId: input.membershipId,
-          sessionActive: this.active,
-          sessionId: input.sessionId,
-          tenantId: input.tenantId,
-        });
-      },
-    };
     let application: INestApplication;
     let prisma: PrismaService;
 
     beforeAll(async () => {
       await fixture.start();
-      for (const [key, value] of Object.entries(fixture.environment())) {
+      await identityInternal.start();
+      for (const [key, value] of Object.entries({
+        ...fixture.environment(),
+        ...identityInternal.environment(),
+      })) {
         vi.stubEnv(key, value);
       }
       vi.stubEnv('DATABASE_URL', testDatabaseUrl as string);
@@ -75,10 +55,6 @@ describe.runIf(testDatabaseUrl)(
       })
         .overrideProvider(ACADEMIC_AUDIT_PORT)
         .useValue(audit)
-        .overrideProvider(ACADEMIC_IDENTITY_LINK_VERIFIER)
-        .useValue(identityLinks)
-        .overrideProvider(IDENTITY_SESSION_STATUS_ADAPTER)
-        .useValue(identityStatus)
         .compile();
 
       application = testingModule.createNestApplication();
@@ -88,7 +64,7 @@ describe.runIf(testDatabaseUrl)(
     });
 
     beforeEach(async () => {
-      identityStatus.active = true;
+      identityInternal.reset();
       audit.events.length = 0;
       await prisma.inAppNotification.deleteMany();
       await prisma.notificationDelivery.deleteMany();
@@ -119,8 +95,73 @@ describe.runIf(testDatabaseUrl)(
 
     afterAll(async () => {
       await application.close();
+      await identityInternal.close();
       await fixture.close();
       vi.unstubAllEnvs();
+    });
+
+    it('uses the HTTP bridge only for high-risk identity linking', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const student = await createStudent(admin, 'Camila', 'Conectada');
+
+      expect(identityInternal.requests).toHaveLength(0);
+
+      const linked = await link(admin, 'students', student.id, 'student-user');
+
+      expect(
+        identityInternal.requests.map(({ method, url }) => ({ method, url })),
+      ).toEqual([
+        {
+          method: 'GET',
+          url: '/internal/v1/sessions/session-tenant-a-admin-a/status',
+        },
+        {
+          method: 'POST',
+          url: '/internal/v1/identity-users/resolve',
+        },
+      ]);
+      expect(identityInternal.requests[1]?.body).toMatchObject({
+        actor: {
+          identityUserId: 'admin-a',
+          membershipId: 'membership-tenant-a-admin-a',
+          sessionId: 'session-tenant-a-admin-a',
+          tenantId: 'tenant-a',
+        },
+        expectedRole: 'STUDENT',
+        targetIdentityUserId: 'student-user',
+      });
+      expect(linked).toMatchObject({ identityUserId: 'student-user' });
+      expect(linked).not.toHaveProperty('membershipId');
+    });
+
+    it('rejects client-provided tenant and role fields before Identity is called', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const teacher = await createTeacher(admin, 'Teresa', 'Validada');
+
+      await api(admin)
+        .put(`/api/v1/teachers/${teacher.id}/identity-link`)
+        .send({
+          identityUserId: 'teacher-user',
+          tenantId: 'tenant-b',
+        })
+        .expect(403);
+
+      await api(admin)
+        .put(`/api/v1/teachers/${teacher.id}/identity-link`)
+        .send({
+          expectedRole: 'STUDENT',
+          identityUserId: 'teacher-user',
+        })
+        .expect(400);
+
+      expect(
+        identityInternal.requests.map(({ method, url }) => ({ method, url })),
+      ).toEqual([
+        {
+          method: 'GET',
+          url: '/internal/v1/sessions/session-tenant-a-admin-a/status',
+        },
+      ]);
     });
 
     it('isolates reads, labels, and every cross-tenant relationship', async () => {
@@ -408,7 +449,15 @@ describe.runIf(testDatabaseUrl)(
         .send({ name: 'Arte' })
         .expect(403);
 
-      identityStatus.active = false;
+      identityInternal.sessionResponse = {
+        active: false,
+        identityUserId: 'admin-a',
+        membershipActive: false,
+        membershipId: 'membership-tenant-a-admin-a',
+        sessionActive: false,
+        sessionId: 'session-tenant-a-admin-a',
+        tenantId: 'tenant-a',
+      };
       await api(admin)
         .put(`/api/v1/students/${student.id}/identity-link`)
         .send({ identityUserId: 'student-user' })
@@ -503,10 +552,18 @@ describe.runIf(testDatabaseUrl)(
       identityUserId: string,
       roles: Array<'SYSTEM_ADMIN' | 'TENANT_ADMIN' | 'TEACHER' | 'STUDENT'>,
     ): Promise<string> {
+      const membershipId = `membership-${tenantId}-${identityUserId}`;
+      const sessionId = `session-${tenantId}-${identityUserId}`;
+      identityInternal.registerSession({
+        identityUserId,
+        membershipId,
+        sessionId,
+        tenantId,
+      });
       return fixture.sign({
-        membership_id: `membership-${tenantId}-${identityUserId}`,
+        membership_id: membershipId,
         roles,
-        sid: `session-${tenantId}-${identityUserId}`,
+        sid: sessionId,
         sub: identityUserId,
         tenant_id: tenantId,
       });

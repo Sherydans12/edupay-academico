@@ -1,5 +1,3 @@
-import { ServiceUnavailableException } from '@nestjs/common';
-
 import type { AcademicRequestContext } from './academic-context';
 
 export const ACADEMIC_IDENTITY_LINK_VERIFIER = Symbol(
@@ -15,13 +13,4 @@ export interface AcademicIdentityLinkRequest {
 
 export interface AcademicIdentityLinkVerifier {
   verifyExactLink(request: AcademicIdentityLinkRequest): Promise<void>;
-}
-
-/** Fails closed until the restricted Identity resolve transport is configured. */
-export class UnconfiguredAcademicIdentityLinkVerifier implements AcademicIdentityLinkVerifier {
-  verifyExactLink(): Promise<void> {
-    throw new ServiceUnavailableException(
-      'Academic identity linking is not configured.',
-    );
-  }
 }

@@ -20,6 +20,11 @@ describe('Health endpoint (e2e)', () => {
       'IDENTITY_JWKS_URI',
       'http://identity.local/.well-known/jwks.json',
     );
+    vi.stubEnv('IDENTITY_INTERNAL_BASE_URL', 'http://identity.local');
+    vi.stubEnv(
+      'IDENTITY_INTERNAL_SERVICE_TOKEN',
+      'academic_test_service_token_000000000000000000000000',
+    );
 
     const { AppModule } = await import('../src/app.module');
     const testingModule = await Test.createTestingModule({

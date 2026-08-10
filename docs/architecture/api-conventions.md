@@ -60,17 +60,50 @@ EduPay Académico explicitly initiates Student/Teacher ↔ IdentityUser linking.
 
 The link request must be authenticated, actor-attributed, tenant-scoped, exact, auditable, and idempotent where retries are possible. Identity returns minimum necessary data only. It must not be used for unbounded directory search, name-only matching, automatic linking from an unverified email, credential access, or token access. One verified email maps to one Identity user globally; institutional usernames are unique within a tenant realm after safe normalization.
 
+The restricted internal calls use
+`Authorization: Bearer <server-only EduPay-Academico service token>`, accept and
+return JSON, and propagate the current `X-Request-Id`. The service token never
+enters the web application. The exact link verifier calls:
+
+```json
+{
+  "actor": {
+    "identityUserId": "validated JWT sub",
+    "sessionId": "validated JWT sid",
+    "membershipId": "validated membership context",
+    "tenantId": "trusted canonical tenant ID"
+  },
+  "targetIdentityUserId": "requested exact target",
+  "expectedRole": "STUDENT"
+}
+```
+
+`expectedRole` is always derived by Académico from the Student or Teacher record
+type. Identity verification must return `verified`, the exact `identityUserId`,
+the verified `membershipId`, the trusted canonical `tenantId`,
+`membershipStatus`, and `roles`. Only `ACTIVE` and `PENDING_ACTIVATION`
+membership statuses are linkable, and `roles` must contain the derived expected
+role. Académico validates but does not persist the Identity-owned `membershipId`.
+A pending link does not grant Academic access; normal access still requires an
+Identity token with an active membership.
+
+The current-session response is strictly limited to `active`, `identityUserId`,
+`membershipActive`, `membershipId`, `sessionActive`, `sessionId`, and `tenantId`.
+Académico compares every identifier and active flag with its validated local
+principal/context. The remote response never establishes a different tenant
+principal.
+
 ## Identity endpoint dependencies
 
 The Académico adapter may consume these Identity contracts:
 
-| Contract | Use |
-| --- | --- |
-| `GET /.well-known/jwks.json` | Validate asymmetric access-token signatures. |
+| Contract                                                 | Use                                                                                                                  |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `GET /.well-known/jwks.json`                             | Validate asymmetric access-token signatures.                                                                         |
 | `GET /api/v1/auth/me` and `GET /api/v1/auth/memberships` | Read the authenticated profile/membership choices through Identity-owned flows; never infer from client tenant data. |
-| `POST /api/v1/auth/sessions/current-context` | Request a membership switch; Identity issues the replacement access token. |
-| `POST /internal/v1/identity-users/resolve` | Exact, restricted lookup for an explicit academic link. |
-| `GET /internal/v1/sessions/{sessionId}/status` | Optional online status/membership check for high-risk operations. |
+| `POST /api/v1/auth/sessions/current-context`             | Request a membership switch; Identity issues the replacement access token.                                           |
+| `POST /internal/v1/identity-users/resolve`               | Exact, restricted lookup for an explicit academic link.                                                              |
+| `GET /internal/v1/sessions/{sessionId}/status`           | Optional online status/membership check for high-risk operations.                                                    |
 
 Identity events may be consumed as integration signals, but they are not authorization proof. Consumers validate issuer, event ID, schema version, timestamp, replay/idempotency key, and current context before sensitive action.
 
