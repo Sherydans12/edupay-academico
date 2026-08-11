@@ -364,6 +364,7 @@ async function main() {
 
   const tenantId = randomUUID();
   const academicYearId = randomUUID();
+  const academicYearPaginationToken = randomUUID();
   await run('pnpm', ['bootstrap:tenant', '--tenant-id', tenantId], {
     cwd: root,
     env: academicEnv,
@@ -371,7 +372,7 @@ async function main() {
   });
   await sql(
     academicPostgres,
-    `INSERT INTO academic_years (id, tenant_id, label, start_date, end_date, status) VALUES ('${academicYearId}', '${tenantId}', 'Pilot Sync 2026', DATE '2026-01-01', DATE '2026-12-31', 'ACTIVE');`,
+    `INSERT INTO academic_years (id, tenant_id, pagination_token, label, start_date, end_date, status) VALUES ('${academicYearId}', '${tenantId}', '${academicYearPaginationToken}', 'Pilot Sync 2026', DATE '2026-01-01', DATE '2026-12-31', 'ACTIVE');`,
   );
   const configureArgs = [
     'sync:configure',
