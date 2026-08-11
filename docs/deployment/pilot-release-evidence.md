@@ -1,7 +1,8 @@
 # Colegio Conquistadores pilot release evidence
 
-Status: safe generated evidence record awaiting a fresh current-main rerun.
-Disposable or automated results are not production acceptance.
+Status: safe generated evidence record for the latest green current-main
+validation. All results below are AUTOMATED CI / DISPOSABLE evidence and are
+not production acceptance.
 Replace only the marked fields with non-secret evidence;
 never paste credentials, tokens, activation codes, private keys, database URLs,
 or EICAR bytes into this file.
@@ -30,41 +31,48 @@ or EICAR bytes into this file.
 - PR #1 is merged and contains the reviewed fix: `EmailModule` is imported by
   `AppModule`, and the compiled worker resolves `EmailOutboxService` from the
   selected module with strict Nest DI before calling `deliverPending()`.
-- Fresh Académico PR #3 validation against this Identity SHA: **PENDING**.
+- Fresh Académico PR #3 validation against this Identity SHA: **PASS**.
+
+## Validated release heads
+
+- Académico validation SHA: `8d0a5f843ea2dbc006846bbef023dbffc99fdb62`
+- Identity `main`: `16838f526a4ee48fbb518b840fe0c19e766395cf`
+- BL-002 `main`: `abc3776631d5940759d1a45ad949413174f2acf9`
 
 ## Gate results
 
 | Gate                                     | Result                 | Classification                 | Safe evidence / link |
 | ---------------------------------------- | ---------------------- | ------------------------------ | -------------------- |
-| GitHub/Linux workflow run                | `RERUN PENDING; previous run 31528621315 failed only at pre-fix Identity worker` | AUTOMATED CI | [previous run](https://github.com/Sherydans12/edupay-academico/actions/runs/31528621315) |
+| GitHub/Linux workflow run                | `PASS; 31544545504`    | AUTOMATED CI                   | [green run](https://github.com/Sherydans12/edupay-academico/actions/runs/31544545504) |
 | Prisma validation/generation             | `PASS`                 | AUTOMATED CI                   | Repository release gate |
 | lint/typecheck/normal tests/build        | `PASS`                 | AUTOMATED CI                   | Repository release gate |
 | PostgreSQL-backed tests                  | `PASS`                 | AUTOMATED CI / DISPOSABLE      | PostgreSQL release gate |
-| API image build                          | `PASS; b96e1d357b3c2f59894419f89e0dd6491c7668492173e4f2af92957d1f3481df` | AUTOMATED CI | Linux topology gate |
-| Web image build                          | `PASS; b2f06c9dd3f060316b5646d6a2cdd8611ab770f2bb038c38f0e902b95c0d79cf` | AUTOMATED CI | Linux topology gate |
+| API image build                          | `PASS; e2739f5df48f4b4d2f01e22b6e22c72b81f8ab1717373ed7775089fe3ef898c4` | AUTOMATED CI | Linux topology gate |
+| Web image build                          | `PASS; d44b131114385496e25900b3ea35cea2fd479e40aef79cfb673bb790d2919c1c` | AUTOMATED CI | Linux topology gate |
 | Compose syntax/runtime/health            | `PASS`                 | AUTOMATED CI / DISPOSABLE      | API/Web/DB/ClamAV health routes passed |
 | Academic migration status/deploy         | `PASS`                 | DISPOSABLE; production pending | PostgreSQL, Compose, and smoke gates |
 | `pilot:e2e`                              | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Full pilot with real ClamAV |
 | ClamAV image/version/signature timestamp | `clamav/clamav:1.4.3; signature timestamp not emitted` | DISPOSABLE; production pending | Private topology; production timestamp pending |
-| Clean synthetic upload/download          | `PASS`                 | DISPOSABLE / PRODUCTION        | Full pilot with real ClamAV |
-| EICAR rejection/download denial          | `PASS`                 | DISPOSABLE / PRODUCTION        | Rejected; never AVAILABLE/downloadable |
-| Staging/quota cleanup                    | `PASS`                 | DISPOSABLE / PRODUCTION        | Failed reservation released; staging clean |
+| Clean synthetic upload/download          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Full pilot with real ClamAV |
+| EICAR rejection/download denial          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Rejected; never AVAILABLE/downloadable |
+| Staging/quota cleanup                    | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Failed reservation released; staging clean |
 | Backup/checksum                          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Separate disposable target; SHA256 verified |
 | Restore/database/file-byte verification  | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Both DBs and retained file bytes verified |
-| Identity tenant-admin bootstrap          | `RERUN PENDING against Identity 16838f5` | DISPOSABLE / PRODUCTION | Previous blocker is the reviewed PR #1 fix |
-| Academic tenant bootstrap                | `PASS`                 | DISPOSABLE / PRODUCTION        | Same canonical UUID; quota/accounting present |
-| Activation/login                         | `NOT REACHED`          | DISPOSABLE / PRODUCTION        | Blocked before activation by Identity worker |
+| Identity tenant-admin bootstrap          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Actual command; same UUID; idempotent and incompatible rerun checks |
+| Identity email outbox lifecycle          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Normal email activation created one intent; Resend not called |
+| Academic tenant bootstrap                | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Same canonical UUID; quota/accounting present |
+| Activation/login                         | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Normal one-time activation and TENANT_ADMIN login |
 | BL-002 incremental sync                  | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Current BL-002 main; source identities/enrollments/watermark |
 | BL-002 full sync                         | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Snapshot completion and watermark verified |
-| Notification/sync/Identity worker checks | `PARTIAL; Academic notification/sync PASS; Identity email FAIL` | DISPOSABLE / PRODUCTION | Compiled `--check` plus actual Identity runner |
+| Notification/sync/Identity worker checks | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Academic checks plus built Identity `email:deliver` |
 
 ## Migration and image evidence
 
 - Academic migration result: `PASS in disposable PostgreSQL/Compose/consumer gates; production revision pending`
 - Identity migration result: `PASS in disposable bootstrap/backup gates; production revision pending`
 - BL-002 migration result, if same host: `PASS in disposable source smoke; same-host deployment not approved`
-- API image digest: `sha256:b96e1d357b3c2f59894419f89e0dd6491c7668492173e4f2af92957d1f3481df`
-- Web image digest: `sha256:b2f06c9dd3f060316b5646d6a2cdd8611ab770f2bb038c38f0e902b95c0d79cf`
+- API image digest: `sha256:e2739f5df48f4b4d2f01e22b6e22c72b81f8ab1717373ed7775089fe3ef898c4`
+- Web image digest: `sha256:d44b131114385496e25900b3ea35cea2fd479e40aef79cfb673bb790d2919c1c`
 - ClamAV image digest/version: `clamav/clamav:1.4.3; CI image digest not recorded`
 - ClamAV signature database timestamp: `not emitted by disposable gate; production evidence required`
 
@@ -89,6 +97,6 @@ infrastructure blocker.
 ## Final owner decision
 
 - ADR-0017 status: `Proposed` until the D-15 owner record above is complete.
-- Production release decision: `HOLD pending current-main rerun`
+- Production release decision: `HOLD_PENDING_D15_OWNER_ACCEPTANCE`
 - Named approver/date: `<non-secret name/date>`
-- Production-only gates still open: `current-main Identity rerun; D-15 owner facts; production migration/image/ClamAV signature/backup/restore evidence`
+- Production-only gates still open: `D-15 owner facts; production migration/image/ClamAV signature/backup/restore evidence`
