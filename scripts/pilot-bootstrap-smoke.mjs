@@ -481,6 +481,56 @@ async function main() {
     'bootstrap: compatible reruns are idempotent and incompatible reruns fail',
   );
 
+  const emailProbeTenantId = randomUUID();
+  const emailProbeHandle = `pilot-email-${randomUUID().slice(0, 8)}`;
+  const emailProbeUsername = `pilot.email.${randomUUID().slice(0, 8)}`;
+  const emailProbeBootstrap = await run(
+    'pnpm',
+    [
+      'bootstrap:tenant-admin',
+      '--tenant-id',
+      emailProbeTenantId,
+      '--tenant-handle',
+      emailProbeHandle,
+      '--username',
+      emailProbeUsername,
+      '--activation',
+      'email',
+      '--email',
+      'pilot.email@example.test',
+      '--request-id',
+      'pilot-bootstrap-email-outbox',
+    ],
+    {
+      cwd: identityRoot,
+      env: identityEnv,
+      label: 'create disposable Identity email activation intent',
+      safeDiagnostics: true,
+    },
+  );
+  const emailProbeOutput = JSON.parse(
+    emailProbeBootstrap.stdout
+      .trim()
+      .split('\n')
+      .find((line) => line.trim().startsWith('{')) ?? '{}',
+  );
+  assert.equal(emailProbeOutput.action, 'IDENTITY_TENANT_ADMIN_BOOTSTRAP');
+  assert.equal(emailProbeOutput.activation.method, 'email');
+  const pendingEmailIntents = Number(
+    await sql(
+      identityPostgres,
+      `SELECT count(*) FROM outbox_events WHERE "eventType"='identity.email.invitation.v1' AND "status"='PENDING';`,
+    ),
+  );
+  assert.equal(pendingEmailIntents, 1);
+  checkpoint(
+    'email lifecycle: actual Identity email activation created one disposable outbox intent without calling Resend',
+  );
+  await sql(
+    identityPostgres,
+    `DELETE FROM outbox_events WHERE "eventType"='identity.email.invitation.v1' AND "status"='PENDING';`,
+  );
+
   const identityEmailWorker = await run('pnpm', ['email:deliver'], {
     cwd: identityRoot,
     env: identityEnv,
