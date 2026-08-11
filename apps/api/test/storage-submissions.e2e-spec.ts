@@ -1,5 +1,6 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -47,11 +48,11 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
 
   beforeAll(async () => {
     await fixture.start();
-    storageRoot = await mkdtemp(`${tmpdir()}\\edupay-storage-e2e-`);
+    storageRoot = await mkdtemp(join(tmpdir(), 'edupay-storage-e2e-'));
     for (const [key, value] of Object.entries(fixture.environment())) vi.stubEnv(key, value);
     vi.stubEnv('DATABASE_URL', testDatabaseUrl as string);
     vi.stubEnv('STORAGE_ROOT', storageRoot);
-    vi.stubEnv('STORAGE_TEMP_ROOT', `${storageRoot}\\tmp`);
+    vi.stubEnv('STORAGE_TEMP_ROOT', join(storageRoot, 'tmp'));
     vi.stubEnv('STORAGE_MIN_FREE_BYTES', '0');
     vi.stubEnv('STORAGE_MIN_FREE_PERCENTAGE', '0');
     vi.stubEnv('ACADEMIC_MALWARE_SCANNER', 'fake');
