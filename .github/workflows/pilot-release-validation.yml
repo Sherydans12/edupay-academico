@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     branches:
-      - release/pilot-validation
+      - main
     paths:
       - '.github/workflows/pilot-release-validation.yml'
       - 'apps/**'
@@ -21,6 +21,7 @@ permissions:
 jobs:
   repository-gate:
     name: Repository release gate
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'release/pilot-validation'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -62,6 +63,7 @@ jobs:
 
   postgresql-gate:
     name: PostgreSQL-backed release tests
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'release/pilot-validation'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -106,6 +108,7 @@ jobs:
 
   docker-linux-gate:
     name: Linux container and topology gate
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'release/pilot-validation'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -149,6 +152,7 @@ jobs:
 
   disposable-pilot-gate:
     name: Full disposable pilot with real ClamAV
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'release/pilot-validation'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -189,6 +193,7 @@ jobs:
 
   bootstrap-gate:
     name: Actual first-tenant bootstrap gate
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'release/pilot-validation'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -222,6 +227,7 @@ jobs:
 
   edupay-sync-gate:
     name: Real BL-002 source synchronization gate
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'release/pilot-validation'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -255,6 +261,7 @@ jobs:
 
   backup-restore-gate:
     name: Disposable backup and restore gate
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'release/pilot-validation'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     services:
