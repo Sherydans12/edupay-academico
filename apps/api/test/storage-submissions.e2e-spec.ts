@@ -260,7 +260,7 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
       .expect(400);
     expect((await prisma.uploadIntent.findUniqueOrThrow({ where: { tenantId_id: { tenantId: 'hardening-a', id: invalid.id } } })).status).toBe('FAILED');
     expect((await prisma.storageUsageAccount.findUniqueOrThrow({ where: { scopeKey: 'TENANT:hardening-a' } })).reservedBytes).toBe(0n);
-    await expect(readdir(`${storageRoot}\\tmp`)).resolves.toEqual([]);
+    await expect(readdir(join(storageRoot, 'tmp'))).resolves.toEqual([]);
 
     const infected = await createIntentOnly(
       setup.teacherToken,
@@ -304,7 +304,7 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
         where: { scopeKey: 'TENANT:hardening-a' },
       })).reservedBytes,
     ).toBe(0n);
-    await expect(readdir(`${storageRoot}\\tmp`)).resolves.toEqual([]);
+    await expect(readdir(join(storageRoot, 'tmp'))).resolves.toEqual([]);
   });
 
   it('accepts only separately finalized authorized student files and preserves immutable revision semantics', async () => {
