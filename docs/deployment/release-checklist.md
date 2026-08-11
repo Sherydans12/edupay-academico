@@ -1,8 +1,10 @@
 # Pilot release checklist
 
 Status: controlled release gate. This checklist does not provide production
-credentials and does not close D-15. D-11 is resolved for the controlled pilot
-by ADR-0018; D-17 and D-18 are resolved for the pilot by ADR-0019 and ADR-0020.
+credentials. D-15 is accepted for the controlled Colegio Conquistadores pilot
+by ADR-0017; production execution evidence remains open. D-11 is resolved for
+the controlled pilot by ADR-0018; D-17 and D-18 are resolved for the pilot by
+ADR-0019 and ADR-0020.
 
 ## Final pilot release-validation workflow
 
@@ -21,8 +23,8 @@ The canonical GitHub Actions entry point is
 Its Ubuntu jobs build the reviewed images, exercise PostgreSQL 15, run the
 real ClamAV pilot, execute the actual bootstrap and BL-002 smoke procedures,
 and run disposable backup/restore verification. The workflow must be read as
-release evidence, not as production acceptance; the D-15 owner facts and
-production-host gates remain open until explicitly approved.
+release evidence, not as production acceptance; production-host execution
+gates remain open.
 
 ## Automated repository gate
 
@@ -87,7 +89,7 @@ modify it or its migrations from the Académico release process.
 - [ ] Git worktree is clean except for the intentional release commit and the expected branch.
 - [ ] Académico and Identity are built from reviewed commits; no development server is running.
 - [ ] Academic migration status is clean; Identity migration status is clean; both databases are separate.
-- [ ] Pre-deploy backups exist outside live volumes and checksum verification passed.
+- [ ] Pre-deploy backup exists outside live volumes, checksum verification passed, and the completed set was transferred to Cloudflare R2 with remote presence verification; local staging is not treated as authoritative custody.
 - [ ] Final and staging storage paths are mounted, writable by the non-root API user, private, and have approved free-space thresholds.
 - [ ] Web, Academic API, and Identity API use final HTTPS origins; certificates are valid and monitored.
 - [ ] Academic and Identity exact CORS allowlists contain only the approved Academic web origin.
@@ -110,6 +112,7 @@ modify it or its migrations from the Académico release process.
 - [ ] D-11 malware/retention/legal-hold decision is signed by the relevant owner.
 - [ ] ADR-0019 audit/support policy and ADR-0020 pilot success targets are included in the release evidence; their operational prerequisites are verified.
 - [ ] Restore verification passed on a disposable target before pilot data is accepted.
+- [ ] The production backup job uses `BACKUP_REQUIRE_OFFHOST=1`; R2 transfer or remote verification failure is non-zero/fail-closed, and at least 14 daily/4 weekly recovery-point retention is configured.
 
 ## Container/config validation
 

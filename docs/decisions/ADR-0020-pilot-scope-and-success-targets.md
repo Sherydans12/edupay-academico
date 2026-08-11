@@ -61,7 +61,9 @@ This ADR does not invent a contractual uptime SLA for the pilot.
 
 ## Scope boundaries
 
-This baseline does not resolve D-15 final deployment/provider/RTO/RPO
-acceptance. D-11 is resolved for the controlled pilot by
+This baseline uses the D-15 owner-approved controlled-pilot deployment
+baseline in [ADR-0017](ADR-0017-single-vps-pilot-deployment-topology.md).
+Actual production execution evidence remains an owner/operations release gate.
+D-11 is resolved for the controlled pilot by
 [ADR-0018](ADR-0018-file-security-retention-and-malware-policy.md); permanent
 retention and future destructive deletion remain outside this pilot baseline.

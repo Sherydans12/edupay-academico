@@ -18,7 +18,7 @@ Status: decision register; resolved rows are recorded for traceability and all r
 | D-12 | **Resolved 2026-08-09 by [ADR-0014](../decisions/ADR-0014-academic-notifications-and-delivery.md):** PostgreSQL transactional outbox, independently runnable worker, `FOR UPDATE SKIP LOCKED`-equivalent claiming, bounded configurable retries, and terminal failure state | Enables reliable notifications without coupling requests to Resend | Platform + operations | Resolved for MVP; operational hardening remains in Phase 6 |
 | D-13 | **Resolved 2026-08-09 by [ADR-0014](../decisions/ADR-0014-academic-notifications-and-delivery.md):** MVP event/channel catalog, no preferences center, operational Spanish email templates, optional announcement in-app notification, and no reminder/chat/content-change email scope | Defines user-visible behavior and Academic Resend configuration | Product + communications | Resolved for MVP; future preference/retention decisions remain open |
 | D-14 | **Resolved 2026-08-08 by [ADR-0011](../decisions/ADR-0011-api-and-shared-contract-strategy.md):** REST/JSON `/api/v1`, camelCase, opaque IDs, ISO 8601, stable errors, OpenAPI boundary, Zod 4 schemas in `packages/contracts`, thin hand-written client, opaque cursor envelope, endpoint-specific idempotency | Affects monorepo packages and frontend/backend coupling | Engineering | Resolved for Phase 1 |
-| D-15 | Production hosting, region, backups, RTO/RPO, and support | Determines operating cost and release readiness | Platform + operations | Phase 6 |
+| D-15 | **Resolved 2026-08-11 by [ADR-0017](../decisions/ADR-0017-single-vps-pilot-deployment-topology.md):** Hostinger VPS KVM 4, Ubuntu 24.04 LTS, provider-displayed location Brazil - Campinas, single-node controlled Colegio Conquistadores pilot, Cloudflare R2 off-host backups, RPO <= 6 hours, RTO <= 8 hours, Coolify/deployment-layer TLS with automated ACME, Nicolás Sena as primary technical owner, approved firewall/SSH baseline, and accepted single-node residual risk | Determines operating cost and release readiness | Resolved for controlled pilot; production execution evidence remains a release gate |
 | D-16 | Colegio Conquistadores brand assets, localization, and theme-admin scope | Affects design tokens and first-pilot UX | Product + design + tenant | Phase 3 |
 | D-17 | **Resolved 2026-08-10 by [ADR-0019](../decisions/ADR-0019-audit-retention-and-support-policy.md):** pilot security/business audit records are retained for at least 12 months; ordinary logs target no more than 90 days; support access remains explicit, tenant-bounded, audited, and non-impersonating | Affects storage, privacy, and incident response | Security + operations | Resolved for pilot policy; statutory/legal sufficiency remains outside this decision |
 | D-18 | **Resolved 2026-08-10 by [ADR-0020](../decisions/ADR-0020-pilot-scope-and-success-targets.md):** Colegio Conquistadores has a controlled 14-day pilot baseline with functional, security/data-integrity, operational, and no-P0/P1 launch criteria | Determines rollout and product validation | Product + tenant | Resolved for pilot baseline |
@@ -38,7 +38,12 @@ Status: decision register; resolved rows are recorded for traceability and all r
 - Pilot file-security, malware, retention, and deletion gates are fixed by [ADR-0018](../decisions/ADR-0018-file-security-retention-and-malware-policy.md); it is not a permanent statutory or contractual retention policy.
 - Colegio Conquistadores pilot scope and success targets are fixed by [ADR-0020](../decisions/ADR-0020-pilot-scope-and-success-targets.md); no contractual uptime SLA is created.
 
-These resolutions do not close D-15 or D-16. Permanent statutory/contractual retention, future destructive deletion, legal hold, export, hosting, RTO/RPO, and provider support decisions remain future work. D-05 and D-06 are accepted, but their source API and implementation prerequisites remain delivery gates.
+These resolutions do not close D-16. Permanent statutory/contractual retention,
+future destructive deletion, legal hold, export, and future multi-node storage
+architecture remain future work. D-05 and D-06 are accepted, but their source
+API and implementation prerequisites remain delivery gates. D-15 production
+execution evidence is still required; resolving the operational decision does
+not claim that the real VPS has been deployed or verified.
 
 ## Decision protocol
 

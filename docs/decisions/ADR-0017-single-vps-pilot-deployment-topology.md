@@ -1,10 +1,11 @@
 # ADR-0017: single-VPS pilot deployment topology
 
-Status: Proposed; does not resolve D-15
+Status: Accepted for controlled pilot
 
 Date: 2026-08-10
+Accepted: 2026-08-11
 
-Decision authority: Platform and operations owner approval required
+Decision authority: Platform and operations owner
 
 ## Context
 
@@ -12,13 +13,14 @@ The functionally complete Académico and Identity services need a controlled
 Colegio Conquistadores pilot deployment. The pilot should be operable on one
 Docker/Coolify-style VPS without coupling the two services' databases or
 silently turning the local Academic filesystem adapter into a multi-node store.
-Provider, region, backup destination, RTO/RPO, and support decisions remain
-open in D-15.
+The owner-approved deployment facts are recorded below for the controlled
+Colegio Conquistadores pilot. This ADR is not a permanent production
+architecture decision for all future tenants.
 The controlled-pilot malware, retention, deletion, and legal-hold gate is
 resolved by [ADR-0018](ADR-0018-file-security-retention-and-malware-policy.md);
 permanent statutory/contractual policy remains future work.
 
-## Proposed topology
+## Accepted controlled-pilot topology
 
 - Public: one Academic web service, one Academic API service, and one Identity API service, all behind HTTPS.
 - Private: one Academic notification worker and one Identity email worker/scheduled runner.
@@ -45,54 +47,51 @@ horizontal Academic API scaling must wait for a reviewed shared object-storage
 decision. Identity readiness remains liveness plus deployment-level database
 and smoke evidence until Identity adds a dependency-aware endpoint.
 
-## Acceptance required before marking D-15 resolved
+## D-15 owner acceptance — controlled Colegio Conquistadores pilot
 
-The platform/operations owner must approve the provider/region, private network
-and firewall rules, backup destination and retention, RTO/RPO, certificate
-ownership, on-call/support path, worker scheduling/locking, restore evidence,
-and the residual single-node storage risk. This proposed ADR intentionally does
-not make those choices on the owner's behalf.
+Accepted by the owner on **2026-08-11**. The decision scope is **CONTROLLED
+COLEGIO CONQUISTADORES PILOT**, not permanent production architecture for all
+future tenants.
 
-## Recommended controlled-pilot baseline for owner acceptance
-
-The recommended D-15 baseline is one Ubuntu 24.04 single-node VPS with one
-public HTTPS reverse proxy. Public routes are Academic web, Academic API, and
-Identity API. Academic and Identity PostgreSQL, the Academic notification and
-sync workers, the Identity email worker, ClamAV, and Academic final/staging
-storage remain private. The two databases remain separate. TLS is managed by
-the reverse proxy through an automated public CA renewal mechanism such as
-Let's Encrypt; manually copied long-lived certificate files are not the
-baseline. Public ingress is limited to required HTTP/HTTPS and SSH management
-paths; PostgreSQL, ClamAV, storage, and worker ports are not public.
-
-For the controlled pilot, the recommended backup target is outside the live
-application volumes, with PostgreSQL and finalized private file evidence copied
-at least every six hours, at least 14 daily recovery points during/around the
-pilot, at least four weekly recovery points while evidence is operationally
-required, and a checksum on every backup. The internal operational targets are
-RPO <= 6 hours and RTO <= 8 hours; they are not contractual SLAs. A disposable
-restore must pass before real pilot data is accepted.
-
-The single-node Academic file adapter risk is explicitly accepted only for this
-small controlled pilot. The residual risks are a concentrated VPS failure
-domain, no HA/failover, and future horizontal-scaling work if shared object
-storage is required. Support has no 24x7 contractual SLA: one named technical
-owner handles immediate escalation for data loss, cross-tenant exposure,
-credential exposure, or complete outage; ordinary issues use the available
-support window; impersonation remains out of scope and support context is
-explicit, tenant-bounded, and audited.
-
-## D-15 owner-acceptance record — open
-
-Leave this ADR Proposed until every entry below is completed with an actual
-owner-approved fact. This release-validation branch must not infer values from
-the operator's location, provider defaults, or an example deployment.
-
-- Provider and product: **OWNER INPUT REQUIRED**
-- Actual VPS region: **OWNER INPUT REQUIRED**
-- Off-host backup destination and custody/access owner: **OWNER INPUT REQUIRED**
-- Reverse-proxy and certificate renewal owner: **OWNER INPUT REQUIRED**
-- Named technical/support owner and escalation window: **OWNER INPUT REQUIRED**
-- Acceptance of RPO <= 6 hours and RTO <= 8 hours for the controlled pilot: **OWNER INPUT REQUIRED**
-- Firewall/SSH management policy and private-network confirmation: **OWNER INPUT REQUIRED**
-- Restore evidence and residual single-node file-adapter risk acceptance: **OWNER INPUT REQUIRED**
+- Provider/product: **Hostinger / Hostinger VPS KVM 4**.
+- Operating system: **Ubuntu 24.04 LTS**.
+- Actual provider-displayed location: **Brazil - Campinas**.
+- Topology: one public reverse proxy and one single-node VPS. Public routes are
+  Academic web, Academic API, and Identity API. Academic and Identity
+  PostgreSQL, Academic notification and sync workers, Identity email worker,
+  ClamAV, and Academic final/staging storage remain private. The databases
+  remain separate.
+- TLS: the Coolify/deployment reverse-proxy layer owns automated ACME/public-CA
+  issuance and renewal, such as Let's Encrypt. Owner: **pilot infrastructure /
+  Nicolás Sena**. The actual proxy implementation and successful certificate
+  issuance remain production evidence to capture after deployment.
+- Off-host backup: **Cloudflare R2** is the durable recovery destination for
+  completed checksum-verified backup sets. R2 is for off-host backups only; the
+  Academic runtime filesystem remains the private single-node pilot adapter.
+  Credentials and bucket details are runtime/secret-managed and are not stored
+  in this repository.
+- Backup policy: PostgreSQL and finalized private file evidence leave the live
+  volumes at least every six hours; retain at least 14 daily recovery points
+  during/around the pilot and at least four weekly recovery points while pilot
+  evidence remains operationally required. Every backup is checksum-verified,
+  and at least one disposable restore is required before accepting real pilot
+  data. A local staging copy is not a successful production backup until its
+  R2 transfer and remote presence checks pass.
+- Operational targets: **RPO <= 6 hours** and **RTO <= 8 hours**. These are
+  internal pilot targets, not contractual SLAs.
+- Support: no 24x7 contractual SLA. **Nicolás Sena** is the primary technical
+  owner. Critical incidents receive immediate/manual escalation when noticed;
+  ordinary non-critical issues use the operator's available support window.
+  Support remains explicit, tenant-scoped, audited, and non-impersonating; no
+  implicit `SYSTEM_ADMIN` tenant access exists.
+- Firewall: public ingress is limited to TCP 80 where needed for HTTP-to-HTTPS
+  and ACME, TCP 443, and SSH administrative access. PostgreSQL, ClamAV,
+  storage, worker, and other internal service ports remain private.
+- SSH: key authentication is required; password authentication is disabled and
+  direct remote root login is disabled only after operator access and sudo are
+  confirmed. Administrative SSH is source-IP restricted where practical, and
+  no application service runs as root for convenience.
+- Accepted residual risk: concentrated single-VPS failure domain, single-node
+  Academic private filesystem, no HA/failover, horizontal scale-out deferred,
+  and a future object-storage architecture review required before multi-node
+  scaling. These risks are accepted only for this controlled pilot baseline.

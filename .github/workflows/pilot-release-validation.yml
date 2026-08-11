@@ -48,6 +48,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Validate release-shaped config inventory
         run: node scripts/release-config-check.mjs --service academico --env-file deploy/env/academico-api.ci.env.example
+      - name: Validate backup shell helpers
+        run: bash -n ops/backup/backup-pilot.sh ops/backup/restore-verify-pilot.sh ops/backup/upload-to-r2.sh
       - name: Validate Prisma schema
         run: pnpm db:validate
       - name: Generate Prisma client

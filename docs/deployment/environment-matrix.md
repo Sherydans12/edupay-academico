@@ -1,12 +1,25 @@
 # Pilot production environment matrix
 
-Status: deployment template; final hostnames, providers, regions, and support
-ownership remain operator decisions under D-15. Pilot audit/support policy and
-success targets are fixed by ADR-0019 and ADR-0020.
+Status: owner-approved controlled-pilot deployment template; final hostnames,
+actual proxy/certificate evidence, and runtime secret values remain deployment
+inputs. D-15 is resolved by ADR-0017 for the controlled Colegio Conquistadores
+pilot. Pilot audit/support policy and success targets are fixed by ADR-0019
+and ADR-0020.
 
 Do not commit the final pilot domains or secret values. Replace each
 `<placeholder>` in managed deployment configuration and record the resulting
 values in the release evidence.
+
+## Owner-approved host and operating baseline
+
+| Setting | Approved value | Evidence boundary |
+| --- | --- | --- |
+| Provider | Hostinger | Owner-approved D-15 fact; actual VPS inventory remains production evidence. |
+| Product | Hostinger VPS KVM 4 | Owner-approved D-15 fact; actual provisioned resources remain production evidence. |
+| Operating system | Ubuntu 24.04 LTS | Verify on the connected host before production sign-off. |
+| Provider-displayed location | Brazil - Campinas | Use this exact provider-displayed text; do not substitute a region code. |
+| Deployment layer | Existing Coolify-managed infrastructure expected | Capture the actual reverse proxy and successful ACME certificate issuance as production evidence. |
+| Primary technical owner | Nicolás Sena | No 24x7 contractual SLA; critical incidents receive immediate/manual escalation when noticed. |
 
 ## Public and private endpoints
 
@@ -48,6 +61,27 @@ values in the release evidence.
 | Malware scanner mode | `ACADEMIC_MALWARE_SCANNER=clamav` in production; `fake` only in explicit development/test environments | — |
 | Private ClamAV endpoint | `ACADEMIC_CLAMAV_HOST=clamav`, `ACADEMIC_CLAMAV_PORT=3310` | — |
 | Scanner timeout/concurrency | `ACADEMIC_CLAMAV_TIMEOUT_MS=10000`, `ACADEMIC_MALWARE_SCAN_CONCURRENCY=2` | — |
+
+## Off-host backup values
+
+Cloudflare R2 is the approved durable off-host backup custody for the pilot.
+It is not runtime Academic object storage. The local backup directory is only
+temporary staging; production backup success requires checksum verification,
+R2 transfer, and remote presence verification by
+`ops/backup/backup-pilot.sh` with `BACKUP_REQUIRE_OFFHOST=1`.
+
+| Setting | Pilot baseline | Requirement |
+| --- | --- | --- |
+| Backup staging root | `/var/lib/edupay-backup-staging` | Separate from PostgreSQL and Academic final/staging volumes; prune only after successful R2 verification. |
+| `BACKUP_R2_ACCOUNT_ID` | runtime-managed Cloudflare account reference | Inventory/reference only; never commit a real account ID. |
+| `BACKUP_R2_ENDPOINT` | runtime-managed HTTPS S3-compatible R2 endpoint | Secret-managed deployment value; never print it with credentials. |
+| `BACKUP_R2_BUCKET` | runtime-managed approved recovery bucket | Do not place a production bucket name or URL in this repository. |
+| `BACKUP_R2_PREFIX` | `edupay-academico/pilot` | Restrict to the approved pilot recovery namespace. |
+| `BACKUP_R2_ACCESS_KEY_ID` | runtime-managed secret reference | Backup transfer job only; never store in application databases or images. |
+| `BACKUP_R2_SECRET_ACCESS_KEY` | runtime-managed secret reference | Runtime secret only; never log, commit, or include in backup contents. |
+| `BACKUP_REQUIRE_OFFHOST` | `1` in production | `0` is allowed only for explicitly labelled disposable/local procedure tests. |
+| Cadence/retention | At least every 6 hours; 14 daily and 4 weekly recovery points | Internal pilot policy accepted by owner. |
+| Recovery targets | RPO <= 6 hours; RTO <= 8 hours | Internal operational targets, not contractual SLAs. |
 
 Production Académico startup rejects missing or relative storage paths, missing
 physical guard values, equal final/temp paths, insecure Identity endpoints,
@@ -91,3 +125,6 @@ token.
 - [ ] The dedicated EduPay integration token is present only in EduPay source and Académico server/worker secret custody; it is absent from browser configuration and PostgreSQL.
 - [ ] The configured source origin is exact and HTTPS, or the approved private-HTTP exception and network controls are recorded.
 - [ ] The source tenant mapping and active local AcademicYear were configured with `pnpm sync:configure`; no year was inferred from Course labels.
+- [ ] `deploy/env/backup-r2.env.example` has been replaced only in runtime secret management with the approved R2 endpoint/account, bucket, prefix, and credentials; no values were committed.
+- [ ] The production backup job uses `BACKUP_REQUIRE_OFFHOST=1`, verifies `SHA256SUMS`, transfers the completed set to R2, verifies remote presence, and fails closed on upload/verification failure.
+- [ ] At least one disposable restore has been completed from a checksum-verified backup set before real pilot data is accepted; actual R2 upload and R2 restore remain production evidence gates.

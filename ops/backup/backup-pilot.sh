@@ -61,5 +61,13 @@ if [[ -n "${DEPLOYMENT_INVENTORY_PATH:-}" && -f "$DEPLOYMENT_INVENTORY_PATH" ]];
 fi
 
 sha256sum "$target"/* > "$target/SHA256SUMS"
-printf 'Backup complete: %s\n' "$target"
-printf 'Keep at least %s dated restore points and copy this directory off the live host.\n' "${MIN_RESTORE_POINTS:-7}"
+
+if [[ "${BACKUP_REQUIRE_OFFHOST:-0}" == "1" ]]; then
+  backup_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  BACKUP_SET_DIR="$target" bash "${BACKUP_R2_UPLOAD_SCRIPT:-$backup_script_dir/upload-to-r2.sh}"
+  printf 'Off-host backup complete and remotely verified: %s\n' "$target"
+else
+  printf 'Local backup set prepared for disposable/staging use only: %s\n' "$target"
+  printf 'This is not a production backup until the checksum-verified set is copied off-host and remotely verified.\n'
+fi
+printf 'Keep at least %s dated restore points in the approved off-host custody.\n' "${MIN_RESTORE_POINTS:-7}"

@@ -1,11 +1,29 @@
 # Colegio Conquistadores pilot production runbook
 
-Status: proposed single-VPS operational baseline. This runbook does not close
-D-15 hosting/RTO/RPO/support. D-11 is resolved for the controlled pilot by
-ADR-0018; D-17 is resolved for the pilot by ADR-0019 and D-18 is resolved for
-the pilot baseline by ADR-0020.
+Status: owner-approved controlled-pilot operational baseline; production
+execution evidence is still pending. ADR-0017 is Accepted for the controlled
+Colegio Conquistadores pilot on 2026-08-11. D-11 is resolved for the controlled
+pilot by ADR-0018; D-17 is resolved for the pilot by ADR-0019 and D-18 is
+resolved for the pilot baseline by ADR-0020. D-16 remains independent branding
+and UX polish.
 
-## 1. Proposed topology
+## Approved pilot target
+
+- Provider/product: **Hostinger / Hostinger VPS KVM 4**.
+- Operating system: **Ubuntu 24.04 LTS**.
+- Provider-displayed location: **Brazil - Campinas**.
+- Scope: one single-node VPS for the controlled Colegio Conquistadores pilot.
+- Production deployment platform: expected Coolify-managed infrastructure. The
+  actual reverse-proxy implementation must be recorded after access to the
+  deployed instance; do not infer it from this runbook.
+- Off-host backup custody: **Cloudflare R2**. The Academic final/staging
+  filesystem remains private local application storage; R2 is not runtime
+  object storage.
+
+The target has not been deployed by this validation branch. Production-only
+checks below remain mandatory after the operator connects to the actual host.
+
+## 1. Approved controlled-pilot topology
 
 ```text
 Student/Teacher/Admin browser
@@ -26,8 +44,8 @@ The single VPS may host the containers and private volumes, but the two
 databases remain independent services and databases. PostgreSQL is not
 published to the internet. The Academic file and staging volumes are private
 container mounts and are never mounted under a web/static directory or served
-as a public path. Off-host backup storage should be used where the selected
-provider supports it.
+as a public path. Cloudflare R2 is the approved durable off-host backup
+destination; a local backup directory is only temporary staging.
 
 The checked-in `deploy/compose.pilot.yml` expresses the Academic half of this
 topology. Identity is deployed from its read-only repository with its existing
@@ -90,12 +108,12 @@ history.
 
 ## 4. First deployment sequence
 
-1. Approve the unresolved deployment/support decisions and the D-11 release gate below.
+1. Confirm ADR-0017's owner-approved controlled-pilot baseline and the D-11 release gate below. Production execution evidence is still required.
 2. Provision private Academic PostgreSQL, private Identity PostgreSQL, the Academic final-files volume, and the separate Academic staging volume.
 3. Load only managed secret references and the environment matrix values. Confirm no wildcard CORS or HTTP browser URL remains.
 4. Build the Academic API/web images and the Identity API image from their repositories.
 5. Run both repositories' schema validation, generated-client checks, and migration status checks against their own databases.
-6. Take a pre-migration backup and verify that the backup artifact is outside the live database/file volumes.
+6. Take a pre-migration backup, verify its checksum, transfer it to Cloudflare R2, and verify remote presence before treating the backup as successful.
 7. Run Identity migrations, then Academic migrations, each as a single controlled job.
 8. Start the private ClamAV service and verify its healthcheck. Start Identity API, verify JWKS and liveness, then start Academic API and verify liveness/readiness including the scanner dependency.
 9. Start exactly one Academic notification worker, one Academic sync worker, and one Identity email runner/schedule.
@@ -372,10 +390,22 @@ deployment state. Review the target before running them. Never use
    Confirm final and staging are separate persistent mounts and are not under
    a web/static or reverse-proxy alias.
 
-4. Managed env/secrets creation. Create the Academic, Identity, and BL-002
-   server-side environments from `docs/deployment/environment-matrix.md` and
-   `deploy/pilot-secrets.inventory.example`. Store only secret-manager
-   references in the deployment inventory. Validate each service without
+   Create a separate, restricted local backup staging directory outside the
+   live database and Academic file volumes. It is temporary transfer space,
+   not the authoritative recovery destination:
+
+   ```sh
+   sudo install -d -o <backup-operator-uid> -g <backup-operator-gid> -m 0700 /var/lib/edupay-backup-staging
+   ```
+
+4. Managed env/secrets creation. Create the Academic, Identity, BL-002, and
+   backup-transfer server-side environments from
+   `docs/deployment/environment-matrix.md`,
+   `deploy/pilot-secrets.inventory.example`, and
+   `deploy/env/backup-r2.env.example`. Store only secret-manager references in
+   the deployment inventory. The R2 endpoint/account, bucket, access key ID,
+   and secret access key are runtime-managed; never place their values in this
+   repository or in an application container. Validate each service without
    printing values:
 
    ```sh
@@ -387,10 +417,21 @@ deployment state. Review the target before running them. Never use
 5. Databases start privately. Start separate Academic and Identity PostgreSQL
    services/databases on the private network. Confirm neither has a public
    host port and that credentials are injected only into their owning service.
-6. Pre-migration backup if applicable. Run `ops/backup/backup-pilot.sh` with a
-   backup destination outside the live data volumes. Verify `SHA256SUMS` before
-   any migration. **DESTRUCTIVE:** do not point a restore or migration at the
-   live database while testing this step.
+6. Pre-migration backup if applicable. Load the runtime-managed R2 transfer
+   environment without echoing it, then run the backup helper with
+   `BACKUP_REQUIRE_OFFHOST=1` and a staging destination outside the live data
+   volumes. The helper verifies `SHA256SUMS`, uploads the complete set to R2,
+   and verifies remote object presence and sizes. A failed R2 transfer is
+   non-zero and is not a successful production backup. **DESTRUCTIVE:** do not
+   point a restore or migration at the live database while testing this step.
+
+   ```sh
+   set -a
+   . <managed-backup-r2-env-file>
+   set +a
+   BACKUP_REQUIRE_OFFHOST=1 BACKUP_ROOT=/var/lib/edupay-backup-staging \
+     bash ops/backup/backup-pilot.sh
+   ```
 7. Identity migrations. From the reviewed Identity checkout, run once:
 
    ```sh
@@ -499,15 +540,37 @@ deployment state. Review the target before running them. Never use
     where available, and one controlled in-app notification/email delivery.
     Confirm exactly one Academic notification worker, one Academic sync worker,
     and one Identity email runner/schedule.
-23. Backup. Run the scheduled backup procedure, verify checksum success, and
-    confirm the dated target is outside live data volumes and has an owner.
-24. Disposable restore verification evidence. On a clearly labelled disposable
-    target, run `ops/backup/restore-verify-pilot.sh` with
-    `RESTORE_CONFIRM=I_UNDERSTAND_DISPOSABLE_RESTORE`, verify database structure,
-    tenant/file metadata, restored file bytes/checksums, and the application
+23. Backup and Cloudflare R2 transfer. Load the runtime-managed R2 environment
+    without echoing secrets and run:
+
+    ```sh
+    set -a
+    . <managed-backup-r2-env-file>
+    set +a
+    BACKUP_REQUIRE_OFFHOST=1 BACKUP_ROOT=/var/lib/edupay-backup-staging \
+      bash ops/backup/backup-pilot.sh
+    ```
+
+    The helper first creates PostgreSQL dumps and the finalized private-file
+    archive, verifies `SHA256SUMS`, transfers every artifact to the R2 prefix
+    for that dated backup, and verifies remote presence and byte sizes. It
+    exits non-zero on any R2 failure. **DESTRUCTIVE:** after and only after the
+    helper succeeds, the dated local staging directory may be pruned according
+    to retention policy; never prune the live application volumes and never
+    report a local-only copy as a successful production backup.
+24. R2 restore verification evidence. Before accepting real pilot data, use
+    the approved R2 credentials to copy one completed dated set into a clearly
+    labelled disposable restore directory, verify its checksum manifest, and
+    run `ops/backup/restore-verify-pilot.sh` against disposable Identity and
+    Academic databases and storage. Verify database structure, tenant/file
+    metadata, restored file bytes/checksums, and the application
     health/read-authorized-evidence checks. **DESTRUCTIVE:** the helper may
-    clean only the declared restore work directory; never use a live target.
+    clean only the declared disposable restore work directory; never use a
+    live database, live file volume, or the authoritative R2 objects as a
+    restore target.
 25. Final release checklist sign-off. Attach the evidence manifest, exact
-    repository SHAs, migration/image/ClamAV results, backup/restore results,
-    support and ownership facts, and the owner decisions required by D-15.
-    Do not route real pilot traffic until D-15 is accepted by the named owner.
+    repository SHAs, migration/image/ClamAV results, backup/R2/restore results,
+    support and ownership facts, actual Coolify/reverse-proxy and ACME
+    evidence, and the owner decisions recorded by D-15. Do not describe the
+    pilot as deployed until the production-only gates in the release evidence
+    are complete.

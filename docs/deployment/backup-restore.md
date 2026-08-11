@@ -1,9 +1,10 @@
 # Pilot backup and restore
 
-Status: provider-agnostic operational baseline. Exact off-host destination,
-retention beyond the minimum pilot window, RTO/RPO, encryption custody, and
-support ownership remain open under D-15; the pilot audit/support policy is
-defined by ADR-0019.
+Status: owner-approved controlled-pilot operational baseline. Cloudflare R2 is
+the approved durable off-host backup custody under ADR-0017. RPO/RTO targets,
+cadence, retention, and support policy are accepted for the pilot; actual R2
+credentials, bucket configuration, upload, and restore remain production
+execution evidence. The pilot audit/support policy is defined by ADR-0019.
 
 ## Backup contents
 
@@ -28,13 +29,21 @@ recreated and updated after restore. Do not include secret values, JWT private
 keys, refresh cookies, database URLs, activation codes, or developer credentials. Do not place dumps in the live
 database or application volume. The recommended destination is an encrypted
 off-host object/filesystem location mounted only for the backup job. If that
-destination cannot yet be selected, the pilot is not backup-ready; an operator
-must supply the destination and access mechanism.
+The production destination is Cloudflare R2 using its S3-compatible API. R2 is
+for off-host backups only, not runtime application object storage. The
+endpoint/account, bucket, and credentials are runtime/secret-managed and are
+represented only by `deploy/env/backup-r2.env.example`. If R2 transfer or
+remote verification fails, the job must exit non-zero and the local staging
+copy must not be reported as a successful production backup.
 
-The minimum pilot baseline is seven daily restore points. Keep the final file
-volume and its PostgreSQL metadata from the same dated point. The staging/temp
-volume is intentionally separate scratch space and is not a source of
-authoritative file evidence; confirm it is empty or separately disposable.
+The pilot baseline is at least one checksum-verified backup every six hours,
+with at least 14 daily recovery points during/around the pilot and at least 4
+weekly recovery points while pilot evidence remains operationally required.
+Keep the final file volume and its PostgreSQL metadata from the same dated
+point. The staging/temp volume is intentionally separate scratch space and is
+not a source of authoritative file evidence; confirm it is empty or separately
+disposable. RPO <= 6 hours and RTO <= 8 hours are internal operational targets,
+not contractual SLAs.
 
 ## Runnable backup command
 
@@ -45,20 +54,47 @@ export ACADEMIC_DATABASE_URL='managed-secret-reference-injected-at-runtime'
 export IDENTITY_DATABASE_URL='managed-secret-reference-injected-at-runtime'
 export ACADEMIC_STORAGE_ROOT=/var/lib/edupay-academico/files
 export ACADEMIC_STORAGE_TEMP_ROOT=/var/lib/edupay-academico/tmp
-export BACKUP_ROOT=/mnt/off-host-edupay-backups
+export BACKUP_ROOT=/var/lib/edupay-backup-staging
 export DEPLOYMENT_INVENTORY_PATH=/etc/edupay/deployment-inventory.example
+set -a
+. /etc/edupay/backup-r2.env
+set +a
+export BACKUP_REQUIRE_OFFHOST=1
 ./ops/backup/backup-pilot.sh
 ```
 
 The example values above are placeholders for secret injection; never paste
 real credentials into shell history. Use the deployment platform's secret
-environment injection or a protected `.pgpass`/credential mechanism. The
-script uses restrictive file permissions, atomic partial-file renames, and
-writes `SHA256SUMS` for artifact verification.
+environment injection or a protected `.pgpass`/credential mechanism. With
+`BACKUP_REQUIRE_OFFHOST=1`, the script uses restrictive file permissions,
+atomic partial-file renames, writes `SHA256SUMS`, invokes
+`ops/backup/upload-to-r2.sh`, and reports success only after every uploaded
+object is found remotely with the expected size. The upload helper never
+prints credentials and does not prune local staging.
 
-Schedule exactly one daily job, alert on non-zero exit, and verify the dated
-directory is visible from outside the live application host. The job must not
-run inside every API or worker replica.
+Schedule exactly one job at least every six hours, alert on non-zero exit, and
+retain the approved daily/weekly recovery points in R2. The job must not run
+inside every API or worker replica. A local staging directory is not the
+authoritative recovery destination and may be pruned only after R2 verification
+and according to retention policy.
+
+## R2 transfer and remote verification
+
+The transfer seam is intentionally small and uses the standard AWS CLI against
+the Cloudflare R2 S3-compatible endpoint:
+
+1. `backup-pilot.sh` writes one dated set to the local staging root.
+2. It verifies `SHA256SUMS` before transfer.
+3. `upload-to-r2.sh` copies the whole set to
+   `s3://<bucket>/<prefix>/<dated-set>/` using runtime environment credentials.
+4. It checks every remote object's presence and byte size with `head-object`.
+5. Only a successful exit permits the operator to prune that local temporary
+   set. Any transfer or verification failure is non-zero/fail-closed.
+
+Do not place R2 credentials in command-line arguments, repository files,
+application environment images, logs, or backup contents. Do not claim
+off-host production custody from the disposable CI gate; that gate validates
+the local backup/restore procedure only.
 
 ## Restore verification runbook
 

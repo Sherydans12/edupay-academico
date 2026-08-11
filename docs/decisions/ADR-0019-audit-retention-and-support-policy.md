@@ -67,5 +67,6 @@ retention sufficiency.
 D-11 is resolved for the controlled pilot by
 [ADR-0018](ADR-0018-file-security-retention-and-malware-policy.md). Permanent
 retention/deletion, legal hold, export, and future scanner-policy behavior
-remain subject to later review. D-15 remains open for final provider,
-backup destination, RTO/RPO, and support acceptance.
+remain subject to later review. D-15 is resolved for the controlled pilot by
+[ADR-0017](ADR-0017-single-vps-pilot-deployment-topology.md); actual provider
+deployment and production evidence remain open.
