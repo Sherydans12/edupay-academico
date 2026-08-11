@@ -43,6 +43,9 @@ jobs:
       - name: Validate Prisma configuration
         run: pnpm db:validate
 
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Lint
         run: pnpm lint
 
