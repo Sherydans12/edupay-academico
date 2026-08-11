@@ -413,12 +413,18 @@ async function main() {
   await run(
     'pnpm',
     ['sync:run', '--tenant-id', tenantId, '--mode', 'incremental'],
-    { cwd: root, env: academicEnv, label: 'run real BL-002 incremental sync' },
+    {
+      cwd: root,
+      env: academicEnv,
+      label: 'run real BL-002 incremental sync',
+      safeDiagnostics: true,
+    },
   );
   await run('pnpm', ['sync:run', '--tenant-id', tenantId, '--mode', 'full'], {
     cwd: root,
     env: academicEnv,
     label: 'run real BL-002 full sync',
+    safeDiagnostics: true,
   });
   const courseCount = Number(
     await sql(
