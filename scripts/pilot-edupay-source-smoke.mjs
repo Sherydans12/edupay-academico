@@ -372,7 +372,7 @@ async function main() {
   });
   await sql(
     academicPostgres,
-    `INSERT INTO academic_years (id, tenant_id, pagination_token, label, start_date, end_date, status) VALUES ('${academicYearId}', '${tenantId}', '${academicYearPaginationToken}', 'Pilot Sync 2026', DATE '2026-01-01', DATE '2026-12-31', 'ACTIVE');`,
+    `INSERT INTO academic_years (id, tenant_id, pagination_token, label, start_date, end_date, status, updated_at) VALUES ('${academicYearId}', '${tenantId}', '${academicYearPaginationToken}', 'Pilot Sync 2026', DATE '2026-01-01', DATE '2026-12-31', 'ACTIVE', now());`,
   );
   const configureArgs = [
     'sync:configure',
