@@ -80,6 +80,12 @@ describe.runIf(testDatabaseUrl)('Academic notifications (PostgreSQL e2e)', () =>
     await prisma.teacher.deleteMany();
     await prisma.student.deleteMany();
     await prisma.course.deleteMany();
+    await prisma.syncFullPresence.deleteMany();
+    await prisma.syncItemResult.deleteMany();
+    await prisma.syncLease.deleteMany();
+    await prisma.syncRun.deleteMany();
+    await prisma.syncState.deleteMany();
+    await prisma.syncConfiguration.deleteMany();
     await prisma.academicYear.deleteMany();
     await prisma.tenant.deleteMany();
   });

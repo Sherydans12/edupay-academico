@@ -11,6 +11,10 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @edupay/web --filter @edupay/api dev",
     "bootstrap:tenant": "pnpm --filter @edupay/api bootstrap:tenant",
+    "sync:configure": "pnpm --filter @edupay/api sync:configure",
+    "sync:run": "pnpm --filter @edupay/api sync:run",
+    "sync:worker": "pnpm --filter @edupay/api sync:worker",
+    "sync:smoke:real": "node scripts/real-edupay-source-smoke.mjs",
     "pilot:e2e": "node scripts/pilot-cross-service-smoke.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm -r --if-present typecheck",

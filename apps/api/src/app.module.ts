@@ -9,6 +9,7 @@ import { PersistenceModule } from './persistence/persistence.module';
 import { SecurityFoundationModule } from './security/security-foundation.module';
 import { StorageModule } from './storage/storage.module';
 import { NotificationsApiModule } from './notifications/notifications-api.module';
+import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { NotificationsApiModule } from './notifications/notifications-api.module
     LearningModule,
     StorageModule,
     NotificationsApiModule,
+    SyncModule,
     HealthModule,
   ],
 })

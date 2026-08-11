@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "bootstrap:tenant": "tsx src/bootstrap/tenant-bootstrap-main.ts",
+    "sync:configure": "tsx src/sync/sync-configure-main.ts",
+    "sync:run": "tsx src/sync/sync-run-main.ts",
+    "sync:worker": "tsx src/sync/sync-worker-main.ts",
+    "sync:worker:check": "tsx src/sync/sync-worker-main.ts --check",
     "worker": "tsx src/notifications/notification-worker-main.ts",
     "worker:check": "tsx src/notifications/notification-worker-main.ts --check",
     "prebuild": "pnpm --filter @edupay/contracts build",

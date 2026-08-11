@@ -72,35 +72,79 @@ const identityInternalBaseUrl = z
   )
   .transform((value) => value.replace(/\/+$/, ''));
 
-const trustedWebOrigins = z.string().default('').transform((value, context) => {
-  const origins = value
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-  const normalizedOrigins = new Set<string>();
+const optionalHttpOrigin = z.preprocess(
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z
+    .string()
+    .url()
+    .refine(
+      (value) => {
+        const url = new URL(value);
+        return (
+          (url.protocol === 'http:' || url.protocol === 'https:') &&
+          url.username === '' &&
+          url.password === '' &&
+          (url.pathname === '' || url.pathname === '/') &&
+          url.search === '' &&
+          url.hash === ''
+        );
+      },
+      { message: 'must be an exact HTTP(S) origin without credentials' },
+    )
+    .transform((value) => new URL(value).origin)
+    .optional(),
+);
 
-  for (const origin of origins) {
-    try {
-      const parsed = new URL(origin);
-      if (
-        !['http:', 'https:'].includes(parsed.protocol) ||
-        parsed.username ||
-        parsed.password ||
-        (parsed.pathname !== '' && parsed.pathname !== '/') ||
-        parsed.search ||
-        parsed.hash
-      ) {
-        context.addIssue({ code: 'custom', message: 'must contain exact HTTP(S) origins only' });
-        continue;
+const optionalIntegrationToken = z.preprocess(
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z
+    .string()
+    .min(32)
+    .max(512)
+    .regex(/^\S+$/, { message: 'must not contain whitespace' })
+    .optional(),
+);
+
+const trustedWebOrigins = z
+  .string()
+  .default('')
+  .transform((value, context) => {
+    const origins = value
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0);
+    const normalizedOrigins = new Set<string>();
+
+    for (const origin of origins) {
+      try {
+        const parsed = new URL(origin);
+        if (
+          !['http:', 'https:'].includes(parsed.protocol) ||
+          parsed.username ||
+          parsed.password ||
+          (parsed.pathname !== '' && parsed.pathname !== '/') ||
+          parsed.search ||
+          parsed.hash
+        ) {
+          context.addIssue({
+            code: 'custom',
+            message: 'must contain exact HTTP(S) origins only',
+          });
+          continue;
+        }
+        normalizedOrigins.add(parsed.origin);
+      } catch {
+        context.addIssue({
+          code: 'custom',
+          message: 'must contain exact HTTP(S) origins only',
+        });
       }
-      normalizedOrigins.add(parsed.origin);
-    } catch {
-      context.addIssue({ code: 'custom', message: 'must contain exact HTTP(S) origins only' });
     }
-  }
 
-  return [...normalizedOrigins];
-});
+    return [...normalizedOrigins];
+  });
 
 const optionalStorageNumber = z.preprocess(
   (value) =>
@@ -184,6 +228,62 @@ const environmentSchema = z
       .min(100)
       .max(30_000)
       .default(3_000),
+    EDUPAY_INTEGRATION_BASE_URL: optionalHttpOrigin,
+    EDUPAY_INTEGRATION_TOKEN: optionalIntegrationToken,
+    EDUPAY_INTEGRATION_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(30_000)
+      .default(5_000),
+    EDUPAY_INTEGRATION_ALLOW_PRIVATE_HTTP: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    EDUPAY_SYNC_PAGE_SIZE: z.coerce.number().int().min(1).max(500).default(100),
+    EDUPAY_SYNC_WORKER_POLL_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(300_000)
+      .default(60_000),
+    EDUPAY_SYNC_INCREMENTAL_INTERVAL_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10_080)
+      .default(60),
+    EDUPAY_SYNC_FULL_HOUR_UTC: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(23)
+      .default(2),
+    EDUPAY_SYNC_MAX_RUN_ATTEMPTS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(5)
+      .default(3),
+    EDUPAY_SYNC_RETRY_SCHEDULE_SECONDS: retryScheduleSeconds,
+    EDUPAY_SYNC_LEASE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(30)
+      .max(3_600)
+      .default(900),
+    EDUPAY_SYNC_ITEM_EVIDENCE_LIMIT: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(5_000)
+      .default(500),
+    EDUPAY_SYNC_EVIDENCE_RETENTION_DAYS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(365)
+      .default(30),
     ACADEMIC_TRUSTED_WEB_ORIGINS: trustedWebOrigins,
     STORAGE_ROOT: z.string().min(1).optional(),
     STORAGE_TEMP_ROOT: z.string().min(1).optional(),
@@ -268,6 +368,31 @@ const environmentSchema = z
       return;
     }
 
+    if (!environment.EDUPAY_INTEGRATION_BASE_URL) {
+      context.addIssue({
+        code: 'custom',
+        message: 'must be configured in production',
+        path: ['EDUPAY_INTEGRATION_BASE_URL'],
+      });
+    } else if (
+      new URL(environment.EDUPAY_INTEGRATION_BASE_URL).protocol !== 'https:' &&
+      !environment.EDUPAY_INTEGRATION_ALLOW_PRIVATE_HTTP
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message:
+          'must use HTTPS in production unless private HTTP is explicitly approved',
+        path: ['EDUPAY_INTEGRATION_BASE_URL'],
+      });
+    }
+    if (!environment.EDUPAY_INTEGRATION_TOKEN) {
+      context.addIssue({
+        code: 'custom',
+        message: 'must be configured in production',
+        path: ['EDUPAY_INTEGRATION_TOKEN'],
+      });
+    }
+
     if (environment.ACADEMIC_MALWARE_SCANNER !== 'clamav') {
       context.addIssue({
         code: 'custom',
@@ -300,7 +425,8 @@ const environmentSchema = z
     if (environment.ACADEMIC_TRUSTED_WEB_ORIGINS.length === 0) {
       context.addIssue({
         code: 'custom',
-        message: 'must contain at least one exact trusted web origin in production',
+        message:
+          'must contain at least one exact trusted web origin in production',
         path: ['ACADEMIC_TRUSTED_WEB_ORIGINS'],
       });
     }

@@ -17,6 +17,27 @@ const validEnvironment = {
   ACADEMIC_MALWARE_SCANNER: 'fake',
 };
 
+const validProductionEnvironment = {
+  ...validEnvironment,
+  NODE_ENV: 'production',
+  IDENTITY_ISSUER: 'https://identity.example.test',
+  IDENTITY_JWKS_URI: 'https://identity.example.test/.well-known/jwks.json',
+  IDENTITY_INTERNAL_BASE_URL: 'https://identity.internal.test',
+  EDUPAY_INTEGRATION_BASE_URL: 'https://edupay.internal.test',
+  EDUPAY_INTEGRATION_TOKEN: 'synthetic-edupay-token-000000000000000000000000',
+  ACADEMIC_TRUSTED_WEB_ORIGINS: 'https://academico.example.test',
+  ACADEMIC_MALWARE_SCANNER: 'clamav',
+  ACADEMIC_CLAMAV_HOST: 'clamav',
+  ACADEMIC_CLAMAV_PORT: '3310',
+  ACADEMIC_CLAMAV_TIMEOUT_MS: '5000',
+  STORAGE_MIN_FREE_BYTES: '1073741824',
+  STORAGE_MIN_FREE_PERCENTAGE: '5',
+  STORAGE_ROOT: 'C:\\edupay-academico\\files',
+  STORAGE_TEMP_ROOT: 'C:\\edupay-academico\\tmp',
+  ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
+  ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
+};
+
 describe('validateEnvironment', () => {
   it('parses a complete environment contract', () => {
     expect(validateEnvironment(validEnvironment)).toMatchObject({
@@ -58,7 +79,8 @@ describe('validateEnvironment', () => {
         ...validEnvironment,
         NODE_ENV: 'production',
         IDENTITY_ISSUER: 'https://identity.example.test',
-        IDENTITY_JWKS_URI: 'https://identity.example.test/.well-known/jwks.json',
+        IDENTITY_JWKS_URI:
+          'https://identity.example.test/.well-known/jwks.json',
         IDENTITY_INTERNAL_BASE_URL: 'https://identity.internal.test',
         ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
         ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
@@ -75,7 +97,8 @@ describe('validateEnvironment', () => {
         ...validEnvironment,
         NODE_ENV: 'production',
         IDENTITY_ISSUER: 'https://identity.example.test',
-        IDENTITY_JWKS_URI: 'https://identity.example.test/.well-known/jwks.json',
+        IDENTITY_JWKS_URI:
+          'https://identity.example.test/.well-known/jwks.json',
         IDENTITY_INTERNAL_BASE_URL: 'https://identity.internal.test',
         ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
         ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
@@ -95,7 +118,8 @@ describe('validateEnvironment', () => {
         ...validEnvironment,
         NODE_ENV: 'production',
         IDENTITY_ISSUER: 'https://identity.example.test',
-        IDENTITY_JWKS_URI: 'https://identity.example.test/.well-known/jwks.json',
+        IDENTITY_JWKS_URI:
+          'https://identity.example.test/.well-known/jwks.json',
         IDENTITY_INTERNAL_BASE_URL: 'https://identity.internal.test',
         ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
         ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
@@ -113,7 +137,8 @@ describe('validateEnvironment', () => {
         ...validEnvironment,
         NODE_ENV: 'production',
         IDENTITY_ISSUER: 'https://identity.example.test',
-        IDENTITY_JWKS_URI: 'https://identity.example.test/.well-known/jwks.json',
+        IDENTITY_JWKS_URI:
+          'https://identity.example.test/.well-known/jwks.json',
         IDENTITY_INTERNAL_BASE_URL: 'https://identity.internal.test',
         ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
         ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
@@ -159,5 +184,45 @@ describe('validateEnvironment', () => {
         IDENTITY_INTERNAL_SERVICE_TOKEN: 'human-password',
       }),
     ).toThrow(/IDENTITY_INTERNAL_SERVICE_TOKEN/);
+  });
+
+  it('requires the server-only EduPay origin and token in production', () => {
+    expect(validateEnvironment(validProductionEnvironment)).toMatchObject({
+      EDUPAY_INTEGRATION_BASE_URL: 'https://edupay.internal.test',
+      EDUPAY_INTEGRATION_TIMEOUT_MS: 5000,
+      EDUPAY_SYNC_INCREMENTAL_INTERVAL_MINUTES: 60,
+      EDUPAY_SYNC_FULL_HOUR_UTC: 2,
+    });
+    expect(() =>
+      validateEnvironment({
+        ...validProductionEnvironment,
+        EDUPAY_INTEGRATION_TOKEN: '',
+      }),
+    ).toThrow(/EDUPAY_INTEGRATION_TOKEN/);
+    expect(() =>
+      validateEnvironment({
+        ...validProductionEnvironment,
+        EDUPAY_INTEGRATION_BASE_URL: 'https://edupay.internal.test/path',
+      }),
+    ).toThrow(/exact HTTP\(S\) origin/);
+  });
+
+  it('requires HTTPS for EduPay unless private HTTP is explicitly approved', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validProductionEnvironment,
+        EDUPAY_INTEGRATION_BASE_URL: 'http://edupay.private.test',
+      }),
+    ).toThrow(/unless private HTTP is explicitly approved/);
+    expect(
+      validateEnvironment({
+        ...validProductionEnvironment,
+        EDUPAY_INTEGRATION_BASE_URL: 'http://edupay.private.test',
+        EDUPAY_INTEGRATION_ALLOW_PRIVATE_HTTP: 'true',
+      }),
+    ).toMatchObject({
+      EDUPAY_INTEGRATION_BASE_URL: 'http://edupay.private.test',
+      EDUPAY_INTEGRATION_ALLOW_PRIVATE_HTTP: true,
+    });
   });
 });

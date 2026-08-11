@@ -15,6 +15,18 @@ export interface AcademicAuditEvent {
 
 export interface AcademicAuditPort {
   record(event: AcademicAuditEvent): Promise<void>;
+  recordSystem?(event: AcademicSystemAuditEvent): Promise<void>;
+}
+
+export interface AcademicSystemAuditEvent {
+  readonly action: string;
+  readonly actorType: 'SYSTEM_INTEGRATION';
+  readonly correlationId: string;
+  readonly resourceId: string;
+  readonly resourceType: string;
+  readonly source: 'EDUPAY';
+  readonly summary?: Readonly<Record<string, string | number | boolean>>;
+  readonly tenantId: string;
 }
 
 /**
@@ -37,6 +49,21 @@ export class CorrelatedAcademicAuditLogger implements AcademicAuditPort {
       summary: event.summary,
       sessionId: event.context.tenant.sessionId,
       tenantId: event.context.tenant.tenantId,
+    });
+    return Promise.resolve();
+  }
+
+  recordSystem(event: AcademicSystemAuditEvent): Promise<void> {
+    this.logger.log({
+      action: event.action,
+      actorType: event.actorType,
+      correlationId: event.correlationId,
+      principalId: event.source === 'EDUPAY' ? 'EDUPAY_SYNC' : event.source,
+      resourceId: event.resourceId,
+      resourceType: event.resourceType,
+      source: event.source,
+      summary: event.summary,
+      tenantId: event.tenantId,
     });
     return Promise.resolve();
   }

@@ -26,6 +26,8 @@ export const mapAcademicYear = (record: AcademicYear): object => ({
 export const mapCourse = (record: Course): object => ({
   id: record.id,
   academicYearId: record.academicYearId,
+  source: record.source,
+  externalReference: record.externalReference,
   label: record.label,
   status: record.status,
   createdAt: timestamp(record.createdAt),
@@ -90,6 +92,8 @@ export const mapCourseEnrollment = (record: CourseEnrollment): object => ({
   id: record.id,
   studentId: record.studentId,
   courseId: record.courseId,
+  source: record.source,
+  externalReference: record.externalReference,
   status: record.status,
   createdAt: timestamp(record.createdAt),
   updatedAt: timestamp(record.updatedAt),

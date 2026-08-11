@@ -149,6 +149,14 @@ Notification routes are tenant/principal-scoped and use shared Zod contracts:
 `GET /api/v1/notifications/unread-count`. Notification cursors are opaque and
 another user’s or tenant’s notification ID is not disclosed.
 
+EduPay synchronization configuration remains operator-owned. An authenticated
+tenant administrator has one read-only status route,
+`GET /api/v1/sync/status`, returning the configured source tenant and local
+AcademicYear, enabled state, last successful incremental/full runs, safe last
+run counts/status, and unresolved conflict count. It never returns the service
+token, raw source payloads, personal-data error details, or opaque source
+watermarks. `SYSTEM_ADMIN` has no implicit access to this tenant route.
+
 Upload control-plane requests use JSON metadata and return an opaque
 `uploadIntentId` with an expiry and bounded upload instructions. File bytes use
 the dedicated content endpoint as one-file `multipart/form-data`; bytes are not

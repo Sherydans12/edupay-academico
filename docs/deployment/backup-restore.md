@@ -15,6 +15,13 @@ Create one dated restore point every day containing:
 4. a non-secret deployment inventory containing secret names, owners,
    secret-manager references, key IDs, environment versions, and rotation dates.
 
+The Academic dump includes EduPay sync configuration, terminal watermarks,
+absence generations, leases, runs, and bounded conflict evidence. It must not
+contain `EDUPAY_INTEGRATION_TOKEN`; that credential remains in managed runtime
+secret custody and is represented in the inventory by reference only. A
+restored worker may safely replay source pages from the last committed terminal
+watermark.
+
 Do not include the ClamAV signature database as application evidence unless an
 operator explicitly chooses to preserve it as an operational cache. It can be
 recreated and updated after restore. Do not include secret values, JWT private

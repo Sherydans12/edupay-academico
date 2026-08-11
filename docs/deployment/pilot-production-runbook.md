@@ -18,6 +18,7 @@ Browser
   -> HTTPS edupay-identity-api -> private Identity PostgreSQL
 
 edupay-academico-notification-worker -> Academic PostgreSQL -> Academic Resend
+edupay-academico-sync-worker         -> Academic PostgreSQL -> dedicated EduPay integration API
 edupay-identity-email-worker       -> Identity PostgreSQL -> Identity Resend
 ```
 
@@ -40,6 +41,7 @@ Prisma package is introduced.
 | `edupay-academico-web` | `pnpm --filter @edupay/web start` | One or more web replicas; build-time public URLs only. |
 | `edupay-academico-api` | `node apps/api/dist/main.js` | One API replica for the local filesystem pilot. |
 | `edupay-academico-notification-worker` | `pnpm --filter @edupay/api worker` | One instance for the pilot; the PostgreSQL claim lease supports later scale-out. |
+| `edupay-academico-sync-worker` | `pnpm --filter @edupay/api sync:worker` | One private pilot instance; tenant/source PostgreSQL leases prevent overlap. |
 | `clamav` | ClamAV image with `clamd` | One private instance; no host/public port; bounded CPU/memory. |
 | `edupay-identity-api` | `node dist/main.js` from Identity repository | One or more API replicas only after shared key/database/session operations are validated. |
 | `edupay-identity-email-worker` | `node dist/email/worker-main.js` (`pnpm email:deliver`) | One scheduled runner; do not run it inside every API replica. |
@@ -96,9 +98,11 @@ history.
 6. Take a pre-migration backup and verify that the backup artifact is outside the live database/file volumes.
 7. Run Identity migrations, then Academic migrations, each as a single controlled job.
 8. Start the private ClamAV service and verify its healthcheck. Start Identity API, verify JWKS and liveness, then start Academic API and verify liveness/readiness including the scanner dependency.
-9. Start exactly one Academic notification worker and one Identity email runner/schedule.
+9. Start exactly one Academic notification worker, one Academic sync worker, and one Identity email runner/schedule.
 10. Run the coordinated production-safe Identity and Academic tenant/admin bootstrap described in §9.
-11. Run the controlled pilot workflow with synthetic or approved pilot data, verify audit/request correlation, and record the release evidence.
+11. Create and activate the local AcademicYear, then configure the explicit EduPay source-tenant mapping with `pnpm sync:configure`.
+12. Run one controlled full onboarding sync with `pnpm sync:run -- --tenant-id <canonical-uuid> --mode full` and review safe counts/conflicts.
+13. Run the controlled pilot workflow with synthetic or approved pilot data, verify audit/request correlation, and record the release evidence.
 
 ## 5. Health, readiness, and worker validation
 
@@ -129,6 +133,15 @@ pnpm --filter @edupay/api worker:check
 
 `worker --once` is an operational delivery command and may contact the
 configured Academic provider; do not use it as a healthcheck.
+
+Safe synchronization worker probe (does not contact EduPay or mutate roster):
+
+```sh
+pnpm --filter @edupay/api sync:worker:check
+```
+
+The API and notification worker do not start synchronization as a side effect.
+The sync worker is private and has no published port.
 
 ## 6. Migration and rollback procedure
 
@@ -289,6 +302,7 @@ Minimum pilot metrics/alerts:
 - malware scanner unavailable/timeout/failure counts, infected detections, scan
   latency, signature freshness, and pending scan backlog;
 - Academic notification worker last-success/run age, retry and `FAILED` counts;
+- EduPay sync worker last-success/run age, source-unavailable/partial/failed counts, unresolved conflict count, lease expiry, page duration, watermark advancement, and nightly full-snapshot completion;
 - Identity email runner last-success/run age, outbox `FAILED` count, and provider failures;
 - terminal notification/email failures and repeated Identity service-auth failures;
 - backup job failure, missing daily restore point, and certificate/HTTPS expiry or handshake failure.
@@ -302,5 +316,6 @@ have named owners and are tested before pilot.
 
 - If readiness fails for database or storage, stop routing new traffic and preserve the evidence; do not delete files to make space without an approved D-11 action.
 - If notifications fail, keep Academic mutations available while monitoring in-app delivery and outbox state; restart only the singleton worker after capturing its safe summary.
+- If EduPay is unavailable, preserve the last known roster state, do not advance watermarks or absence generations, and retry only within the bounded worker budget. Do not disable tenant isolation, change the source origin, or paste a token into a manual command.
 - If service-token or signing-key material is exposed, rotate/revoke through the owning service's procedure and do not copy secrets into incident tickets.
 - If a restore is required, use the disposable restore verification procedure first and obtain the operator/data-owner decision before touching live volumes.

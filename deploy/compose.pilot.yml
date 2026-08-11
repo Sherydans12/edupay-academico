@@ -77,6 +77,20 @@ services:
     command: ["pnpm", "--filter", "@edupay/api", "worker"]
     networks: [edupay-private]
 
+  edupay-academico-sync-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+      target: runtime
+    restart: unless-stopped
+    env_file:
+      - ${ACADEMICO_API_ENV_FILE:-./deploy/env/academico-api.env}
+    depends_on:
+      academico-migrate:
+        condition: service_completed_successfully
+    command: ["pnpm", "--filter", "@edupay/api", "sync:worker"]
+    networks: [edupay-private]
+
   edupay-academico-web:
     build:
       context: ..

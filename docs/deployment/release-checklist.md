@@ -75,6 +75,10 @@ modify it or its migrations from the Académico release process.
 - [ ] JWKS retrieval, issuer, audience, active key ID, and access-token lifetime evidence is recorded.
 - [ ] Current/previous service-token rotation references and expiry ownership are recorded; the token value is not.
 - [ ] One Academic notification worker and one Identity email runner/schedule are active; no API replica starts either worker.
+- [ ] One private Academic sync worker is active; `sync:worker:check` passes and no public route/port exposes it.
+- [ ] `EDUPAY_INTEGRATION_BASE_URL` is the reviewed exact source origin; the dedicated token is in managed server/worker custody only and is absent from database dumps, logs, responses, and web bundles.
+- [ ] The operator configured the source tenant to canonical tenant and active local AcademicYear mapping; a compatible configuration rerun passed and an incompatible mapping was refused.
+- [ ] One controlled incremental and one source-confirmed full reconciliation passed; terminal watermarks, two-full-run absence behavior, and safe conflict/status visibility were reviewed.
 - [ ] `GET /api/v1/health/live`, `GET /api/v1/health/ready`, web `/api/health`, Identity health, and worker `--check` pass.
 - [ ] ClamAV is healthy on the private network, has no host/public port, and `ACADEMIC_MALWARE_SCANNER=clamav` is configured with validated private host, port, timeout, and bounded concurrency.
 - [ ] A known clean synthetic file is accepted with `scanStatus=CLEAR`.

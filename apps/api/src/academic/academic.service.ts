@@ -58,6 +58,7 @@ import {
   ACADEMIC_IDENTITY_LINK_VERIFIER,
   type AcademicIdentityLinkVerifier,
 } from './identity-link.port';
+import { EDUPAY_SOURCE, MANUAL_SOURCE } from '../sync/sync.constants';
 
 const academicYearTransitions: Readonly<
   Record<AcademicYearStatus, readonly AcademicYearStatus[]>
@@ -229,6 +230,7 @@ export class AcademicService {
         data: {
           tenantId: scope.tenantId,
           academicYearId: input.academicYearId,
+          source: MANUAL_SOURCE,
           label: input.label,
           status: input.status,
         },
@@ -283,6 +285,9 @@ export class AcademicService {
   ): Promise<object> {
     const scope = this.adminScope(context);
     const current = await this.courseWithYear(scope, id);
+    if (current.source === EDUPAY_SOURCE) {
+      this.sourceManagedConflict();
+    }
     if (current.status === 'ARCHIVED') {
       throw new ConflictException('An archived course is read-only.');
     }
@@ -321,7 +326,7 @@ export class AcademicService {
       this.prisma.student.create({
         data: {
           tenantId: scope.tenantId,
-          source: 'MANUAL',
+          source: MANUAL_SOURCE,
           firstName: input.firstName,
           lastName: input.lastName,
           ...(input.email !== undefined ? { email: input.email } : {}),
@@ -389,7 +394,13 @@ export class AcademicService {
     input: UpdateStudent,
   ): Promise<object> {
     const scope = this.adminScope(context);
-    await this.student(scope, id);
+    const current = await this.student(scope, id);
+    if (
+      current.source === EDUPAY_SOURCE &&
+      (input.firstName !== undefined || input.lastName !== undefined)
+    ) {
+      this.sourceManagedConflict();
+    }
     const record = await this.write(() =>
       this.prisma.student.update({
         where: { tenantId_id: { tenantId: scope.tenantId, id } },
@@ -412,7 +423,8 @@ export class AcademicService {
     status: 'ACTIVE' | 'INACTIVE',
   ): Promise<object> {
     const scope = this.adminScope(context);
-    await this.student(scope, id);
+    const current = await this.student(scope, id);
+    if (current.source === EDUPAY_SOURCE) this.sourceManagedConflict();
     const record = await this.prisma.student.update({
       where: { tenantId_id: { tenantId: scope.tenantId, id } },
       data: { status },
@@ -454,7 +466,7 @@ export class AcademicService {
       this.prisma.teacher.create({
         data: {
           tenantId: scope.tenantId,
-          source: 'MANUAL',
+          source: MANUAL_SOURCE,
           firstName: input.firstName,
           lastName: input.lastName,
           ...(input.email !== undefined ? { email: input.email } : {}),
@@ -765,9 +777,19 @@ export class AcademicService {
     }
     const course = await this.courseWithYear(scope, input.courseId);
     this.requireStructuralMutation(course.status, course.academicYear.status);
+    const sourceEnrollment = await this.prisma.courseEnrollment.findFirst({
+      where: {
+        tenantId: scope.tenantId,
+        studentId: student.id,
+        source: EDUPAY_SOURCE,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+    if (sourceEnrollment) this.sourceManagedEnrollmentConflict();
     const record = await this.write(() =>
       this.prisma.courseEnrollment.create({
-        data: { tenantId: scope.tenantId, ...input },
+        data: { tenantId: scope.tenantId, source: MANUAL_SOURCE, ...input },
       }),
     );
     await this.recordAudit(
@@ -789,6 +811,9 @@ export class AcademicService {
       include: { course: { include: { academicYear: true } } },
     });
     if (!current) this.notFound();
+    if (current.source === EDUPAY_SOURCE) {
+      this.sourceManagedEnrollmentConflict();
+    }
     this.requireStructuralMutation(
       current.course.status,
       current.course.academicYear.status,
@@ -1371,5 +1396,19 @@ export class AcademicService {
     throw new NotFoundException(
       'The requested academic resource was not found.',
     );
+  }
+
+  private sourceManagedConflict(): never {
+    throw new ConflictException({
+      code: 'SOURCE_MANAGED_FIELD_CONFLICT',
+      message: 'This field is managed by EduPay synchronization.',
+    });
+  }
+
+  private sourceManagedEnrollmentConflict(): never {
+    throw new ConflictException({
+      code: 'SOURCE_MANAGED_ENROLLMENT_CONFLICT',
+      message: 'This course enrollment is managed by EduPay synchronization.',
+    });
   }
 }

@@ -8,7 +8,7 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/estudiante/asignaturas'
 
 const id = '00000000-0000-4000-8000-000000000001';
 const timestamp = '2026-08-08T12:00:00+00:00';
-const contextSubject = { id, courseId: id, subjectId: id, defaultForCourse: true, sortOrder: 0, status: 'ACTIVE' as const, course: { id, academicYearId: id, label: '7º Básico A', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp }, subject: { id, name: 'Lenguaje y Comunicación', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp }, createdAt: timestamp, updatedAt: timestamp };
+const contextSubject = { id, courseId: id, subjectId: id, defaultForCourse: true, sortOrder: 0, status: 'ACTIVE' as const, course: { id, academicYearId: id, source: 'MANUAL', externalReference: null, label: '7º Básico A', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp }, subject: { id, name: 'Lenguaje y Comunicación', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp }, createdAt: timestamp, updatedAt: timestamp };
 
 function client(overrides: Partial<AcademicApiClient>): AcademicApiClient {
   return overrides as AcademicApiClient;

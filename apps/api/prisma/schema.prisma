@@ -161,6 +161,34 @@ enum NotificationDeliveryStatus {
   SKIPPED
 }
 
+enum SyncEntity {
+  COURSE
+  STUDENT
+}
+
+enum SyncMode {
+  INCREMENTAL
+  FULL
+}
+
+enum SyncTrigger {
+  SCHEDULED
+  MANUAL
+}
+
+enum SyncRunStatus {
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+  SOURCE_UNAVAILABLE
+}
+
+enum SyncItemOutcome {
+  CONFLICT
+  FAILED
+}
+
 model Tenant {
   id        String   @id @db.VarChar(128)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -189,6 +217,12 @@ model Tenant {
   notificationEvents         NotificationEvent[]
   notificationDeliveries     NotificationDelivery[]
   inAppNotifications         InAppNotification[]
+  syncConfigurations         SyncConfiguration[]
+  syncStates                 SyncState[]
+  syncRuns                   SyncRun[]
+  syncItemResults            SyncItemResult[]
+  syncFullPresences          SyncFullPresence[]
+  syncLeases                 SyncLease[]
 
   @@map("tenants")
 }
@@ -206,6 +240,7 @@ model AcademicYear {
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   courses Course[]
+  syncConfigurations SyncConfiguration[]
 
   @@id([tenantId, id])
   @@unique([tenantId, label])
@@ -218,8 +253,15 @@ model Course {
   tenantId        String       @map("tenant_id") @db.VarChar(128)
   academicYearId  String       @map("academic_year_id") @db.Uuid
   paginationToken String       @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  source          String       @default("MANUAL") @db.VarChar(80)
+  externalReference String?    @map("external_reference") @db.VarChar(200)
   label           String       @db.VarChar(160)
   status          CourseStatus @default(DRAFT)
+  sourceUpdatedAt DateTime?    @map("source_updated_at") @db.Timestamptz(3)
+  lastSyncedAt    DateTime?    @map("last_synced_at") @db.Timestamptz(3)
+  sourceStatus    String?      @map("source_status") @db.VarChar(32)
+  lastSeenFullGeneration Int?  @map("last_seen_full_generation")
+  consecutiveAbsences Int      @default(0) @map("consecutive_absences")
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -229,7 +271,7 @@ model Course {
   enrollments    CourseEnrollment[]
 
   @@id([tenantId, id])
-  @@unique([tenantId, academicYearId, label])
+  @@unique([tenantId, source, externalReference])
   @@index([tenantId, academicYearId, status, label])
   @@map("courses")
 }
@@ -245,6 +287,11 @@ model Student {
   lastName          String       @map("last_name") @db.VarChar(120)
   email             String?      @db.VarChar(320)
   status            PersonStatus @default(ACTIVE)
+  sourceUpdatedAt   DateTime?    @map("source_updated_at") @db.Timestamptz(3)
+  lastSyncedAt      DateTime?    @map("last_synced_at") @db.Timestamptz(3)
+  sourceStatus      String?      @map("source_status") @db.VarChar(32)
+  lastSeenFullGeneration Int?    @map("last_seen_full_generation")
+  consecutiveAbsences Int        @default(0) @map("consecutive_absences")
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -334,7 +381,10 @@ model CourseEnrollment {
   tenantId  String             @map("tenant_id") @db.VarChar(128)
   studentId String             @map("student_id") @db.Uuid
   courseId  String             @map("course_id") @db.Uuid
+  source    String             @default("MANUAL") @db.VarChar(80)
+  externalReference String?    @map("external_reference") @db.VarChar(420)
   status    RelationshipStatus @default(ACTIVE)
+  lastSyncedAt DateTime?       @map("last_synced_at") @db.Timestamptz(3)
   createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -343,9 +393,136 @@ model CourseEnrollment {
   course  Course  @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
 
   @@id([tenantId, id])
+  @@unique([tenantId, source, externalReference])
   @@index([tenantId, courseId, status, studentId])
   @@index([tenantId, studentId, status, courseId])
   @@map("course_enrollments")
+}
+
+model SyncConfiguration {
+  id                String   @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.VarChar(128)
+  source            String   @db.VarChar(80)
+  sourceTenantId    String   @map("source_tenant_id") @db.VarChar(200)
+  academicYearId    String   @map("academic_year_id") @db.Uuid
+  enabled           Boolean  @default(true)
+  fullGeneration    Int      @default(0) @map("full_generation")
+  nextIncrementalAt DateTime @default(now()) @map("next_incremental_at") @db.Timestamptz(3)
+  nextFullAt        DateTime @default(now()) @map("next_full_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  academicYear AcademicYear @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, source])
+  @@unique([source, sourceTenantId])
+  @@index([enabled, nextIncrementalAt])
+  @@index([enabled, nextFullAt])
+  @@map("sync_configurations")
+}
+
+model SyncState {
+  tenantId     String     @map("tenant_id") @db.VarChar(128)
+  source       String     @db.VarChar(80)
+  entity       SyncEntity
+  watermark    String?    @db.Text
+  lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz(3)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, source, entity])
+  @@map("sync_states")
+}
+
+model SyncRun {
+  id                    String        @db.Uuid
+  tenantId              String        @map("tenant_id") @db.VarChar(128)
+  source                String        @db.VarChar(80)
+  mode                  SyncMode
+  trigger               SyncTrigger
+  status                SyncRunStatus @default(RUNNING)
+  correlationId         String        @map("correlation_id") @db.VarChar(128)
+  sourceSchemaVersion   String        @map("source_schema_version") @db.VarChar(16)
+  sourceTenantId        String        @map("source_tenant_id") @db.VarChar(200)
+  seenCount             Int           @default(0) @map("seen_count")
+  createdCount          Int           @default(0) @map("created_count")
+  updatedCount          Int           @default(0) @map("updated_count")
+  unchangedCount        Int           @default(0) @map("unchanged_count")
+  deactivatedCount      Int           @default(0) @map("deactivated_count")
+  conflictedCount       Int           @default(0) @map("conflicted_count")
+  failedCount           Int           @default(0) @map("failed_count")
+  pageCount             Int           @default(0) @map("page_count")
+  watermarkAdvanced     Boolean       @default(false) @map("watermark_advanced")
+  snapshotComplete      Boolean       @default(false) @map("snapshot_complete")
+  evidenceTruncated     Boolean       @default(false) @map("evidence_truncated")
+  errorCode             String?       @map("error_code") @db.VarChar(80)
+  retryable             Boolean       @default(false)
+  startedAt             DateTime      @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt            DateTime?     @map("finished_at") @db.Timestamptz(3)
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  itemResults  SyncItemResult[]
+  fullPresence SyncFullPresence[]
+
+  @@id([tenantId, id])
+  @@unique([correlationId])
+  @@index([tenantId, source, mode, status, startedAt])
+  @@map("sync_runs")
+}
+
+model SyncItemResult {
+  id                String          @default(uuid()) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.VarChar(128)
+  runId             String          @map("run_id") @db.Uuid
+  entity            SyncEntity
+  externalReference String?         @map("external_reference") @db.VarChar(200)
+  targetId          String?         @map("target_id") @db.Uuid
+  outcome           SyncItemOutcome
+  code              String          @db.VarChar(80)
+  retryable         Boolean         @default(false)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  resolvedAt        DateTime?       @map("resolved_at") @db.Timestamptz(3)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  run    SyncRun @relation(fields: [tenantId, runId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, id])
+  @@index([tenantId, resolvedAt, entity, code])
+  @@index([tenantId, entity, externalReference, resolvedAt])
+  @@map("sync_item_results")
+}
+
+model SyncFullPresence {
+  tenantId          String     @map("tenant_id") @db.VarChar(128)
+  runId             String     @map("run_id") @db.Uuid
+  entity            SyncEntity
+  externalReference String     @map("external_reference") @db.VarChar(200)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  run    SyncRun @relation(fields: [tenantId, runId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, runId, entity, externalReference])
+  @@index([tenantId, entity, externalReference])
+  @@map("sync_full_presences")
+}
+
+model SyncLease {
+  tenantId   String   @map("tenant_id") @db.VarChar(128)
+  source     String   @db.VarChar(80)
+  ownerRunId String   @map("owner_run_id") @db.Uuid
+  lockedUntil DateTime @map("locked_until") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, source])
+  @@index([lockedUntil])
+  @@map("sync_leases")
 }
 
 model StudentSubjectEnrollment {

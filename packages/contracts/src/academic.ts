@@ -74,6 +74,8 @@ export const courseSchema = z
   .object({
     id: opaqueIdSchema,
     academicYearId: opaqueIdSchema,
+    source: z.string().min(1).max(80),
+    externalReference: z.string().min(1).max(200).nullable(),
     label: labelSchema,
     status: courseStatusSchema,
     createdAt: timestampSchema,
@@ -228,6 +230,8 @@ export const courseEnrollmentSchema = z
     id: opaqueIdSchema,
     studentId: opaqueIdSchema,
     courseId: opaqueIdSchema,
+    source: z.string().min(1).max(80),
+    externalReference: z.string().min(1).max(420).nullable(),
     status: relationshipStatusSchema,
     createdAt: timestampSchema,
     updatedAt: timestampSchema,

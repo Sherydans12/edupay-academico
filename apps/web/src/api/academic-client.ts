@@ -53,6 +53,8 @@ import {
   unreadNotificationCountSchema,
   uploadIntentSchema,
   verifiedIdentityLinkSchema,
+  syncStatusSchema,
+  type SyncStatus,
   type CreateReview,
   type CreateSubmission,
   type CreateSubmissionRevision,
@@ -317,6 +319,7 @@ export class AcademicApiClient {
   }
 
   getTenant() { return this.request('tenant', tenantSchema); }
+  getSyncStatus(): Promise<SyncStatus> { return this.request('sync/status', syncStatusSchema); }
   getStorageUsage(): Promise<StorageUsage> { return this.request('storage/usage', storageUsageSchema); }
   getStoragePolicy(): Promise<StoragePolicy> { return this.request('storage/policy', storagePolicySchema); }
 

@@ -1,6 +1,6 @@
 # EduPay integration
 
-Status: mandated separation with contract details unresolved
+Status: accepted boundary implemented for the Course/Student roster MVP
 
 ## Boundary rule
 
@@ -32,13 +32,14 @@ The tenant mapping must resolve the source institution to the canonical ecosyste
 
 Internal IDs remain the only IDs used by the academic API and UI.
 
-## Candidate synchronization modes
+## Synchronization mode
 
-1. **Pull**: academic service periodically reads an EduPay API.
-2. **Push**: EduPay sends signed change events or batches.
-3. **Reconciliation**: an operator starts a bounded import and reviews conflicts.
-
-The first implementation should choose the smallest mode supported reliably by the existing EduPay platform. Manual creation remains available for the agreed records.
+The accepted MVP uses scheduled pull from the dedicated schema-v1 EduPay
+integration API: hourly incremental feeds, nightly source-confirmed full
+reconciliation, and bounded operator runs. Manual creation remains available.
+Push/events remain a future evolution and full reconciliation remains the
+correctness backstop. Implementation details and operations are documented in
+[EduPay roster synchronization consumer](../integration/edupay-sync-implementation.md).
 
 ## Consistency and conflict rules
 
@@ -56,11 +57,7 @@ The first implementation should choose the smallest mode supported reliably by t
 - Never accept a client-provided source-system record as proof of tenant membership.
 - Log sync runs, counts, failures, and correlation identifiers without logging unnecessary student data.
 
-## Unresolved decisions
-
-- Existing EduPay API availability, authentication, and contract owner.
-- Pull versus push versus operator-led reconciliation.
-- Source of truth for each student/course field.
-- Tenant mapping between current EduPay institutions and new tenants.
-- Initial sync frequency and expected data volume.
-- Synchronization may create or update only academic records and external references. It cannot silently create Identity links; Student/Teacher ↔ IdentityUser linking is an explicit Académico-initiated operation through the restricted Identity contract.
+Synchronization may create or update only the accepted Course, Student, and
+source-owned current CourseEnrollment projection. It cannot silently create
+Identity links; Student/Teacher ↔ IdentityUser linking remains an explicit
+Académico-initiated operation through the restricted Identity contract.

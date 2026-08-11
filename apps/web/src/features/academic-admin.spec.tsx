@@ -9,7 +9,7 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/administracion/estructu
 const id = '00000000-0000-4000-8000-000000000001';
 const timestamp = '2026-08-08T12:00:00+00:00';
 const year = { id, label: '2026', startDate: '2026-03-01', endDate: '2026-12-31', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp };
-const course = { id, academicYearId: id, label: '7º Básico A', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp };
+const course = { id, academicYearId: id, source: 'MANUAL', externalReference: null, label: '7º Básico A', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp };
 const subject = { id, name: 'Lenguaje y Comunicación', status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp };
 const courseSubject = { id, courseId: id, subjectId: id, defaultForCourse: true, sortOrder: 0, status: 'ACTIVE' as const, course, subject, createdAt: timestamp, updatedAt: timestamp };
 
@@ -22,6 +22,7 @@ function adminClient(overrides: Partial<AcademicApiClient>): AcademicApiClient {
     listSubjects: vi.fn(async () => ({ items: [subject], nextCursor: null })),
     listCourseSubjects: vi.fn(async () => ({ items: [courseSubject], nextCursor: null })),
     getCourseRoster: vi.fn(async () => []),
+    getSyncStatus: vi.fn(async () => ({ source: 'EDUPAY' as const, configured: true, configuration: { sourceTenantId: 'colegio-conquistadores', academicYearId: id, academicYearLabel: '2026', enabled: true }, lastIncrementalSuccessAt: null, lastFullSuccessAt: null, lastRun: null, currentConflictCount: 0 })),
     ...overrides,
   } as unknown as AcademicApiClient;
 }
@@ -40,6 +41,12 @@ describe('Academic admin screens', () => {
     expect(await screen.findByRole('heading', { name: 'Inscripciones y asignaciones' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Asignar docente a CourseSubject' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Asignar subject directamente' })).toBeTruthy();
+  });
+
+  it('shows safe tenant synchronization status in the existing overview', async () => {
+    render(<AcademicAdminScreen api={adminClient({})} view="overview" />);
+    expect(await screen.findByRole('heading', { name: 'Sincronización EduPay' })).toBeTruthy();
+    expect(screen.getByText(/colegio-conquistadores/)).toBeTruthy();
   });
 
   it('renders a forbidden state without pretending data is available', async () => {
