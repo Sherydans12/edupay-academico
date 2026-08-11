@@ -22,7 +22,7 @@ or EICAR bytes into this file.
 
 | Repository       | Observed commit SHA                        | Worktree status                                         | Classification                     |
 | ---------------- | ------------------------------------------ | ------------------------------------------------------- | ---------------------------------- |
-| EduPay Académico | `11bc58ea219e5b1f3e7a198e5889995cfd1dde7e` | clean release/pilot-validation worktree at latest green validation | DISPOSABLE / AUTOMATED CI baseline |
+| EduPay Académico | `39ab05fc818fe34bd77e3e57e15a9ba81d925808` | clean release/pilot-validation worktree at latest green validation | DISPOSABLE / AUTOMATED CI baseline |
 | EduPay Identity  | `16838f526a4ee48fbb518b840fe0c19e766395cf` | clean `main`, matched `origin/main`; PR #1 email-worker fix verified | DISPOSABLE / AUTOMATED CI baseline |
 | BL-002 EduPay    | `abc3776631d5940759d1a45ad949413174f2acf9` | clean `main`, matched `origin/main` at validation start | DISPOSABLE / AUTOMATED CI baseline |
 
@@ -36,7 +36,7 @@ or EICAR bytes into this file.
 
 ## Validated release heads
 
-- Académico validation SHA: `11bc58ea219e5b1f3e7a198e5889995cfd1dde7e`
+- Académico validation SHA: `39ab05fc818fe34bd77e3e57e15a9ba81d925808`
 - Identity `main`: `16838f526a4ee48fbb518b840fe0c19e766395cf`
 - BL-002 `main`: `abc3776631d5940759d1a45ad949413174f2acf9`
 
@@ -44,12 +44,12 @@ or EICAR bytes into this file.
 
 | Gate                                     | Result                 | Classification                 | Safe evidence / link |
 | ---------------------------------------- | ---------------------- | ------------------------------ | -------------------- |
-| GitHub/Linux workflow run                | `PASS; 31547411810`    | AUTOMATED CI                   | [green run](https://github.com/Sherydans12/edupay-academico/actions/runs/31547411810) |
+| GitHub/Linux workflow run                | `PASS; 31547851646`    | AUTOMATED CI                   | [green run](https://github.com/Sherydans12/edupay-academico/actions/runs/31547851646) |
 | Prisma validation/generation             | `PASS`                 | AUTOMATED CI                   | Repository release gate |
 | lint/typecheck/normal tests/build        | `PASS`                 | AUTOMATED CI                   | Repository release gate |
 | PostgreSQL-backed tests                  | `PASS`                 | AUTOMATED CI / DISPOSABLE      | PostgreSQL release gate |
-| API image build                          | `PASS; 619b85bb85a6299dd8dc83872a26ee1a644a83aceff7d2f071e3f688b66d2aa8` | AUTOMATED CI | Linux topology gate |
-| Web image build                          | `PASS; 46d50c5ebca5f84225931fa7588cbc7fe1cde344b8154dd57d8e6594393be4d2` | AUTOMATED CI | Linux topology gate |
+| API image build                          | `PASS; 96e9fcb4b35a3722e5b679f18a2748c8fc6c0390c704528582467442005b8df3` | AUTOMATED CI | Linux topology gate |
+| Web image build                          | `PASS; 45e3b6a22f41680f55ec81b8e7c57a8fd76369c5c8f4f0a559067fc192901714` | AUTOMATED CI | Linux topology gate |
 | Compose syntax/runtime/health            | `PASS`                 | AUTOMATED CI / DISPOSABLE      | API/Web/DB/ClamAV health routes passed |
 | Academic migration status/deploy         | `PASS`                 | DISPOSABLE; production pending | PostgreSQL, Compose, and smoke gates |
 | `pilot:e2e`                              | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Full pilot with real ClamAV |
@@ -72,8 +72,8 @@ or EICAR bytes into this file.
 - Academic migration result: `PASS in disposable PostgreSQL/Compose/consumer gates; production revision pending`
 - Identity migration result: `PASS in disposable bootstrap/backup gates; production revision pending`
 - BL-002 migration result, if same host: `PASS in disposable source smoke; same-host deployment not approved`
-- API image digest: `sha256:619b85bb85a6299dd8dc83872a26ee1a644a83aceff7d2f071e3f688b66d2aa8`
-- Web image digest: `sha256:46d50c5ebca5f84225931fa7588cbc7fe1cde344b8154dd57d8e6594393be4d2`
+- API image digest: `sha256:96e9fcb4b35a3722e5b679f18a2748c8fc6c0390c704528582467442005b8df3`
+- Web image digest: `sha256:45e3b6a22f41680f55ec81b8e7c57a8fd76369c5c8f4f0a559067fc192901714`
 - ClamAV image digest/version: `clamav/clamav:1.4.3; CI image digest not recorded`
 - ClamAV signature database timestamp: `not emitted by disposable gate; production evidence required`
 
