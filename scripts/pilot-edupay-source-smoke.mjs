@@ -341,6 +341,22 @@ async function main() {
     label: 'seed disposable BL-002 source data',
   });
   assert(seed.code === 0);
+  // The current BL-002 seed preserves legacy full names and intentionally
+  // leaves the reviewed structured-name fields for operator validation. The
+  // disposable release fixture validates the successful path with synthetic,
+  // explicitly derived test values; it does not alter source code or product
+  // semantics.
+  await sql(
+    sourcePostgres,
+    `UPDATE students SET "firstName" = split_part(name, ' ', 1), "lastName" = trim(substring(name FROM position(' ' IN name) + 1)) WHERE "tenantId" = '${sourceTenantId}' AND "firstName" IS NULL;`,
+  );
+  const structuredStudentCount = Number(
+    await sql(
+      sourcePostgres,
+      `SELECT count(*) FROM students WHERE "tenantId" = '${sourceTenantId}' AND "firstName" IS NOT NULL AND "lastName" IS NOT NULL;`,
+    ),
+  );
+  assert(structuredStudentCount > 0);
   const sourceProcess = await startSource(sourceEnv, sourcePort);
   const sourceBaseUrl = `http://127.0.0.1:${sourcePort}`;
   const academicEnv = academicEnvironment(
