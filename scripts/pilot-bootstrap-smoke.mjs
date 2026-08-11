@@ -52,13 +52,32 @@ async function run(tool, args, options = {}) {
       const result = { code: code ?? -1, stdout, stderr };
       if (result.code === 0 || options.allowFailure)
         return resolvePromise(result);
+      const diagnostics = options.safeDiagnostics
+        ? safeDiagnostics(`${stdout}\n${stderr}`)
+        : '';
       rejectPromise(
         new Error(
-          `${options.label ?? `${tool} ${args.join(' ')}`} failed (${result.code}).`,
+          `${options.label ?? `${tool} ${args.join(' ')}`} failed (${result.code}).${diagnostics ? ` Safe diagnostic: ${diagnostics}` : ''}`,
         ),
       );
     });
   });
+}
+
+function safeDiagnostics(output) {
+  const lines = output
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, 'postgresql://[redacted]')
+    .replace(/\b(?:act|inv)_[A-Za-z0-9_-]+\b/g, '[redacted-activation]')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) =>
+      /^(?:Identity tenant-admin bootstrap refused|Identity tenant-admin bootstrap failed|Invalid bootstrap environment configuration|Usage:|Error:|Prisma)/i.test(
+        line,
+      ),
+    )
+    .slice(-3);
+  return lines.join(' | ').slice(0, 600);
 }
 
 async function freePort() {
@@ -358,6 +377,7 @@ async function main() {
     cwd: identityRoot,
     env: identityEnv,
     label: 'run actual Identity tenant-admin bootstrap',
+    safeDiagnostics: true,
   });
   const output = JSON.parse(
     identityBootstrap.stdout

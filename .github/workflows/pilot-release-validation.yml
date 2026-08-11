@@ -140,9 +140,21 @@ jobs:
           docker compose -p "$project" -f deploy/compose.pilot.yml build --pull=false academico-migrate edupay-academico-api edupay-academico-web
           docker compose -p "$project" -f deploy/compose.pilot.yml up -d academico-db clamav academico-migrate edupay-academico-api edupay-academico-web
           docker compose -p "$project" -f deploy/compose.pilot.yml ps
-          docker compose -p "$project" -f deploy/compose.pilot.yml exec -T edupay-academico-api node -e "fetch('http://127.0.0.1:3001/api/v1/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-          docker compose -p "$project" -f deploy/compose.pilot.yml exec -T edupay-academico-api node -e "fetch('http://127.0.0.1:3001/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-          docker compose -p "$project" -f deploy/compose.pilot.yml exec -T edupay-academico-web node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+          wait_for() {
+            local service="$1"
+            local url="$2"
+            for attempt in $(seq 1 45); do
+              if docker compose -p "$project" -f deploy/compose.pilot.yml exec -T "$service" node -e "fetch('$url').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+                return 0
+              fi
+              sleep 2
+            done
+            docker compose -p "$project" -f deploy/compose.pilot.yml logs --no-color "$service"
+            return 1
+          }
+          wait_for edupay-academico-api http://127.0.0.1:3001/api/v1/health/live
+          wait_for edupay-academico-api http://127.0.0.1:3001/api/v1/health/ready
+          wait_for edupay-academico-web http://127.0.0.1:3000/api/health
           docker compose -p "$project" -f deploy/compose.pilot.yml run --rm --no-deps edupay-academico-notification-worker pnpm --filter @edupay/api worker:check
           docker compose -p "$project" -f deploy/compose.pilot.yml run --rm --no-deps edupay-academico-sync-worker pnpm --filter @edupay/api sync:worker:check
           test "$(docker image inspect edupay-ci-api:release --format '{{.Config.User}}')" = node
@@ -315,7 +327,7 @@ jobs:
           DATABASE_URL="$IDENTITY_DATABASE_URL" pnpm --dir EduPayIdentity prisma:generate
           DATABASE_URL="$IDENTITY_DATABASE_URL" pnpm --dir EduPayIdentity prisma:migrate:deploy
           DATABASE_URL="$ACADEMIC_DATABASE_URL" pnpm db:generate
-          DATABASE_URL="$ACADEMIC_DATABASE_URL" pnpm db:migrate:deploy
+          DATABASE_URL="$ACADEMIC_DATABASE_URL" pnpm --filter @edupay/api db:migrate:deploy
       - name: Backup, checksum, restore, and file-byte verification
         shell: bash
         run: |

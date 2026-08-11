@@ -185,17 +185,9 @@ async function startSource(environment, port) {
     record.exitCode = code;
   });
   resources.processes.push(record);
-  await waitUntil('BL-002 source API', async () => {
+  await waitUntil('BL-002 source API health', async () => {
     if (record.exitCode !== undefined) throw new Error('source API exited');
-    const response = await fetch(
-      `http://127.0.0.1:${port}/api/v1/integrations/academico/courses?limit=1`,
-      {
-        headers: {
-          authorization: `Bearer ${environment.EDUPAY_ACADEMICO_INTEGRATION_TOKEN}`,
-          'x-source-tenant-id': sourceTenantId,
-        },
-      },
-    );
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
     return response.ok;
   });
   return record;
