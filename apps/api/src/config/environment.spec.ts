@@ -32,8 +32,8 @@ const validProductionEnvironment = {
   ACADEMIC_CLAMAV_TIMEOUT_MS: '5000',
   STORAGE_MIN_FREE_BYTES: '1073741824',
   STORAGE_MIN_FREE_PERCENTAGE: '5',
-  STORAGE_ROOT: 'C:\\edupay-academico\\files',
-  STORAGE_TEMP_ROOT: 'C:\\edupay-academico\\tmp',
+  STORAGE_ROOT: '/var/lib/edupay-academico/files',
+  STORAGE_TEMP_ROOT: '/var/lib/edupay-academico/tmp',
   ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
   ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
 };

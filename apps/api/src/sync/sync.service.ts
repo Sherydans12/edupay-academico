@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 
 import type { Environment } from '../config/environment';
 import { Prisma } from '../generated/prisma/client';
@@ -39,6 +40,13 @@ type RunCounters = {
 type DrainedEntity = {
   readonly safeToAdvance: boolean;
   readonly terminalWatermark: string;
+};
+
+type LeaseHeartbeat = {
+  readonly renewAfterMs: number;
+  readonly runId: string;
+  readonly tenantId: string;
+  lastRenewedAtMs: number;
 };
 
 type SourceConflict = {
@@ -127,6 +135,7 @@ export class EduPaySyncService {
         counts: this.publicCounts(counters),
       };
     }
+    const heartbeat = this.createLeaseHeartbeat(tenantId, runId);
 
     this.logger.log({
       event: 'edupay_sync_started',
@@ -144,6 +153,7 @@ export class EduPaySyncService {
           runId,
           correlationId,
           counters,
+          heartbeat,
         );
         watermarkAdvanced = result.watermarkAdvanced;
       } else {
@@ -152,6 +162,7 @@ export class EduPaySyncService {
           runId,
           correlationId,
           counters,
+          heartbeat,
         );
         watermarkAdvanced = result.watermarkAdvanced;
         snapshotComplete = result.snapshotComplete;
@@ -224,6 +235,7 @@ export class EduPaySyncService {
     runId: string,
     correlationId: string,
     counters: RunCounters,
+    heartbeat: LeaseHeartbeat,
   ): Promise<{ watermarkAdvanced: boolean }> {
     const states = await this.prisma.syncState.findMany({
       where: {
@@ -244,8 +256,10 @@ export class EduPaySyncService {
       mode: 'incremental',
       runId,
       watermark: watermarks.get('COURSE') ?? undefined,
+      heartbeat,
     });
     if (courses.safeToAdvance) {
+      await this.heartbeatLease(heartbeat, true);
       await this.persistWatermark(
         configuration.tenantId,
         'COURSE',
@@ -261,8 +275,10 @@ export class EduPaySyncService {
       mode: 'incremental',
       runId,
       watermark: watermarks.get('STUDENT') ?? undefined,
+      heartbeat,
     });
     if (students.safeToAdvance) {
+      await this.heartbeatLease(heartbeat, true);
       await this.persistWatermark(
         configuration.tenantId,
         'STUDENT',
@@ -278,12 +294,14 @@ export class EduPaySyncService {
     runId: string,
     correlationId: string,
     counters: RunCounters,
+    heartbeat: LeaseHeartbeat,
   ): Promise<{ watermarkAdvanced: boolean; snapshotComplete: boolean }> {
-    await this.renewLease(configuration.tenantId, runId);
+    await this.heartbeatLease(heartbeat, true);
     const snapshot = await this.client.createSnapshot(
       configuration.sourceTenantId,
       correlationId,
     );
+    await this.heartbeatLease(heartbeat, true);
     const courses = await this.drainCourses({
       configuration,
       correlationId,
@@ -292,6 +310,7 @@ export class EduPaySyncService {
       runId,
       snapshot: snapshot.snapshotToken,
       snapshotRunId: snapshot.snapshot.runId,
+      heartbeat,
     });
     const students = await this.drainStudents({
       configuration,
@@ -301,8 +320,9 @@ export class EduPaySyncService {
       runId,
       snapshot: snapshot.snapshotToken,
       snapshotRunId: snapshot.snapshot.runId,
+      heartbeat,
     });
-    await this.renewLease(configuration.tenantId, runId);
+    await this.heartbeatLease(heartbeat, true);
     const completed = await this.client.completeSnapshot(
       configuration.sourceTenantId,
       correlationId,
@@ -312,6 +332,7 @@ export class EduPaySyncService {
         studentWatermark: students.terminalWatermark,
       },
     );
+    await this.heartbeatLease(heartbeat, true);
     if (
       completed.snapshot.runId !== snapshot.snapshot.runId ||
       !completed.snapshot.complete
@@ -327,6 +348,7 @@ export class EduPaySyncService {
       return { watermarkAdvanced: false, snapshotComplete: true };
     }
 
+    await this.heartbeatLease(heartbeat, true);
     const absenceDeactivated = await this.applyCompleteFullGeneration(
       configuration.tenantId,
       runId,
@@ -341,6 +363,7 @@ export class EduPaySyncService {
     configuration: Awaited<ReturnType<EduPaySyncService['configuration']>>;
     correlationId: string;
     counters: RunCounters;
+    heartbeat: LeaseHeartbeat;
     mode: 'incremental' | 'full';
     runId: string;
     snapshot?: string | undefined;
@@ -353,7 +376,7 @@ export class EduPaySyncService {
     let terminalWatermark: string | null = null;
     let sourceRunId: string | undefined;
     do {
-      await this.renewLease(input.configuration.tenantId, input.runId);
+      await this.heartbeatLease(input.heartbeat, true);
       const page =
         input.mode === 'full'
           ? await this.client.courseFeed(
@@ -372,6 +395,7 @@ export class EduPaySyncService {
                 ...(cursor ? { cursor } : { watermark: input.watermark }),
               },
             );
+      await this.heartbeatLease(input.heartbeat, true);
       this.assertPageScope(
         page.sourceTenantId,
         input.configuration.sourceTenantId,
@@ -402,6 +426,7 @@ export class EduPaySyncService {
     const duplicates = this.duplicateIds(items);
     let safeToAdvance = true;
     for (const conflict of conflicts) {
+      await this.heartbeatLease(input.heartbeat);
       await this.processSourceConflict(
         input.configuration.tenantId,
         input.configuration.sourceTenantId,
@@ -410,8 +435,10 @@ export class EduPaySyncService {
         conflict,
         input.counters,
       );
+      await this.heartbeatLease(input.heartbeat);
     }
     for (const item of items) {
+      await this.heartbeatLease(input.heartbeat);
       this.assertPageScope(
         item.sourceTenantId,
         input.configuration.sourceTenantId,
@@ -439,9 +466,11 @@ export class EduPaySyncService {
           input.counters,
         );
         input.counters.conflictedCount += 1;
+        await this.heartbeatLease(input.heartbeat);
         continue;
       }
       if (!(await this.applyCourseItem(input, item))) safeToAdvance = false;
+      await this.heartbeatLease(input.heartbeat);
     }
     return { safeToAdvance, terminalWatermark };
   }
@@ -450,6 +479,7 @@ export class EduPaySyncService {
     configuration: Awaited<ReturnType<EduPaySyncService['configuration']>>;
     correlationId: string;
     counters: RunCounters;
+    heartbeat: LeaseHeartbeat;
     mode: 'incremental' | 'full';
     runId: string;
     snapshot?: string | undefined;
@@ -462,7 +492,7 @@ export class EduPaySyncService {
     let terminalWatermark: string | null = null;
     let sourceRunId: string | undefined;
     do {
-      await this.renewLease(input.configuration.tenantId, input.runId);
+      await this.heartbeatLease(input.heartbeat, true);
       const page =
         input.mode === 'full'
           ? await this.client.studentFeed(
@@ -481,6 +511,7 @@ export class EduPaySyncService {
                 ...(cursor ? { cursor } : { watermark: input.watermark }),
               },
             );
+      await this.heartbeatLease(input.heartbeat, true);
       this.assertPageScope(
         page.sourceTenantId,
         input.configuration.sourceTenantId,
@@ -511,6 +542,7 @@ export class EduPaySyncService {
     let safeToAdvance = true;
     const duplicates = this.duplicateIds(items);
     for (const conflict of conflicts) {
+      await this.heartbeatLease(input.heartbeat);
       await this.processSourceConflict(
         input.configuration.tenantId,
         input.configuration.sourceTenantId,
@@ -519,8 +551,10 @@ export class EduPaySyncService {
         conflict,
         input.counters,
       );
+      await this.heartbeatLease(input.heartbeat);
     }
     for (const item of items) {
+      await this.heartbeatLease(input.heartbeat);
       this.assertPageScope(
         item.sourceTenantId,
         input.configuration.sourceTenantId,
@@ -548,9 +582,11 @@ export class EduPaySyncService {
           input.counters,
         );
         input.counters.conflictedCount += 1;
+        await this.heartbeatLease(input.heartbeat);
         continue;
       }
       if (!(await this.applyStudentItem(input, item))) safeToAdvance = false;
+      await this.heartbeatLease(input.heartbeat);
     }
     return { safeToAdvance, terminalWatermark };
   }
@@ -701,6 +737,7 @@ export class EduPaySyncService {
     studentWatermark: string,
   ): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
+      await this.renewLeaseInTransaction(tx, tenantId, runId);
       const configuration = await tx.syncConfiguration.update({
         where: { tenantId_source: { tenantId, source: EDUPAY_SOURCE } },
         data: { fullGeneration: { increment: 1 } },
@@ -874,6 +911,35 @@ export class EduPaySyncService {
     return rows[0]?.ownerRunId === runId;
   }
 
+  private createLeaseHeartbeat(
+    tenantId: string,
+    runId: string,
+  ): LeaseHeartbeat {
+    const leaseSeconds = this.config.get('EDUPAY_SYNC_LEASE_SECONDS', 900);
+    return {
+      tenantId,
+      runId,
+      renewAfterMs: Math.max(1_000, Math.floor((leaseSeconds * 1_000) / 3)),
+      lastRenewedAtMs: this.heartbeatNow(),
+    };
+  }
+
+  private heartbeatNow(): number {
+    return performance.now();
+  }
+
+  private async heartbeatLease(
+    heartbeat: LeaseHeartbeat,
+    force = false,
+  ): Promise<void> {
+    const now = this.heartbeatNow();
+    if (!force && now - heartbeat.lastRenewedAtMs < heartbeat.renewAfterMs) {
+      return;
+    }
+    await this.renewLease(heartbeat.tenantId, heartbeat.runId);
+    heartbeat.lastRenewedAtMs = this.heartbeatNow();
+  }
+
   private async renewLease(tenantId: string, runId: string): Promise<void> {
     const leaseSeconds = this.config.get('EDUPAY_SYNC_LEASE_SECONDS', 900);
     const renewed = await this.prisma.$executeRaw(Prisma.sql`
@@ -885,12 +951,33 @@ export class EduPaySyncService {
         AND owner_run_id = ${runId}::uuid
         AND locked_until > CURRENT_TIMESTAMP
     `);
-    if (renewed !== 1) {
-      throw new SyncConfigurationError(
-        'SYNC_LEASE_LOST',
-        'The synchronization execution lease was lost.',
-      );
-    }
+    this.assertLeaseRenewed(renewed);
+  }
+
+  private async renewLeaseInTransaction(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    runId: string,
+  ): Promise<void> {
+    const leaseSeconds = this.config.get('EDUPAY_SYNC_LEASE_SECONDS', 900);
+    const renewed = await tx.$executeRaw(Prisma.sql`
+      UPDATE sync_leases
+      SET locked_until = CURRENT_TIMESTAMP + (${leaseSeconds} * INTERVAL '1 second'),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = ${tenantId}
+        AND source = ${EDUPAY_SOURCE}
+        AND owner_run_id = ${runId}::uuid
+        AND locked_until > CURRENT_TIMESTAMP
+    `);
+    this.assertLeaseRenewed(renewed);
+  }
+
+  private assertLeaseRenewed(renewed: number): void {
+    if (renewed === 1) return;
+    throw new SyncConfigurationError(
+      'SYNC_LEASE_LOST',
+      'The synchronization execution lease was lost.',
+    );
   }
 
   private async releaseLease(tenantId: string, runId: string): Promise<void> {

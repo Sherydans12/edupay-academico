@@ -19,6 +19,7 @@ import {
   configureEduPaySync,
   SyncConfigurationConflictError,
 } from '../src/sync/sync-configuration';
+import { SyncItemApplicationService } from '../src/sync/sync-item-application.service';
 import { EduPaySyncService } from '../src/sync/sync.service';
 import { EduPaySourceFixture } from './support/edupay-source.fixture';
 import { IdentityInternalFixture } from './support/identity-internal.fixture';
@@ -41,6 +42,7 @@ describe
     let application: INestApplication;
     let prisma: PrismaService;
     let sync: EduPaySyncService;
+    let syncItems: SyncItemApplicationService;
     let academicYearId: string;
 
     beforeAll(async () => {
@@ -66,6 +68,7 @@ describe
       await application.init();
       prisma = application.get(PrismaService);
       sync = application.get(EduPaySyncService);
+      syncItems = application.get(SyncItemApplicationService);
     });
 
     beforeEach(async () => {
@@ -749,6 +752,122 @@ describe
       );
       await privateSync.releaseLease(TENANT_A, firstRun);
       await privateSync.releaseLease(TENANT_B, otherTenantRun);
+    });
+
+    it('renews the database lease by elapsed time while applying buffered items', async () => {
+      const privateSync = sync as unknown as {
+        acquireLease(tenantId: string, runId: string): Promise<boolean>;
+        heartbeatNow(): number;
+      };
+      let monotonicMs = 0;
+      const clock = vi
+        .spyOn(privateSync, 'heartbeatNow')
+        .mockImplementation(() => monotonicMs);
+      const originalApplyCourse = syncItems.applyCourse.bind(syncItems);
+      let applicationCount = 0;
+      let competingLeaseAcquired: boolean | undefined;
+      const apply = vi
+        .spyOn(syncItems, 'applyCourse')
+        .mockImplementation(async (context, item) => {
+          if (applicationCount === 1) {
+            const lease = await prisma.syncLease.findUniqueOrThrow({
+              where: {
+                tenantId_source: {
+                  tenantId: TENANT_A,
+                  source: EDUPAY_SOURCE,
+                },
+              },
+            });
+            expect(lease.lockedUntil.getTime() - Date.now()).toBeGreaterThan(
+              45_000,
+            );
+            competingLeaseAcquired = await privateSync.acquireLease(
+              TENANT_A,
+              randomUUID(),
+            );
+          }
+          const result = await originalApplyCourse(context, item);
+          applicationCount += 1;
+          if (applicationCount === 1) {
+            await prisma.syncLease.update({
+              where: {
+                tenantId_source: {
+                  tenantId: TENANT_A,
+                  source: EDUPAY_SOURCE,
+                },
+              },
+              data: { lockedUntil: new Date(Date.now() + 5_000) },
+            });
+            monotonicMs += 21_000;
+          }
+          return result;
+        });
+
+      try {
+        const result = await sync.execute(TENANT_A, 'INCREMENTAL', 'MANUAL');
+        expect(result.status).toBe('SUCCEEDED');
+        expect(applicationCount).toBe(2);
+        expect(competingLeaseAcquired).toBe(false);
+        expect(
+          await prisma.syncState.count({ where: { tenantId: TENANT_A } }),
+        ).toBe(2);
+      } finally {
+        apply.mockRestore();
+        clock.mockRestore();
+      }
+    });
+
+    it('fails closed without a checkpoint when lease ownership is lost during item application', async () => {
+      source.courses = [courseItem(COURSE_A, 'Primero A')];
+      source.students = [];
+      const privateSync = sync as unknown as { heartbeatNow(): number };
+      let monotonicMs = 0;
+      const clock = vi
+        .spyOn(privateSync, 'heartbeatNow')
+        .mockImplementation(() => monotonicMs);
+      const originalApplyCourse = syncItems.applyCourse.bind(syncItems);
+      const stolenRunId = randomUUID();
+      const apply = vi
+        .spyOn(syncItems, 'applyCourse')
+        .mockImplementation(async (context, item) => {
+          const result = await originalApplyCourse(context, item);
+          await prisma.syncLease.update({
+            where: {
+              tenantId_source: {
+                tenantId: TENANT_A,
+                source: EDUPAY_SOURCE,
+              },
+            },
+            data: {
+              ownerRunId: stolenRunId,
+              lockedUntil: new Date(Date.now() + 60_000),
+            },
+          });
+          monotonicMs += 21_000;
+          return result;
+        });
+
+      try {
+        const result = await sync.execute(TENANT_A, 'INCREMENTAL', 'MANUAL');
+        expect(result.status).toBe('FAILED');
+        expect(
+          await prisma.course.count({ where: { tenantId: TENANT_A } }),
+        ).toBe(1);
+        expect(
+          await prisma.syncState.count({ where: { tenantId: TENANT_A } }),
+        ).toBe(0);
+        await expect(
+          prisma.syncRun.findUniqueOrThrow({
+            where: { tenantId_id: { tenantId: TENANT_A, id: result.runId } },
+          }),
+        ).resolves.toMatchObject({
+          errorCode: 'SYNC_LEASE_LOST',
+          watermarkAdvanced: false,
+        });
+      } finally {
+        apply.mockRestore();
+        clock.mockRestore();
+      }
     });
 
     function setDefaultSourceRows(): void {

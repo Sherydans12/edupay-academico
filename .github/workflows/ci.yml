@@ -57,3 +57,58 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  postgresql-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: edupay_ci
+          POSTGRES_PASSWORD: edupay_ci_password
+          POSTGRES_DB: edupay_academico_ci
+          TZ: UTC
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edupay_ci -d edupay_academico_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://edupay_ci:edupay_ci_password@localhost:5432/edupay_academico_ci?schema=public
+      TEST_DATABASE_URL: postgresql://edupay_ci:edupay_ci_password@localhost:5432/edupay_academico_ci?schema=public
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Prisma configuration
+        run: pnpm db:validate
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Apply production migrations
+        run: pnpm --filter @edupay/api db:migrate:deploy
+
+      # These suites reset one disposable schema between files, so the
+      # integration gate is deliberately serialized and reports every test.
+      - name: Run PostgreSQL-backed API E2E, including EduPay synchronization
+        run: pnpm --filter @edupay/api test -- --no-file-parallelism --reporter=verbose

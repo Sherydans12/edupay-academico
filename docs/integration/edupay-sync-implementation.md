@@ -95,6 +95,14 @@ Source-declared conflicts occupy scanned cursor positions, are recorded, and do
 not by themselves hold the entity watermark forever; nightly full
 reconciliation is the repair backstop.
 
+`SUCCEEDED` means the synchronization protocol and all safe checkpoint rules
+completed successfully; it does not mean every source record is free of data
+quality issues. A run may therefore be `SUCCEEDED` with `conflictedCount > 0`
+when every conflict was declared by the source and its scanned/presence
+position is safe. Consumer-detected conflicts or target failures that make an
+entity unsafe to checkpoint continue to produce `PARTIAL` or `FAILED` and do
+not advance that entity's watermark.
+
 ## Full reconciliation and absence
 
 The runner uses the source protocol exactly:
@@ -189,6 +197,13 @@ and performs bounded orchestration-level retry only for retryable source
 failures. Incremental cadence is a UTC duration (default 60 minutes); full
 cadence is the next configured UTC hour (default 02:00 UTC), never OS local
 timezone.
+
+The runner awaits a time-aware lease heartbeat while applying buffered target
+items, renewing after one third of the configured lease duration has elapsed.
+It also verifies ownership around source requests, immediately before every
+watermark commit, and inside the final full-generation transaction. There is no
+detached timer. A failed renewal aborts the run as `SYNC_LEASE_LOST`; no later
+watermark or absence generation is committed.
 
 An operator can run a validated enabled tenant without supplying a token on the
 command line:
