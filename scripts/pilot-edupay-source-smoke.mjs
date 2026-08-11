@@ -55,13 +55,33 @@ async function run(tool, args, options = {}) {
       const result = { code: code ?? -1, stdout, stderr };
       if (result.code === 0 || options.allowFailure)
         return resolvePromise(result);
+      const diagnostics = options.safeDiagnostics
+        ? safeDiagnostics(`${stdout}\n${stderr}`)
+        : '';
       rejectPromise(
         new Error(
-          `${options.label ?? `${tool} ${args.join(' ')}`} failed (${result.code}).`,
+          `${options.label ?? `${tool} ${args.join(' ')}`} failed (${result.code}).${diagnostics ? ` Safe diagnostic: ${diagnostics}` : ''}`,
         ),
       );
     });
   });
+}
+
+function safeDiagnostics(output) {
+  return output
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, 'postgresql://[redacted]')
+    .replace(/(token|secret|password|key)\s*[:=]\s*[^\s]+/gi, '$1=[redacted]')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) =>
+      /^(?:ERROR:|DETAIL:|HINT:|NOTICE:|column |relation |syntax |invalid |Prisma|Error:)/i.test(
+        line,
+      ),
+    )
+    .slice(-5)
+    .join(' | ')
+    .slice(0, 1_200);
 }
 
 async function waitUntil(label, check, timeoutMs = 60_000) {
@@ -161,7 +181,7 @@ async function sql(postgres, statement) {
         '-c',
         statement,
       ],
-      { label: `query ${postgres.database}` },
+      { label: `query ${postgres.database}`, safeDiagnostics: true },
     )
   ).stdout.trim();
 }

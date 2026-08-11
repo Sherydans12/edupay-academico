@@ -486,6 +486,7 @@ async function main() {
     cwd: identityRoot,
     env: identityEnv,
     label: 'run independent Identity email worker',
+    safeDiagnostics: true,
   });
   assert.match(
     identityEmailWorker.stdout,
