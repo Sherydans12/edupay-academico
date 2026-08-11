@@ -68,18 +68,15 @@ async function run(tool, args, options = {}) {
 }
 
 function safeDiagnostics(output) {
-  return output
+  const redacted = output
     .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, 'postgresql://[redacted]')
     .replace(/(token|secret|password|key)\s*[:=]\s*[^\s]+/gi, '$1=[redacted]')
+    .replace(/[A-Za-z0-9_-]{32,}/g, '[redacted]');
+  return redacted
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) =>
-      /^(?:ERROR:|DETAIL:|HINT:|NOTICE:|column |relation |syntax |invalid |Prisma|Error:)/i.test(
-        line,
-      ),
-    )
-    .slice(-5)
+    .slice(-12)
     .join(' | ')
     .slice(0, 1_200);
 }
