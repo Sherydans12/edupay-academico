@@ -1,9 +1,9 @@
 # Colegio Conquistadores pilot production runbook
 
 Status: proposed single-VPS operational baseline. This runbook does not close
-D-15 hosting/RTO/RPO/support or D-11 malware/retention/legal hold. D-17 is
-resolved for the pilot by ADR-0019 and D-18 is resolved for the pilot baseline
-by ADR-0020.
+D-15 hosting/RTO/RPO/support. D-11 is resolved for the controlled pilot by
+ADR-0018; D-17 is resolved for the pilot by ADR-0019 and D-18 is resolved for
+the pilot baseline by ADR-0020.
 
 ## 1. Proposed topology
 
@@ -13,6 +13,7 @@ Student/Teacher/Admin browser
   -> HTTPS edupay-academico-api -> private Academic PostgreSQL
                                   -> private/HTTPS Identity internal API
                                   -> private Academic files volume
+                                  -> private ClamAV/clamd service
 Browser
   -> HTTPS edupay-identity-api -> private Identity PostgreSQL
 
@@ -39,6 +40,7 @@ Prisma package is introduced.
 | `edupay-academico-web` | `pnpm --filter @edupay/web start` | One or more web replicas; build-time public URLs only. |
 | `edupay-academico-api` | `node apps/api/dist/main.js` | One API replica for the local filesystem pilot. |
 | `edupay-academico-notification-worker` | `pnpm --filter @edupay/api worker` | One instance for the pilot; the PostgreSQL claim lease supports later scale-out. |
+| `clamav` | ClamAV image with `clamd` | One private instance; no host/public port; bounded CPU/memory. |
 | `edupay-identity-api` | `node dist/main.js` from Identity repository | One or more API replicas only after shared key/database/session operations are validated. |
 | `edupay-identity-email-worker` | `node dist/email/worker-main.js` (`pnpm email:deliver`) | One scheduled runner; do not run it inside every API replica. |
 
@@ -93,7 +95,7 @@ history.
 5. Run both repositories' schema validation, generated-client checks, and migration status checks against their own databases.
 6. Take a pre-migration backup and verify that the backup artifact is outside the live database/file volumes.
 7. Run Identity migrations, then Academic migrations, each as a single controlled job.
-8. Start Identity API, verify JWKS and liveness, then start Academic API and verify liveness/readiness.
+8. Start the private ClamAV service and verify its healthcheck. Start Identity API, verify JWKS and liveness, then start Academic API and verify liveness/readiness including the scanner dependency.
 9. Start exactly one Academic notification worker and one Identity email runner/schedule.
 10. Run the coordinated production-safe Identity and Academic tenant/admin bootstrap described in §9.
 11. Run the controlled pilot workflow with synthetic or approved pilot data, verify audit/request correlation, and record the release evidence.
@@ -104,11 +106,12 @@ Académico exposes:
 
 - `GET /api/v1/health` — compatibility liveness response;
 - `GET /api/v1/health/live` — liveness only;
-- `GET /api/v1/health/ready` — checks a live `SELECT 1` against Academic PostgreSQL and verifies both private storage directories are readable/writable and mounted with the configured physical guard.
+- `GET /api/v1/health/ready` — checks a live `SELECT 1` against Academic PostgreSQL, both private storage directories, the configured physical guard, and the private malware scanner.
 
-Readiness returns only service/status and `database`/`storage` check names. A
-failure is a safe `503`; it does not expose tenant data, paths, credentials, or
-database error details. The web route is `GET /api/health`.
+Readiness returns only service/status and `database`/`storage`/`malwareScanner`
+check names. A failure is a safe `503`; it does not expose tenant data, paths,
+credentials, ClamAV internals, or database error details. The web route is
+`GET /api/health`.
 
 Identity currently exposes `GET /api/v1/identity/health`, which is liveness
 only. Because the Identity repository is explicitly read-only for this task,
@@ -178,29 +181,44 @@ listing, or a download URL. Downloads remain authorized API streams.
 
 ## 8. D-11 malware/retention release gate
 
-Current evidence:
+ADR-0018 resolves D-11 for the 14-day controlled pilot:
 
-- filename, declared MIME, extension, size, signature, bounded package, image,
-  and text-content validation are implemented;
-- immutable originals, tenant-local deduplication, quota reservation, and
-  physical-capacity checks are implemented;
-- the database has a scan-status seam, but the current local adapter persists
-  uploaded blobs as `NOT_SCANNED` and does not run an antivirus or malware
-  scanner;
-- no retention, deletion, export, legal hold, or orphan-cleanup duration is
-  claimed by this runbook.
+- production uses the private ClamAV/`clamd` adapter and fails closed;
+- an upload is staged, type/signature validated, hashed, scanned, and only a
+  `CLEAR` result may proceed to deduplication, promotion, finalization, and
+  Learning/Submission reference creation;
+- `INFECTED`, `FAILED`, unavailable, and timeout results reject the upload,
+  release/reconcile its reservation, and clean staged bytes;
+- only authorized `AVAILABLE` files with `StoredBlob.scanStatus=CLEAR` can be
+  downloaded;
+- valid finalized Learning attachments and Submission evidence have no
+  automatic purge during the pilot and no Student/Teacher finalized-evidence
+  hard-delete UI/API;
+- expired intents, failed validation, scanner failures, infected uploads, and
+  abandoned staging are cleaned by a bounded sweep of at most 100 intents at
+  startup and every 15 minutes; and
+- future destructive retention/deletion requires approved legal-hold semantics.
 
-Exact risk: a file can pass type/content validation and still contain malware
-or an exploit payload. It can then be retained and downloaded by an authorized
-user, creating endpoint, school-network, and downstream-device risk. Type
-validation is not malware detection and must not be represented as such.
+Type/signature validation remains a separate control and must not be described
+as malware scanning. The explicit `fake` scanner is permitted only for
+development/test and is rejected by production environment validation.
 
-Required release decision: the security/operations owner must either (a) approve
-a tightly controlled pilot cohort and documented compensating controls for
-unscanned uploads, with the residual risk recorded, or (b) block pilot file
-uploads until an approved scanner/quarantine adapter and failure policy exist.
-No agent may choose retention, legal hold, deletion, or scanning behavior for
-D-11 without the relevant owner approvals.
+Before launch, record evidence for a healthy ClamAV service, a known clean test
+file accepted, an isolated EICAR test file rejected, rejected-file download
+denial, and empty staging after rejection. Do not use actual malware or commit
+an unsafe test artifact.
+
+### ClamAV signature operations
+
+The Compose service may update signatures on its own schedule and uses a
+persistent signature volume when required by the selected image. Application
+startup is not coupled to an Internet signature update on every boot: the
+service healthcheck validates `clamd`, and any scan failure remains fail closed.
+Operators must monitor signature freshness and run the image's supported
+signature-update command or restart procedure during a maintenance window,
+then repeat the clean-file readiness test. ClamAV signature data is an
+operational cache, not application evidence, and is not required in the
+application evidence backup.
 
 ## 9. Tenant/admin bootstrap procedure
 
@@ -259,6 +277,8 @@ Structured evidence must correlate:
   category, and worker run summaries;
 - upload intent/file/submission/revision IDs, tenant context, outcome, and
   physical/quota rejection category, never file bytes.
+- malware scan start/completion, outcome category, duration, scanner health,
+  and bounded pending/failure counts, never file contents or raw daemon output.
 
 Minimum pilot metrics/alerts:
 
@@ -266,6 +286,8 @@ Minimum pilot metrics/alerts:
 - Academic and Identity PostgreSQL connectivity, migration failure, and pool saturation;
 - free bytes and free percentage on final and staging volumes;
 - storage quota `CRITICAL`/`FULL`, reservation failures, and reconciliation drift;
+- malware scanner unavailable/timeout/failure counts, infected detections, scan
+  latency, signature freshness, and pending scan backlog;
 - Academic notification worker last-success/run age, retry and `FAILED` counts;
 - Identity email runner last-success/run age, outbox `FAILED` count, and provider failures;
 - terminal notification/email failures and repeated Identity service-auth failures;

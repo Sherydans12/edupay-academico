@@ -92,9 +92,11 @@ export class BoundedMultipartUploadInterceptor implements NestInterceptor {
   private async releaseFailedIntent(context: ExecutionContext): Promise<void> {
     const request = context.switchToHttp().getRequest<{
       params?: { intentId?: string };
+      file?: { path?: string };
     }>();
     const intentId = request.params?.intentId;
     if (intentId) await this.storage.releaseFailedUploadIntent(this.context(), intentId);
+    if (request.file?.path) await rm(request.file.path, { force: true });
   }
 
   private context(): AcademicRequestContext {

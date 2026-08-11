@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Environment } from '../config/environment';
 
 import { AcademicModule } from '../academic/academic.module';
 import { SecurityFoundationModule } from '../security/security-foundation.module';
@@ -14,17 +16,47 @@ import { SubmissionController } from './submission.controller';
 import { LocalPrivateStorageAdapter } from './local-private-storage.adapter';
 import { PRIVATE_STORAGE_PROVIDER } from './private-storage.port';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ClamAvMalwareScanner } from './clamav-malware-scanner.adapter';
+import { FakeMalwareScanner } from './fake-malware-scanner.adapter';
+import { BoundedMalwareScanner } from './bounded-malware-scanner';
+import {
+  MALWARE_SCANNER,
+  MALWARE_SCANNER_ADAPTER,
+  type MalwareScanner,
+} from './malware-scanner.port';
+import { StorageCleanupService } from './storage-cleanup.service';
 
 @Module({
   imports: [SecurityFoundationModule, AcademicModule, NotificationsModule],
   controllers: [StorageController, SubmissionController],
   providers: [
     LocalPrivateStorageAdapter,
+    ClamAvMalwareScanner,
+    FakeMalwareScanner,
+    {
+      provide: MALWARE_SCANNER_ADAPTER,
+      inject: [ConfigService, ClamAvMalwareScanner, FakeMalwareScanner],
+      useFactory: (
+        config: ConfigService<Environment, true>,
+        clamav: ClamAvMalwareScanner,
+        fake: FakeMalwareScanner,
+      ): MalwareScanner =>
+        config.get('ACADEMIC_MALWARE_SCANNER') === 'clamav' ? clamav : fake,
+    },
+    {
+      provide: MALWARE_SCANNER,
+      inject: [MALWARE_SCANNER_ADAPTER, ConfigService],
+      useFactory: (
+        adapter: MalwareScanner,
+        config: ConfigService<Environment, true>,
+      ): MalwareScanner => new BoundedMalwareScanner(adapter, config),
+    },
     {
       provide: PRIVATE_STORAGE_PROVIDER,
       useExisting: LocalPrivateStorageAdapter,
     },
     StorageService,
+    StorageCleanupService,
     SubmissionService,
     BoundedMultipartUploadInterceptor,
     {
@@ -40,6 +72,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     StorageService,
     SubmissionService,
     LocalPrivateStorageAdapter,
+    MALWARE_SCANNER,
     LEARNING_STUDENT_WORK_PORT,
     LEARNING_ATTACHMENT_PORT,
   ],

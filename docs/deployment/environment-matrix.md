@@ -45,10 +45,14 @@ values in the release evidence.
 | Final private files | `/var/lib/edupay-academico/files` | — |
 | Staging/temp files | `/var/lib/edupay-academico/tmp` | — |
 | Physical guard | `STORAGE_MIN_FREE_BYTES` and `STORAGE_MIN_FREE_PERCENTAGE` | — |
+| Malware scanner mode | `ACADEMIC_MALWARE_SCANNER=clamav` in production; `fake` only in explicit development/test environments | — |
+| Private ClamAV endpoint | `ACADEMIC_CLAMAV_HOST=clamav`, `ACADEMIC_CLAMAV_PORT=3310` | — |
+| Scanner timeout/concurrency | `ACADEMIC_CLAMAV_TIMEOUT_MS=10000`, `ACADEMIC_MALWARE_SCAN_CONCURRENCY=2` | — |
 
 Production Académico startup rejects missing or relative storage paths, missing
 physical guard values, equal final/temp paths, insecure Identity endpoints,
-fake email mode, and an empty web-origin allowlist. Production web builds
+fake email mode, fake malware-scanner mode, missing/malformed ClamAV settings,
+and an empty web-origin allowlist. Production web builds
 reject HTTP API or Identity URLs. Identity startup rejects insecure cookies,
 an empty trusted-origin allowlist, and an absent current Académico service
 token.
@@ -63,4 +67,6 @@ token.
 - [ ] Internal Identity traffic uses a private network path or HTTPS and carries no browser `Origin`.
 - [ ] The shared service token is present only in the two server-side secret stores.
 - [ ] The Academic final and staging directories are separate writable mounts and are not public/static mounts.
+- [ ] `ACADEMIC_MALWARE_SCANNER=clamav`, private ClamAV host/port/timeout, and bounded scan concurrency are present in managed runtime configuration; fake mode is absent from production.
+- [ ] ClamAV has no host/public port, its healthcheck passes, and signature freshness/update ownership is recorded.
 - [ ] Resend sender domains and reply-to values are approved; no real provider is contacted by ordinary CI.

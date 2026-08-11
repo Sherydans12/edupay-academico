@@ -26,6 +26,7 @@ describe('Health endpoint (e2e)', () => {
       'academic_test_service_token_000000000000000000000000',
     );
     vi.stubEnv('ACADEMIC_TRUSTED_WEB_ORIGINS', 'http://localhost:3000');
+    vi.stubEnv('ACADEMIC_MALWARE_SCANNER', 'fake');
 
     const { AppModule } = await import('../src/app.module');
     const testingModule = await Test.createTestingModule({

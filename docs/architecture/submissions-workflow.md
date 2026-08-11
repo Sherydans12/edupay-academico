@@ -48,6 +48,10 @@ This supports corrections and an audit trail as accepted in [ADR-0013](../decisi
 - Each file is transferred independently through an authorized UploadIntent;
   the create-submission JSON mutation references only finalized opaque
   `fileObjectIds` (one to twenty).
+- An upload must pass authoritative type/signature validation and the
+  production malware-scanning gate before its FileObject can be finalized or
+  referenced by a SubmissionRevision. Only `StoredBlob.scanStatus=CLEAR` files
+  are usable or downloadable.
 - File metadata is associated with the immutable revision that submitted it.
 - A teacher can download only after resource authorization.
 - Replacing a file creates a new revision after CHANGES_REQUESTED; it must not silently mutate reviewed history.

@@ -167,6 +167,12 @@ export class SubmissionService {
           orderBy: { revisionNumber: 'asc' },
           include: {
             fileReferences: {
+              where: {
+                fileObject: {
+                  lifecycle: 'AVAILABLE',
+                  storedBlob: { lifecycle: 'AVAILABLE', scanStatus: 'CLEAR' },
+                },
+              },
               include: { fileObject: true },
               orderBy: { createdAt: 'asc' },
             },
@@ -201,7 +207,15 @@ export class SubmissionService {
         revisions: {
           orderBy: { revisionNumber: 'asc' },
           include: {
-            fileReferences: { include: { fileObject: true } },
+            fileReferences: {
+              where: {
+                fileObject: {
+                  lifecycle: 'AVAILABLE',
+                  storedBlob: { lifecycle: 'AVAILABLE', scanStatus: 'CLEAR' },
+                },
+              },
+              include: { fileObject: true },
+            },
             reviews: { orderBy: { createdAt: 'asc' } },
           },
         },

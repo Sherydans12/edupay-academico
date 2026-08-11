@@ -10,6 +10,7 @@ export interface AcademicAuditEvent {
   readonly courseSubjectId?: string;
   readonly resourceId: string;
   readonly resourceType: string;
+  readonly summary?: Readonly<Record<string, string | number | boolean>>;
 }
 
 export interface AcademicAuditPort {
@@ -33,6 +34,7 @@ export class CorrelatedAcademicAuditLogger implements AcademicAuditPort {
       requestId: event.context.requestId,
       resourceId: event.resourceId,
       resourceType: event.resourceType,
+      summary: event.summary,
       sessionId: event.context.tenant.sessionId,
       tenantId: event.context.tenant.tenantId,
     });

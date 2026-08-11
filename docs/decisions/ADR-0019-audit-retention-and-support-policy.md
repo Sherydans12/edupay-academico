@@ -64,6 +64,8 @@ retention sufficiency.
 
 ## Scope boundaries
 
-D-11 remains open for malware scanning, retention/deletion implementation,
-legal hold, export, and cleanup behavior. D-15 remains open for final provider,
+D-11 is resolved for the controlled pilot by
+[ADR-0018](ADR-0018-file-security-retention-and-malware-policy.md). Permanent
+retention/deletion, legal hold, export, and future scanner-policy behavior
+remain subject to later review. D-15 remains open for final provider,
 backup destination, RTO/RPO, and support acceptance.

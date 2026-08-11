@@ -1,8 +1,8 @@
 # Pilot release checklist
 
 Status: controlled release gate. This checklist does not provide production
-credentials and does not close D-11 or D-15. D-17 and D-18 are resolved for the
-pilot by ADR-0019 and ADR-0020.
+credentials and does not close D-15. D-11 is resolved for the controlled pilot
+by ADR-0018; D-17 and D-18 are resolved for the pilot by ADR-0019 and ADR-0020.
 
 ## Automated repository gate
 
@@ -76,6 +76,11 @@ modify it or its migrations from the Académico release process.
 - [ ] Current/previous service-token rotation references and expiry ownership are recorded; the token value is not.
 - [ ] One Academic notification worker and one Identity email runner/schedule are active; no API replica starts either worker.
 - [ ] `GET /api/v1/health/live`, `GET /api/v1/health/ready`, web `/api/health`, Identity health, and worker `--check` pass.
+- [ ] ClamAV is healthy on the private network, has no host/public port, and `ACADEMIC_MALWARE_SCANNER=clamav` is configured with validated private host, port, timeout, and bounded concurrency.
+- [ ] A known clean synthetic file is accepted with `scanStatus=CLEAR`.
+- [ ] A controlled isolated EICAR test file is rejected with a safe malware error, never becomes available/downloadable, and leaves staging empty. No actual malware payload is used.
+- [ ] Failed/timeout scanner paths reject uploads, release/reconcile quota reservations, and leave no staged bytes.
+- [ ] Valid finalized Learning attachments and Submission evidence have no automatic pilot purge; no finalized-evidence hard-delete UI/API exists.
 - [ ] Backup job, disk, database, notification, email, certificate, and terminal-failure alerts have owners.
 - [ ] One canonical tenant UUID is recorded; Identity creates the TenantRealm and first TENANT_ADMIN; Academic `pnpm bootstrap:tenant` creates the matching Tenant and storage accounting state; no default password or public bootstrap endpoint was used.
 - [ ] D-11 malware/retention/legal-hold decision is signed by the relevant owner.

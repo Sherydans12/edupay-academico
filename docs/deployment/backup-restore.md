@@ -15,8 +15,10 @@ Create one dated restore point every day containing:
 4. a non-secret deployment inventory containing secret names, owners,
    secret-manager references, key IDs, environment versions, and rotation dates.
 
-Do not include secret values, JWT private keys, refresh cookies, database URLs,
-activation codes, or developer credentials. Do not place dumps in the live
+Do not include the ClamAV signature database as application evidence unless an
+operator explicitly chooses to preserve it as an operational cache. It can be
+recreated and updated after restore. Do not include secret values, JWT private
+keys, refresh cookies, database URLs, activation codes, or developer credentials. Do not place dumps in the live
 database or application volume. The recommended destination is an encrypted
 off-host object/filesystem location mounted only for the backup job. If that
 destination cannot yet be selected, the pilot is not backup-ready; an operator
@@ -61,12 +63,18 @@ machine or live production database casually.
 2. Restore the Identity PostgreSQL dump into a disposable Identity database.
 3. Restore the Academic PostgreSQL dump into a separate disposable Academic database.
 4. Extract the private Academic files archive into the disposable final-files root; keep staging separate and empty.
-5. Boot the Identity API, Identity email worker/scheduler, Academic API, web, and Academic notification worker with restore-target configuration only.
-6. Check Identity liveness, JWKS retrieval, Academic liveness/readiness, web health, and both worker `--check`/scheduled-run paths.
+5. Boot the private ClamAV service, Identity API, Identity email worker/scheduler, Academic API, web, and Academic notification worker with restore-target configuration only.
+6. Check ClamAV health, Identity liveness, JWKS retrieval, Academic liveness/readiness including `malwareScanner`, web health, and both worker `--check`/scheduled-run paths.
 7. Verify the representative canonical tenant exists independently in both databases with the same opaque ID.
 8. Verify a representative restored Student has its opaque `identityUserId` link, a Submission and immutable SubmissionRevision exist for the same Academic tenant, and each FileReference points to an available FileObject/StoredBlob whose private blob exists in the restored volume.
 9. Verify an authorized download through the Academic API and a cross-tenant/unauthorized download denial; do not inspect or expose file bytes in logs.
 10. Record restore duration, missing/orphaned files, notification/email terminal failures, and any schema/data mismatch. Destroy the disposable target only after the evidence is captured.
+
+After restore, repeat the controlled malware release gate with a known clean
+synthetic file and an isolated EICAR test file. Confirm that the clean file is
+accepted only after `CLEAR`, the EICAR file is rejected and cannot be
+downloaded, and staging is empty. Do not use actual malware payloads or retain
+the EICAR artifact as pilot evidence.
 
 The guarded helper is:
 

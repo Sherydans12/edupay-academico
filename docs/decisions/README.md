@@ -23,6 +23,7 @@ These records capture major architectural choices from the brief and architectur
 | [0015](ADR-0015-edupay-source-of-truth-proposal.md) | EduPay source-of-truth decision for Académico synchronization | Accepted (2026-08-11); resolves D-05; source API prerequisites remain |
 | [0016](ADR-0016-edupay-sync-strategy-proposal.md) | EduPay synchronization strategy decision | Accepted (2026-08-11); resolves D-06; source API prerequisites remain |
 | [0017](ADR-0017-single-vps-pilot-deployment-topology.md) | Single-VPS pilot deployment topology | Proposed; does not resolve D-15 |
+| [0018](ADR-0018-file-security-retention-and-malware-policy.md) | Pilot file-security, retention, and malware policy | Accepted (2026-08-11); resolves D-11 for the controlled pilot |
 | [0019](ADR-0019-audit-retention-and-support-policy.md) | Pilot audit retention and support access policy | Accepted; resolves D-17 for the pilot |
 | [0020](ADR-0020-pilot-scope-and-success-targets.md) | Colegio Conquistadores pilot scope and success targets | Accepted; resolves D-18 |
 

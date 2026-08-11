@@ -852,6 +852,8 @@ async function main() {
     STORAGE_TEMP_ROOT: storageTempRoot,
     STORAGE_MIN_FREE_BYTES: '0',
     STORAGE_MIN_FREE_PERCENTAGE: '0',
+    ACADEMIC_MALWARE_SCANNER: 'fake',
+    ACADEMIC_MALWARE_SCAN_CONCURRENCY: '2',
     ACADEMIC_RESEND_API_KEY: '',
     ACADEMIC_EMAIL_FROM: 'EduPay Académico <academic@example.test>',
     ACADEMIC_PUBLIC_BASE_URL: `http://127.0.0.1:${apiPort}`,

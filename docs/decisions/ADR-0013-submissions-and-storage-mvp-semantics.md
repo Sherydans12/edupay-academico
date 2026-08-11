@@ -79,8 +79,11 @@ domain calculations remain instant-based.
 
 ## Remaining open decisions
 
-ADR-0013 does not resolve D-11. Malware scanning, retention, deletion, legal
-hold, export, cleanup durations, and related operational policies remain open.
+Malware scanning, pilot retention, finalized-evidence deletion, legal-hold
+prerequisites, and staging cleanup are resolved for the controlled pilot by
+[ADR-0018](ADR-0018-file-security-retention-and-malware-policy.md). Permanent
+statutory/contractual retention and future destructive deletion remain subject
+to later review.
 Production storage provider, physical free-space thresholds, backup/RTO/RPO,
 streamed-versus-signed download defaults, and quota-change authority also
 remain governed by ADR-0005 follow-ups.

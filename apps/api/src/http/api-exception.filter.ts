@@ -32,6 +32,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
   private errorCode(status: number, exception: unknown): string {
     if (this.isMultipartLimit(exception)) return 'FILE_TOO_LARGE';
+    const explicit = this.explicitCode(exception);
+    if (explicit) return explicit;
     const codes: Partial<Record<number, string>> = {
       [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
       [HttpStatus.PAYLOAD_TOO_LARGE]: 'FILE_TOO_LARGE',
@@ -86,6 +88,21 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
 
     return 'The request could not be completed.';
+  }
+
+  private explicitCode(exception: unknown): string | undefined {
+    if (!(exception instanceof HttpException)) return undefined;
+    const response = exception.getResponse();
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      'code' in response &&
+      typeof response.code === 'string' &&
+      /^[A-Z][A-Z0-9_]{2,63}$/.test(response.code)
+    ) {
+      return response.code;
+    }
+    return undefined;
   }
 
   private status(exception: unknown): number {

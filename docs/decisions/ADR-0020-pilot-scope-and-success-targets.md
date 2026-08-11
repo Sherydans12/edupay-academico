@@ -61,5 +61,7 @@ This ADR does not invent a contractual uptime SLA for the pilot.
 
 ## Scope boundaries
 
-This baseline does not resolve D-11 malware/retention/legal-hold implementation
-or D-15 final deployment/provider/RTO/RPO acceptance.
+This baseline does not resolve D-15 final deployment/provider/RTO/RPO
+acceptance. D-11 is resolved for the controlled pilot by
+[ADR-0018](ADR-0018-file-security-retention-and-malware-policy.md); permanent
+retention and future destructive deletion remain outside this pilot baseline.

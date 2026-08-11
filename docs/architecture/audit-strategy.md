@@ -34,6 +34,8 @@ Do not record credentials, refresh tokens, file contents, or unnecessary student
 - enrollment and teacher assignment changes;
 - learning item draft/publish/archive actions;
 - attachment upload, replacement, download, and deletion decisions where required;
+- malware scan start/outcome/rejection and cleanup decisions, with safe outcome
+  category and duration but no file contents or raw scanner response;
 - submission create/submit/resubmit;
 - review and request-changes actions;
 - notification preference or delivery changes;

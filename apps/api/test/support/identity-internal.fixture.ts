@@ -69,6 +69,7 @@ export class IdentityInternalFixture {
       IDENTITY_INTERNAL_BASE_URL: this.baseUrl,
       IDENTITY_INTERNAL_SERVICE_TOKEN: this.serviceToken,
       IDENTITY_INTERNAL_TIMEOUT_MS: String(timeoutMs),
+      ACADEMIC_MALWARE_SCANNER: 'fake',
     };
   }
 

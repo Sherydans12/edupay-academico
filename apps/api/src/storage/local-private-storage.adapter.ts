@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import type { Readable } from 'node:stream';
 import {
   access,
   copyFile,
   constants as fsConstants,
   mkdir,
-  readFile,
   rm,
   statfs,
   stat,
@@ -87,8 +88,8 @@ export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
     await rm(this.absolute(storageKey), { force: true });
   }
 
-  async read(storageKey: string): Promise<Buffer> {
-    return readFile(this.absolute(storageKey));
+  async read(storageKey: string): Promise<Readable> {
+    return createReadStream(this.absolute(storageKey));
   }
 
   private absolute(storageKey: string): string {

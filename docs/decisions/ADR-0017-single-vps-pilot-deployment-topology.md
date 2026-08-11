@@ -14,7 +14,9 @@ Docker/Coolify-style VPS without coupling the two services' databases or
 silently turning the local Academic filesystem adapter into a multi-node store.
 Provider, region, backup destination, RTO/RPO, and support decisions remain
 open in D-15.
-Malware scanning, retention, deletion, and legal hold remain open in D-11.
+The controlled-pilot malware, retention, deletion, and legal-hold gate is
+resolved by [ADR-0018](ADR-0018-file-security-retention-and-malware-policy.md);
+permanent statutory/contractual policy remains future work.
 
 ## Proposed topology
 

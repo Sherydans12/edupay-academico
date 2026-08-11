@@ -14,6 +14,7 @@ const validEnvironment = {
   IDENTITY_INTERNAL_SERVICE_TOKEN:
     'academic_test_service_token_000000000000000000000000',
   ACADEMIC_TRUSTED_WEB_ORIGINS: 'http://localhost:3000',
+  ACADEMIC_MALWARE_SCANNER: 'fake',
 };
 
 describe('validateEnvironment', () => {
@@ -79,12 +80,51 @@ describe('validateEnvironment', () => {
         ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
         ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
         ACADEMIC_TRUSTED_WEB_ORIGINS: 'https://academico.example.test',
+        ACADEMIC_MALWARE_SCANNER: 'fake',
         STORAGE_MIN_FREE_BYTES: '1073741824',
         STORAGE_MIN_FREE_PERCENTAGE: '5',
         STORAGE_ROOT: 'relative/files',
         STORAGE_TEMP_ROOT: 'relative/tmp',
       }),
     ).toThrow(/STORAGE_ROOT/);
+  });
+
+  it('requires ClamAV configuration in production and rejects the fake scanner', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        IDENTITY_ISSUER: 'https://identity.example.test',
+        IDENTITY_JWKS_URI: 'https://identity.example.test/.well-known/jwks.json',
+        IDENTITY_INTERNAL_BASE_URL: 'https://identity.internal.test',
+        ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
+        ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
+        ACADEMIC_TRUSTED_WEB_ORIGINS: 'https://academico.example.test',
+        ACADEMIC_MALWARE_SCANNER: 'fake',
+        STORAGE_MIN_FREE_BYTES: '1073741824',
+        STORAGE_MIN_FREE_PERCENTAGE: '5',
+        STORAGE_ROOT: '/var/lib/edupay-academico/files',
+        STORAGE_TEMP_ROOT: '/var/lib/edupay-academico/tmp',
+      }),
+    ).toThrow(/production requires.*clamav/);
+
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        IDENTITY_ISSUER: 'https://identity.example.test',
+        IDENTITY_JWKS_URI: 'https://identity.example.test/.well-known/jwks.json',
+        IDENTITY_INTERNAL_BASE_URL: 'https://identity.internal.test',
+        ACADEMIC_PUBLIC_BASE_URL: 'https://academico.example.test',
+        ACADEMIC_RESEND_API_KEY: 'synthetic-resend-key',
+        ACADEMIC_TRUSTED_WEB_ORIGINS: 'https://academico.example.test',
+        ACADEMIC_MALWARE_SCANNER: 'clamav',
+        STORAGE_MIN_FREE_BYTES: '1073741824',
+        STORAGE_MIN_FREE_PERCENTAGE: '5',
+        STORAGE_ROOT: '/var/lib/edupay-academico/files',
+        STORAGE_TEMP_ROOT: '/var/lib/edupay-academico/tmp',
+      }),
+    ).toThrow(/ACADEMIC_CLAMAV_HOST/);
   });
 
   it('rejects symmetric, unsigned, and excessive clock-skew configuration', () => {

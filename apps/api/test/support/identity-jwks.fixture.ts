@@ -80,6 +80,7 @@ export class IdentityJwksFixture {
       IDENTITY_INTERNAL_SERVICE_TOKEN:
         'academic_test_service_token_000000000000000000000000',
       IDENTITY_INTERNAL_TIMEOUT_MS: '3000',
+      ACADEMIC_MALWARE_SCANNER: 'fake',
       NODE_ENV: 'test',
     };
   }

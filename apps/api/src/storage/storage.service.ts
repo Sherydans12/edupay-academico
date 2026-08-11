@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
@@ -41,6 +43,11 @@ import {
   PRIVATE_STORAGE_PROVIDER,
   type PrivateStorageProvider,
 } from './private-storage.port';
+import {
+  MALWARE_SCANNER,
+  type MalwareScanFailureReason,
+  type MalwareScanner,
+} from './malware-scanner.port';
 
 const GLOBAL_SCOPE_KEY = 'GLOBAL';
 const EXPIRY_MS = 15 * 60 * 1000;
@@ -72,6 +79,8 @@ export type AuthorizedDownload = {
 
 @Injectable()
 export class StorageService implements LearningAttachmentPort {
+  private readonly logger = new Logger(StorageService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorization: AuthorizationService,
@@ -79,6 +88,8 @@ export class StorageService implements LearningAttachmentPort {
     private readonly provider: PrivateStorageProvider,
     @Inject(ACADEMIC_AUDIT_PORT)
     private readonly audit: AcademicAuditPort,
+    @Inject(MALWARE_SCANNER)
+    private readonly malwareScanner: MalwareScanner,
   ) {}
 
   async getUsage(context: AcademicRequestContext): Promise<object> {
@@ -143,12 +154,16 @@ export class StorageService implements LearningAttachmentPort {
   ): Promise<void> {
     const reference = await this.prisma.fileReference.findUnique({
       where: { tenantId_id: { tenantId: target.tenantId, id: fileReferenceId } },
+      include: { fileObject: { include: { storedBlob: true } } },
     });
     if (
       !reference ||
       reference.referenceType !== 'LEARNING_ITEM' ||
       reference.learningItemId !== target.learningItemId ||
-      reference.category !== target.purpose
+      reference.category !== target.purpose ||
+      reference.fileObject.lifecycle !== 'AVAILABLE' ||
+      reference.fileObject.storedBlob.lifecycle !== 'AVAILABLE' ||
+      reference.fileObject.storedBlob.scanStatus !== 'CLEAR'
     ) {
       throw new ForbiddenException('The file reference is not authorized for this learning item.');
     }
@@ -262,8 +277,15 @@ export class StorageService implements LearningAttachmentPort {
     if (intent.status === 'FINALIZED' && intent.finalizedFileObjectId) {
       const existing = await this.prisma.fileObject.findUnique({
         where: { tenantId_id: { tenantId, id: intent.finalizedFileObjectId } },
+        include: { storedBlob: true },
       });
-      if (existing) return this.mapFile(existing);
+      if (
+        existing?.lifecycle === 'AVAILABLE' &&
+        existing.storedBlob.lifecycle === 'AVAILABLE' &&
+        existing.storedBlob.scanStatus === 'CLEAR'
+      ) {
+        return this.mapFile(existing);
+      }
     }
     if (intent.status !== 'RESERVED' && intent.status !== 'STAGED') {
       throw new ConflictException('The upload intent is no longer available.');
@@ -313,12 +335,15 @@ export class StorageService implements LearningAttachmentPort {
         data: { status: 'STAGED' },
       });
 
+      await this.scanStagedUpload(context, intent.id, stagedKey, validated.authoritativeSizeBytes);
+
       const existingBlob = await this.prisma.storedBlob.findFirst({
         where: {
           tenantId,
           sha256: validated.sha256,
           storedSizeBytes: BigInt(validated.authoritativeSizeBytes),
           lifecycle: 'AVAILABLE',
+          scanStatus: 'CLEAR',
         },
       });
       const storedBlobId = existingBlob?.id ?? randomUUID();
@@ -342,6 +367,7 @@ export class StorageService implements LearningAttachmentPort {
           storageKey: finalKey ?? existingBlob?.storageKey,
           isNewBlob,
         });
+        finalKey = undefined;
       } catch (error) {
         if (!isNewBlob || !this.isUniqueViolation(error)) throw error;
         if (finalKey) {
@@ -354,6 +380,7 @@ export class StorageService implements LearningAttachmentPort {
             sha256: validated.sha256,
             storedSizeBytes: BigInt(validated.authoritativeSizeBytes),
             lifecycle: 'AVAILABLE',
+            scanStatus: 'CLEAR',
           },
         });
         if (!winner) throw error;
@@ -365,6 +392,7 @@ export class StorageService implements LearningAttachmentPort {
           storageKey: winner.storageKey,
           isNewBlob: false,
         });
+        finalKey = undefined;
       }
       await this.audit.record({
         action: isNewBlob ? 'FILE_STORED' : 'FILE_DEDUPLICATED',
@@ -395,6 +423,34 @@ export class StorageService implements LearningAttachmentPort {
     await this.provider.remove(intent.stagingKey);
   }
 
+  async cleanupExpiredUploads(limit: number): Promise<number> {
+    const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const now = new Date();
+    const intents = await this.prisma.uploadIntent.findMany({
+      where: {
+        OR: [
+          {
+            status: { in: ['RESERVED', 'STAGED'] },
+            expiresAt: { lte: now },
+          },
+          { status: { in: ['FAILED', 'EXPIRED'] } },
+        ],
+      },
+      orderBy: { expiresAt: 'asc' },
+      take: boundedLimit,
+      select: { tenantId: true, id: true, status: true, stagingKey: true },
+    });
+
+    for (const intent of intents) {
+      if (intent.status === 'RESERVED' || intent.status === 'STAGED') {
+        await this.expireIntent(intent.tenantId, intent.id, intent.stagingKey);
+      } else {
+        await this.provider.remove(intent.stagingKey);
+      }
+    }
+    return intents.length;
+  }
+
   async listLearningAttachments(
     context: AcademicRequestContext,
     learningItemId: string,
@@ -409,6 +465,7 @@ export class StorageService implements LearningAttachmentPort {
       where: {
         tenantId,
         lifecycle: 'AVAILABLE',
+        storedBlob: { lifecycle: 'AVAILABLE', scanStatus: 'CLEAR' },
         fileReferences: { some: { tenantId, learningItemId: item.id } },
       },
       orderBy: { createdAt: 'asc' },
@@ -434,7 +491,7 @@ export class StorageService implements LearningAttachmentPort {
         category: 'STUDENT_SUBMISSION',
         lifecycle: 'AVAILABLE',
         uploadedByIdentityUserId: studentIdentityUserId,
-        storedBlob: { lifecycle: 'AVAILABLE' },
+        storedBlob: { lifecycle: 'AVAILABLE', scanStatus: 'CLEAR' },
       },
       include: {
         fileReferences: { select: { id: true, submissionRevisionId: true } },
@@ -496,7 +553,12 @@ export class StorageService implements LearningAttachmentPort {
         },
       },
     });
-    if (!file || file.lifecycle !== 'AVAILABLE' || file.storedBlob.lifecycle !== 'AVAILABLE') {
+    if (
+      !file ||
+      file.lifecycle !== 'AVAILABLE' ||
+      file.storedBlob.lifecycle !== 'AVAILABLE' ||
+      file.storedBlob.scanStatus !== 'CLEAR'
+    ) {
       this.deny();
     }
     if (file.fileReferences.length === 0) this.deny();
@@ -615,6 +677,78 @@ export class StorageService implements LearningAttachmentPort {
     throw error;
   }
 
+  private async scanStagedUpload(
+    context: AcademicRequestContext,
+    uploadIntentId: string,
+    stagingKey: string,
+    sizeBytes: number,
+  ): Promise<void> {
+    await this.audit.record({
+      action: 'FILE_SCAN_STARTED',
+      context,
+      resourceId: uploadIntentId,
+      resourceType: 'UploadIntent',
+      summary: { outcome: 'PENDING', sizeBytes },
+    });
+    const startedAt = Date.now();
+    let outcome: Awaited<ReturnType<MalwareScanner['scan']>>;
+    try {
+      outcome = await this.malwareScanner.scan({
+        content: await this.provider.read(stagingKey),
+        sizeBytes,
+        tenantId: context.tenant.tenantId,
+        uploadIntentId,
+        correlationId: context.requestId,
+      });
+    } catch {
+      outcome = { status: 'FAILED', reason: 'ERROR' };
+    }
+    const durationMs = Date.now() - startedAt;
+    const summary = {
+      outcome: outcome.status,
+      durationMs,
+      ...(outcome.status === 'FAILED' ? { reason: outcome.reason } : {}),
+    };
+    await this.audit.record({
+      action: `FILE_SCAN_${outcome.status}`,
+      context,
+      resourceId: uploadIntentId,
+      resourceType: 'UploadIntent',
+      summary,
+    });
+    this.logger.log({
+      action: `FILE_SCAN_${outcome.status}`,
+      durationMs,
+      requestId: context.requestId,
+      tenantId: context.tenant.tenantId,
+      uploadIntentId,
+      ...(outcome.status === 'FAILED' ? { reason: outcome.reason } : {}),
+    });
+
+    if (outcome.status === 'INFECTED') {
+      throw new BadRequestException({
+        code: 'MALWARE_DETECTED',
+        message: 'The file was rejected for security reasons.',
+      });
+    }
+    if (outcome.status === 'FAILED') {
+      throw this.scanFailureException(outcome.reason);
+    }
+  }
+
+  private scanFailureException(reason: MalwareScanFailureReason): ServiceUnavailableException {
+    const code =
+      reason === 'TIMEOUT'
+        ? 'MALWARE_SCAN_TIMEOUT'
+        : reason === 'UNAVAILABLE'
+          ? 'MALWARE_SCANNER_UNAVAILABLE'
+          : 'MALWARE_SCAN_FAILED';
+    return new ServiceUnavailableException({
+      code,
+      message: 'The file could not be cleared by the security scanner. Please retry later.',
+    });
+  }
+
   private async reserveUpload(
     context: AcademicRequestContext,
     reference: {
@@ -701,7 +835,7 @@ export class StorageService implements LearningAttachmentPort {
             detectedExtension: input.validated.extension,
             lifecycle: 'AVAILABLE',
             validationStatus: 'VALID',
-            scanStatus: 'NOT_SCANNED',
+            scanStatus: 'CLEAR',
             validatedAt: now,
             availableAt: now,
           },

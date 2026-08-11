@@ -17,6 +17,10 @@ import {
 import { PrismaService } from '../src/persistence/prisma.service';
 import { configureApplication } from '../src/bootstrap/configure-application';
 import { MAX_FILE_SIZE_BYTES } from '../src/storage/file-validation';
+import {
+  FAKE_INFECTED_MARKER,
+  FAKE_TIMEOUT_MARKER,
+} from '../src/storage/fake-malware-scanner.adapter';
 import { IdentityJwksFixture } from './support/identity-jwks.fixture';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -50,6 +54,7 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
     vi.stubEnv('STORAGE_TEMP_ROOT', `${storageRoot}\\tmp`);
     vi.stubEnv('STORAGE_MIN_FREE_BYTES', '0');
     vi.stubEnv('STORAGE_MIN_FREE_PERCENTAGE', '0');
+    vi.stubEnv('ACADEMIC_MALWARE_SCANNER', 'fake');
     const { AppModule } = await import('../src/app.module');
     const testingModule = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ACADEMIC_AUDIT_PORT)
@@ -135,6 +140,19 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
     });
     expect(afterTransfer.reservedBytes).toBe(0n);
     expect(afterTransfer.usedBytes).toBe(BigInt(bytes.length));
+    const firstBlob = await prisma.storedBlob.findFirstOrThrow({
+      where: { tenantId: 'storage-a' },
+    });
+    expect(firstBlob.scanStatus).toBe('CLEAR');
+    await prisma.storedBlob.update({
+      where: { tenantId_id: { tenantId: 'storage-a', id: firstBlob.id } },
+      data: { scanStatus: 'NOT_SCANNED' },
+    });
+    await api(setup.studentToken).get(`/api/v1/files/${first.id}/download`).expect(403);
+    await prisma.storedBlob.update({
+      where: { tenantId_id: { tenantId: 'storage-a', id: firstBlob.id } },
+      data: { scanStatus: 'CLEAR' },
+    });
 
     const secondIntent = await createIntentOnly(
       setup.teacherToken,
@@ -235,6 +253,50 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
       .expect(400);
     expect((await prisma.uploadIntent.findUniqueOrThrow({ where: { tenantId_id: { tenantId: 'hardening-a', id: invalid.id } } })).status).toBe('FAILED');
     expect((await prisma.storageUsageAccount.findUniqueOrThrow({ where: { scopeKey: 'TENANT:hardening-a' } })).reservedBytes).toBe(0n);
+    await expect(readdir(`${storageRoot}\\tmp`)).resolves.toEqual([]);
+
+    const infected = await createIntentOnly(
+      setup.teacherToken,
+      setup.item.id,
+      'ASSIGNMENT_SOURCE',
+      'infected.pdf',
+      Buffer.concat([Buffer.from('%PDF-'), FAKE_INFECTED_MARKER]),
+    );
+    const infectedResponse = await api(setup.teacherToken)
+      .post(`/api/v1/file-upload-intents/${infected.id}/content`)
+      .attach(
+        'file',
+        Buffer.concat([Buffer.from('%PDF-'), FAKE_INFECTED_MARKER]),
+        { filename: 'infected.pdf', contentType: 'application/pdf' },
+      );
+    expect(infectedResponse.status).toBe(400);
+    expect(infectedResponse.body.error.code).toBe('MALWARE_DETECTED');
+    expect(
+      (await prisma.uploadIntent.findUniqueOrThrow({
+        where: { tenantId_id: { tenantId: 'hardening-a', id: infected.id } },
+      })).status,
+    ).toBe('FAILED');
+    expect(await prisma.storedBlob.count({ where: { tenantId: 'hardening-a' } })).toBe(0);
+    expect(await prisma.fileObject.count({ where: { tenantId: 'hardening-a' } })).toBe(0);
+
+    const timedOutBytes = Buffer.concat([Buffer.from('%PDF-'), FAKE_TIMEOUT_MARKER]);
+    const timedOut = await createIntentOnly(
+      setup.teacherToken,
+      setup.item.id,
+      'ASSIGNMENT_SOURCE',
+      'timeout.pdf',
+      timedOutBytes,
+    );
+    const timedOutResponse = await api(setup.teacherToken)
+      .post(`/api/v1/file-upload-intents/${timedOut.id}/content`)
+      .attach('file', timedOutBytes, { filename: 'timeout.pdf', contentType: 'application/pdf' });
+    expect(timedOutResponse.status).toBe(503);
+    expect(timedOutResponse.body.error.code).toBe('MALWARE_SCAN_TIMEOUT');
+    expect(
+      (await prisma.storageUsageAccount.findUniqueOrThrow({
+        where: { scopeKey: 'TENANT:hardening-a' },
+      })).reservedBytes,
+    ).toBe(0n);
     await expect(readdir(`${storageRoot}\\tmp`)).resolves.toEqual([]);
   });
 

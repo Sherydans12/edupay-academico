@@ -22,7 +22,7 @@ operations decision.
 - Original filenames are display metadata only. Server-generated identifiers and keys address stored objects.
 - Logical files are separate from physical blobs so tenant-local deduplication, immutable evidence, references, and storage accounting do not collapse into one record.
 
-The application code is not authorized in the current Phase 0 baseline. Storage implementation begins only when the tenant-context and authorization foundations it depends on are available and the relevant Phase 3/4 work is authorized.
+The application code is not authorized in the current Phase 0 baseline. Storage implementation begins only when the tenant-context and authorization foundations it depends on are available and the relevant Phase 3/4 work is authorized. For the controlled pilot, [ADR-0018](../decisions/ADR-0018-file-security-retention-and-malware-policy.md) adds a mandatory fail-closed malware-scanning gate before availability.
 
 ## 2. Initial policy and configuration
 
@@ -186,11 +186,11 @@ No physical object becomes downloadable through a domain resource until an avail
 5. Atomically reserve the declared bytes against both tenant and global scopes and create an expiring `UploadIntent` bound to actor, tenant, parent, and purpose.
 6. Return an opaque `uploadIntentId` and safe upload instructions. The control plane is JSON metadata only; it contains no file bytes.
 7. Transfer exactly one file through `POST /api/v1/file-upload-intents/{intentId}/content` as `multipart/form-data` with the `file` field. The initial local adapter uses bounded disk staging, not an in-memory multipart buffer.
-8. Finalize server-side: obtain authoritative size, stream SHA-256 calculation, detect actual type/signature/structure, enforce the 25 MB limit again, and apply the scanning gate once its policy is decided. The object is unavailable during this step.
-9. Recheck both quotas using authoritative bytes. Within a transaction, find or create the tenant-local `StoredBlob`, handle the unique-key race, create `FileObject` and any parent `FileReference`, convert/release the reservation, and update usage/file counts.
-10. If the blob already exists in the tenant, reuse it and remove the staged duplicate after verification; physical `usedBytes` does not increase. Never search or deduplicate across tenants.
-11. Promote a new staged object to its immutable final key and mark it available using an idempotent state transition. Because PostgreSQL and object storage do not share a transaction, retries and reconciliation complete or compensate partial states without exposing an unvalidated file.
-12. Audit intent creation outcome, validation rejection, quota rejection, successful availability, deduplication outcome at a non-sensitive level, and important failure/cleanup operations.
+8. Finalize server-side: obtain authoritative size, stream SHA-256 calculation, detect actual type/signature/structure, enforce the 25 MB limit again, and scan the staged bytes. The object is unavailable during validation and scanning; type/signature validation is not malware scanning.
+9. On `CLEAR`, recheck both quotas using authoritative bytes. Within a transaction, find or create the tenant-local `StoredBlob` only from a `CLEAR` blob, handle the unique-key race, create `FileObject` and any parent `FileReference`, convert/release the reservation, and update usage/file counts.
+10. If the blob already exists in the tenant, reuse it only when its authoritative bytes have `scanStatus=CLEAR` under the active scanner policy, then remove the staged duplicate; physical `usedBytes` does not increase. Never search or deduplicate across tenants. `INFECTED`, `FAILED`, unavailable, or timeout outcomes release the reservation and remove staging without creating an available blob/reference.
+11. Promote a clear staged object to its immutable final key and mark it available using an idempotent state transition. Because PostgreSQL and object storage do not share a transaction, retries and reconciliation complete or compensate partial states without exposing an unvalidated or uncleared file.
+12. Audit intent creation outcome, validation rejection, quota rejection, scan start/outcome/duration, successful availability, deduplication outcome at a non-sensitive level, and important failure/cleanup operations.
 
 Expired reservations are released idempotently. Abandoned staged objects remain accounted while present and are cleaned according to an operational cleanup interval; retention/deletion rules for valid domain files remain unresolved.
 
@@ -200,7 +200,7 @@ Expired reservations are released idempotently. Abandoned staged objects remain 
 2. Resolve trusted tenant context.
 3. Load the `FileReference`, `FileObject`, parent resource, and available blob through tenant-scoped access; return non-enumerating not-found/forbidden behavior.
 4. Authorize the actor against the parent resource and its current relationship/lifecycle rules. A teacher must still be assigned appropriately; a student must still be entitled to the parent or their own submission.
-5. Verify that file/blob states permit download and that no security hold blocks access.
+5. Verify that file/blob states permit download: `FileObject.lifecycle=AVAILABLE`, `StoredBlob.lifecycle=AVAILABLE`, and `StoredBlob.scanStatus=CLEAR`; no security hold may block access.
 6. Either stream through the API or issue a short-lived, response-bound signed URL from the private adapter. The final choice remains open under ADR-0005; both modes use the same authorization service.
 7. Use a sanitized `Content-Disposition` filename, `nosniff` behavior where applicable, safe content type, and no public/cache-shared URL.
 8. Record the audit event when the approved audit policy requires individual download logging.
@@ -224,7 +224,7 @@ Derivative generation is asynchronous/retryable when a worker exists. Failure to
 
 - Deduplication scope is exactly one tenant.
 - SHA-256 is calculated from authoritative uploaded bytes, not trusted client metadata.
-- Lookup requires tenant ID, SHA-256, stored size, and an `AVAILABLE` blob.
+- Lookup requires tenant ID, SHA-256, stored size, an `AVAILABLE` blob, and `scanStatus=CLEAR` under the active scanner policy.
 - A database unique constraint and transactional retry resolve concurrent identical uploads.
 - Each upload retains a distinct `FileObject` and audit trail even when it shares a blob.
 - Blob deletion cannot occur while any live logical object/reference or unresolved retention hold depends on it. The final retention/deletion policy is still open.
@@ -240,7 +240,7 @@ Additional controls:
 - Never trust `tenantId`, uploader identity, parent ownership, checksum, MIME, size, or storage key from a request payload.
 - Keep buckets private and provider credentials out of clients, logs, tenant configuration, and source control.
 - Generate keys from internal IDs under a tenant namespace, for example `tenants/{tenantId}/blobs/{blobId}` and `tenants/{tenantId}/pending/{uploadIntentId}`.
-- Apply upload rate limits, bounded concurrency, intent expiry, parser time/memory limits, archive-entry/decompression limits, and image pixel limits.
+- Apply upload rate limits, bounded scanner concurrency, scanner timeouts, intent expiry, parser time/memory limits, archive-entry/decompression limits, and image pixel limits.
 - Validate completion from provider facts rather than a client success claim.
 - Sanitize filenames for display and response headers; never interpolate them into paths.
 - Do not render active content inline by default. Download headers and any preview sandbox policy are selected by detected type and reviewed separately.
@@ -274,7 +274,7 @@ No upload contract accepts `tenantId`, storage key, detected type, or trusted ch
 
 The upload-intent creation request is JSON metadata (`parentType`, `parentId`, `category`, `filename`, `mimeType`, and `sizeBytes`). The content endpoint is documented in OpenAPI as `multipart/form-data` with one binary `file` field and no JSON/base64 representation. Submission mutations accept only finalized opaque `fileObjectIds`.
 
-Expected safe error codes include `FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`, `FILE_CONTENT_MISMATCH`, `UPLOAD_INTENT_EXPIRED`, `TENANT_STORAGE_QUOTA_EXCEEDED`, `GLOBAL_STORAGE_QUOTA_EXCEEDED`, `PHYSICAL_STORAGE_SAFETY_GUARD`, `FILE_NOT_AVAILABLE`, and a non-enumerating authorization/not-found result. Responses include the request ID but not provider details or another scope's remaining capacity.
+Expected safe error codes include `FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`, `FILE_CONTENT_MISMATCH`, `MALWARE_DETECTED`, `MALWARE_SCANNER_UNAVAILABLE`, `MALWARE_SCAN_TIMEOUT`, `MALWARE_SCAN_FAILED`, `UPLOAD_INTENT_EXPIRED`, `TENANT_STORAGE_QUOTA_EXCEEDED`, `GLOBAL_STORAGE_QUOTA_EXCEEDED`, `PHYSICAL_STORAGE_SAFETY_GUARD`, `FILE_NOT_AVAILABLE`, and a non-enumerating authorization/not-found result. Responses include the request ID but not provider details, local paths, raw scanner responses, or another scope's remaining capacity.
 
 ## 11. Cached accounting and reconciliation
 
@@ -326,7 +326,7 @@ Reconciliation is idempotent and resumable. It never makes a cross-tenant infere
 
 - run the same adapter contract against local/fake and selected S3-compatible implementations;
 - validate authoritative size/type behavior for signed and streamed upload variants;
-- exercise provider timeout, partial multipart upload, retry budget, and idempotent completion;
+- exercise scanner timeout/unavailability/infection, partial multipart upload, retry budget, bounded concurrency, and idempotent completion;
 - verify metrics/alerts for usage, reservations, quota rejection by scope, physical guard, validation failures, reconciliation drift, and provider health;
 - restore database metadata with object storage in a staging recovery exercise before pilot, once backup/RTO/RPO decisions are accepted.
 
@@ -334,8 +334,7 @@ Reconciliation is idempotent and resumable. It never makes a cross-tenant infere
 
 The following remain open and must not be silently implemented:
 
-- malware/virus scanning provider, mandatory states, timeout/failure behavior, and quarantine/release process;
-- retention, user deletion, administrative deletion, legal hold, export, and orphan cleanup durations;
+- permanent statutory/contractual retention, future finalized-evidence deletion, legal hold, export, and any historical scanner re-scan policy; the controlled pilot behavior is fixed by [ADR-0018](../decisions/ADR-0018-file-security-retention-and-malware-policy.md);
 - streamed downloads versus signed URLs as the default;
 - production object-storage provider, bucket layout details, region, replication, versioning, backup, restore, RTO/RPO, and support ownership;
 - numerical minimum-free-byte and minimum-free-percentage guard values per environment;

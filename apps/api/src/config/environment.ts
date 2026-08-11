@@ -193,6 +193,24 @@ const environmentSchema = z
     STORAGE_MIN_FREE_PERCENTAGE: optionalStorageNumber.pipe(
       z.number().finite().min(0).max(100).optional(),
     ),
+    ACADEMIC_MALWARE_SCANNER: z.enum(['clamav', 'fake']),
+    ACADEMIC_CLAMAV_HOST: optionalNonEmptyString,
+    ACADEMIC_CLAMAV_PORT: z.preprocess(
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.coerce.number().int().min(1).max(65_535).optional(),
+    ),
+    ACADEMIC_CLAMAV_TIMEOUT_MS: z.preprocess(
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.coerce.number().int().min(250).max(30_000).optional(),
+    ),
+    ACADEMIC_MALWARE_SCAN_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .default(2),
     ACADEMIC_RESEND_API_KEY: optionalNonEmptyString,
     ACADEMIC_EMAIL_FROM: z
       .string()
@@ -232,8 +250,30 @@ const environmentSchema = z
     NOTIFICATION_RETRY_SCHEDULE_SECONDS: retryScheduleSeconds,
   })
   .superRefine((environment, context) => {
+    if (
+      environment.ACADEMIC_MALWARE_SCANNER === 'clamav' &&
+      (!environment.ACADEMIC_CLAMAV_HOST ||
+        environment.ACADEMIC_CLAMAV_PORT === undefined ||
+        environment.ACADEMIC_CLAMAV_TIMEOUT_MS === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message:
+          'ACADEMIC_CLAMAV_HOST, ACADEMIC_CLAMAV_PORT, and ACADEMIC_CLAMAV_TIMEOUT_MS must be configured when ClamAV is selected',
+        path: ['ACADEMIC_MALWARE_SCANNER'],
+      });
+    }
+
     if (environment.NODE_ENV !== 'production') {
       return;
+    }
+
+    if (environment.ACADEMIC_MALWARE_SCANNER !== 'clamav') {
+      context.addIssue({
+        code: 'custom',
+        message: 'production requires ACADEMIC_MALWARE_SCANNER=clamav',
+        path: ['ACADEMIC_MALWARE_SCANNER'],
+      });
     }
 
     for (const key of ['IDENTITY_ISSUER', 'IDENTITY_JWKS_URI'] as const) {

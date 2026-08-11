@@ -46,8 +46,9 @@ The complete quota semantics, data model, flows, role-visible usage, optimizatio
 These items are intentionally not decided by this ADR:
 
 - production provider, region, bucket layout details, replication/versioning, backup, RTO/RPO, and support ownership;
-- malware scanning provider and quarantine/failure behavior;
-- retention, deletion, legal hold, export, and cleanup durations;
+- permanent malware/retention/deletion/legal-hold policy; the controlled pilot
+  malware and evidence-retention behavior is accepted by
+  [ADR-0018](ADR-0018-file-security-retention-and-malware-policy.md);
 - streamed downloads versus signed URLs as the default;
 - numerical physical guard thresholds per environment;
 - exact role/workflow for quota changes and individual-download audit retention.
