@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, openSync, closeSync } from 'node:fs';
-import { chmod, lstat, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -185,12 +185,32 @@ async function startSource(environment, port) {
     record.exitCode = code;
   });
   resources.processes.push(record);
-  await waitUntil('BL-002 source API health', async () => {
-    if (record.exitCode !== undefined) throw new Error('source API exited');
-    const response = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
-    return response.ok;
-  });
+  try {
+    await waitUntil('BL-002 source API health', async () => {
+      if (record.exitCode !== undefined) throw new Error('source API exited');
+      const response = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
+      return response.ok;
+    });
+  } catch (error) {
+    const log = await readFile(logPath, 'utf8')
+      .then((value) => safeLogTail(value))
+      .catch(() => '');
+    throw new Error(
+      `${error instanceof Error ? error.message : 'source API health failed'}.${log ? ` Safe source log: ${log}` : ''}`,
+    );
+  }
   return record;
+}
+
+function safeLogTail(value) {
+  return value
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, 'postgresql://[redacted]')
+    .replace(/(token|secret|password|key)\s*[:=]\s*[^\s]+/gi, '$1=[redacted]')
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(-12)
+    .join(' | ')
+    .slice(0, 2_000);
 }
 
 const academicEnvironment = (

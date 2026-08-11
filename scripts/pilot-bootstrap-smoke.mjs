@@ -72,7 +72,7 @@ function safeDiagnostics(output) {
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) =>
-      /^(?:Identity tenant-admin bootstrap refused|Identity tenant-admin bootstrap failed|Invalid bootstrap environment configuration|Usage:|Error:|Prisma)/i.test(
+      /^(?:Identity tenant-admin bootstrap refused|Identity tenant-admin bootstrap failed|Invalid bootstrap environment configuration|Unknown option|Missing value|Specify |Usage:|Error:|Prisma|.+ is required\.)/i.test(
         line,
       ),
     )
