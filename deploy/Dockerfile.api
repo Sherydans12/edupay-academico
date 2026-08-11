@@ -1,0 +1,40 @@
+FROM node:22-bookworm AS build
+
+ENV COREPACK_HOME=/tmp/corepack
+RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
+
+WORKDIR /workspace
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY packages/config/package.json packages/config/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/ui/package.json packages/ui/package.json
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+RUN pnpm --filter @edupay/api db:generate
+RUN pnpm --filter @edupay/api build
+RUN pnpm --filter @edupay/api deploy --legacy --prod /out
+
+FROM build AS migrate
+CMD ["pnpm", "--filter", "@edupay/api", "db:migrate:deploy"]
+
+FROM node:22-bookworm AS runtime
+
+ENV COREPACK_HOME=/tmp/corepack
+RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
+
+WORKDIR /workspace
+COPY --from=build /out ./
+COPY --from=build /workspace/apps/api/dist ./dist
+COPY --from=build /workspace/apps/api/prisma ./prisma
+COPY --from=build /workspace/apps/api/prisma.config.ts ./prisma.config.ts
+RUN mkdir -p /var/lib/edupay-academico/files /var/lib/edupay-academico/tmp \
+  && chown -R node:node /var/lib/edupay-academico /workspace
+
+USER node
+EXPOSE 3001
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3001/api/v1/health/ready').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+CMD ["node", "dist/main.js"]

@@ -1,12 +1,12 @@
 # EduPay -> EduPay Académico synchronization discovery
 
-Status: source discovery complete; D-05 and D-06 remain **OPEN**
+Status: source discovery complete; D-05 and D-06 **Accepted** 2026-08-11
 
-Decision state: **Proposed**, not accepted. This document is evidence for owner review, not implementation authorization.
+Decision state: accepted architecture; source API and synchronization implementation remain gated prerequisites.
 
 Date: 2026-08-10
 
-Proposed decisions: [ADR-0015](../decisions/ADR-0015-edupay-source-of-truth-proposal.md) and [ADR-0016](../decisions/ADR-0016-edupay-sync-strategy-proposal.md)
+Accepted decisions: [ADR-0015](../decisions/ADR-0015-edupay-source-of-truth-proposal.md) and [ADR-0016](../decisions/ADR-0016-edupay-sync-strategy-proposal.md)
 
 ## Executive finding
 
@@ -14,9 +14,18 @@ The real source is the BaseLogic administrative EduPay repository at `C:\Users\n
 
 The source has useful administrative lifecycle fields and `updatedAt` timestamps, but its current public routes are offset-paginated CRUD endpoints, not a versioned academic integration API. Existing XLSX exports are administrative exports and the portal API is a guardian/payment interface. No source academic event stream or webhook exists.
 
-The most important identifier correction is that current EduPay `Course.id` values must not be treated as immutable cross-system IDs: source migrations deliberately resequence and rewrite them from course names and grade patterns. Student IDs are better candidates, subject to an explicit no-reuse guarantee. The source tenant key `colegio-conquistadores` is a slug-like string, not the canonical Identity/Académico tenant UUID; a server-controlled tenant mapping is required.
+The most important identifier correction is that current EduPay `Course.id` values must not be treated as immutable cross-system IDs: source migrations deliberately resequence and rewrite them from course names and grade patterns. Owner-approved integration identity is now generated UUID `Course.integrationId` and `Student.integrationId`, immutable and never reused, backfilled for existing records and exposed by the dedicated API. The source tenant key `colegio-conquistadores` is a slug-like string, not the canonical Identity/Académico tenant UUID; a server-controlled tenant mapping is required.
 
-The proposed MVP is a scheduled pull from a new, explicit, versioned source API after the source contract gaps are resolved, with a nightly full reconciliation. A supported export is a fallback only if it becomes a formal tenant-bound contract. Events/webhooks are a future evolution. No synchronization code, worker, cron, webhook, API client, or persistence model is added by this discovery.
+The accepted MVP is a scheduled pull from a dedicated, explicit, versioned source API, with hourly incremental pulls, nightly full reconciliation, and bounded manual full reconciliation. A supported export is not the accepted MVP mechanism. Events/webhooks are a future evolution. The source contract and implementation remain prerequisites; no synchronization code, worker, cron, webhook, API client, or persistence model is added by this discovery.
+
+## Owner-approved scope and authority
+
+- MVP synchronized entities are Course, Student, and current Student -> Course projected as CourseEnrollment.
+- Guardian, Teacher, Subject, CourseSubject, CourseSubjectTeacher, StudentSubjectEnrollment, AcademicYear as a source entity, Learning, Submission, Review, Notification, and financial entities are not sourced from EduPay.
+- AcademicYear is Académico-owned and a local AcademicYear is explicitly selected in Sync configuration. Year, grade, or section is never inferred from Course.name.
+- For source-linked `source = EDUPAY` records, EduPay owns Student integration identity, structured first/last name, administrative status, current Course, Course integration identity, display name, and active/deleted lifecycle.
+- Normal Académico UI/API must not mutate those source-owned fields. MVP has no competing local overrides. Manual records remain locally editable and are never fuzzy-auto-linked.
+- Owner-approved status and absence rules are stated in the lifecycle sections below; D-05 and D-06 are accepted, while source-side API delivery remains an implementation gate.
 
 ## Evidence labels
 
@@ -97,7 +106,7 @@ This mapping must be server-controlled and audited. A source slug must never be 
 
 **VERIFIED source fields:** `Course.id Int @id @default(autoincrement())`, `tenantId String`, `name String`, `createdAt`, `updatedAt`, and nullable `deletedAt`. The source has a unique `(tenantId, name)` constraint and a tenant index. `Course.name` is the only academic-looking descriptive field.
 
-**Important identifier finding:** source migrations `20260507120000_resequence_course_id_primero_basico`, `20260507140000_compact_course_ids_consecutive`, `20260507150000_align_course_ids_to_grade`, and `20260507160000_medio_course_ids_11_to_14` rewrite Course IDs, including parsing names and assigning grade-based numbers. Current `Course.id` is therefore not safe as an immutable cross-system identity. A future contract must add an immutable public Course ID/UUID or the source owner must explicitly freeze and guarantee the existing IDs; until then, Course synchronization is not implementation-ready.
+**Important identifier finding:** source migrations `20260507120000_resequence_course_id_primero_basico`, `20260507140000_compact_course_ids_consecutive`, `20260507150000_align_course_ids_to_grade`, and `20260507160000_medio_course_ids_11_to_14` rewrite Course IDs, including parsing names and assigning grade-based numbers. Current `Course.id` is therefore not an immutable cross-system identity. The owner-approved source contract requires generated UUID `Course.integrationId`, one-time backfill for existing records, immutability, no reuse, and exposure through the dedicated integration API.
 
 **Course API behavior:** `POST /api/courses`, `GET /api/courses`, `GET /api/courses/:id`, `PUT /api/courses/:id`, `DELETE /api/courses/:id`, and XLSX export exist. List responses are offset-paginated and include derived active-student and financial values. Delete sets `deletedAt`; ordinary reads omit deleted Courses. The XLSX export includes `id`, `nombre`, a hard-coded `nivel: '—'`, and active student count. It is not a safe academic integration feed.
 
@@ -105,7 +114,9 @@ This mapping must be server-controlled and audited. A source slug must never be 
 
 **VERIFIED source fields:** `Student.id Int @id @default(autoincrement())`, `tenantId String`, `rut String`, generated `rutNormalized`, `name String`, `status StudentStatus`, `financialSetup`, required `courseId`, required `guardianId`, `createdAt`, `updatedAt`, and nullable `deletedAt`.
 
-`Student.name` is one full-name string. The source schema does **not** contain a Student email, phone, or other Student contact field. Source guardian email/phone fields belong to Guardian, not Student. `rut` is unique within a tenant in the current schema, but RUT is a mutable/sensitive validation attribute and is not the proposed synchronization identity.
+`Student.name` is one legacy full-name string. The source schema does **not** contain a Student email, phone, or other Student contact field. Source guardian email/phone fields belong to Guardian, not Student. `rut` is unique within a tenant in the current schema, but RUT is a mutable/sensitive validation attribute and is not a synchronization identity.
+
+The accepted integration contract requires structured `Student.firstName` and `Student.lastName` to be maintained for the supported feed while preserving legacy `name` where compatibility requires it. Existing Students without validated structured names are source-data conflicts and are not synchronized with guessed name parts. The source must also add generated UUID `Student.integrationId`, backfill it once, never reuse it, and expose it through the dedicated integration API.
 
 `Student.status` is exactly `ACTIVE`, `INACTIVE`, or `GRADUATED`. Student create/list/update endpoints support status and course/guardian changes. Student update writes update `updatedAt` through Prisma. Student delete is a soft delete. Student list/find/export operations include course and/or guardian information and, in some responses, payment/charge-derived financial values; those fields must not be copied into Académico by an academic sync.
 
@@ -117,7 +128,7 @@ This mapping must be server-controlled and audited. A source slug must never be 
 
 **VERIFIED source shape:** the current relationship is `Student.courseId -> Course.id`, a required many-to-one current assignment. There is no source `CourseEnrollment` model, relationship ID, status, effective date, enrollment period, or historical movement record.
 
-**Proposed target behavior:** treat the source `Student.courseId` as current-membership input only. A source change from old Course ID to new Course ID should close the old target `CourseEnrollment` (`INACTIVE`) and activate/create the new one, preserving the old relationship and all academic evidence. This is a derived lifecycle projection, not a claim that EduPay owns historical enrollment semantics.
+**Accepted target behavior:** treat the source `Student.courseId` as current-membership input only. A source change from old Course to new Course should close the old target source-owned `CourseEnrollment` (`INACTIVE`) and activate/create the new one, preserving the old relationship and all academic evidence. This is a derived lifecycle projection, not a claim that EduPay owns historical enrollment semantics.
 
 ### Guardian/apoderado
 
@@ -129,7 +140,7 @@ This mapping must be server-controlled and audited. A source slug must never be 
 
 **VERIFIED source entities:** PaymentConcept, PaymentGroup, Payment, Charge, NotificationLog, SentCommunication, TenantEmailConfig, and related administrative User/Role/Permission models exist. They are tenant-scoped and linked to Student or Guardian workflows.
 
-**Proposed boundary:** financial, payment, charge, notification, authentication, role, permission, and credential data are `NOT_SYNCED` to Académico. Payment-linked Student records do not become academic Student fields.
+**Accepted boundary:** financial, payment, charge, notification, authentication, role, permission, and credential data are `NOT_SYNCED` to Académico. Payment-linked Student records do not become academic Student fields.
 
 ### Structures absent from EduPay
 
@@ -155,37 +166,37 @@ Relevant target gaps:
 
 - `Tenant.id` is tenant-scoped but has no source provenance.
 - `AcademicYear` owns UUID identity, label, dates, and lifecycle; it has no source fields.
-- `Course` owns UUID identity, `academicYearId`, label, and lifecycle; it has no `source`, `externalSystem`, or `externalId`.
+- `Course` owns UUID identity, `academicYearId`, label, and lifecycle; it currently has no `source`, `externalSystem`, or `externalId`. Owner approval permits implementation to add explicit provenance to Course.
 - `Student` has `source` and `externalReference`, unique within tenant, plus `firstName`, `lastName`, `email`, and `ACTIVE`/`INACTIVE` status.
 - `Teacher` has similar provenance, but source Teacher is absent.
-- Subject/relationship models have no source provenance.
+- Subject/relationship models have no source provenance. Owner approval permits explicit provenance for CourseEnrollment where needed for source-owned current membership.
 - No target model currently has `externalSystem`, `lastSyncedAt`, or `syncVersion`.
 
 Current Academic API behavior permits local edits to Student first/last name/email/status and Course label/status. The existing audit port has correlation-capable events but does not persist before/after field values. A future implementation therefore needs approved item-level reconciliation/conflict evidence and cannot infer source-vs-local ownership from timestamps alone.
 
 ## 3. Stable identifiers and mapping
 
-### Proposed source identity
+### Accepted source identity
 
 The general deterministic identity is:
 
 ```text
-(canonical tenantId, source = "EDUPAY", entityType, immutable source externalId)
+(canonical tenantId, source = "EDUPAY", entityType, externalId = integrationId)
 ```
 
-For the current target Student model, the exact representable candidate is:
+For the current target Student model, the exact representable mapping is:
 
 ```text
-Student.tenantId + Student.source = "EDUPAY" + Student.externalReference = String(source Student.id)
+Student.tenantId + Student.source = "EDUPAY" + Student.externalReference = source Student.integrationId
 ```
 
-This is **PROPOSED**, conditional on the source owner adding an explicit guarantee that Student IDs are never reused and on the integration API returning the ID consistently. No Student ID rewrite migration was found, but the source’s autoincrement declaration alone is not a no-reuse contract.
+EduPay must add and backfill generated UUIDs `Course.integrationId` and `Student.integrationId`. They are immutable, never reused, exposed by the dedicated integration API, and become Académico `externalReference` values. Current source integer IDs remain diagnostic only.
 
 RUT can validate/reconcile a suspected mismatch if the owner approves handling it, but it must not be the primary synchronization key. Names, email, guardian data, and course labels are never automatic identity keys.
 
 ### Course identity
 
-`String(source Course.id)` is **not** a safe final Course external reference because source migrations rewrite Course IDs. Course sync requires an immutable source public ID/UUID or an explicit accepted source guarantee that IDs are frozen and never reused. The current target Course also lacks a provenance field, so target-side Course mapping must be designed and accepted before implementation. A source ID may be shown as an operator diagnostic reference only.
+`String(source Course.id)` is not a safe Course external reference because source migrations rewrite Course IDs. `Course.integrationId` is the accepted identity. The target Course may add explicit tenant-safe provenance during implementation; display labels remain non-identifying. A source integer ID may be shown as an operator diagnostic reference only.
 
 ### Relationship identity
 
@@ -197,33 +208,35 @@ EduPay has no AcademicYear, year boundary, or source course period. A year must 
 
 | Option | Assessment | Status |
 | --- | --- | --- |
-| A. Configured target AcademicYear per sync source | Safe if the mapping points to an existing target year and is versioned/audited. The source does not own the year. | **PROPOSED** fallback; requires owner decision. |
-| B. Local admin creates AcademicYear; source Courses map into it | Preserves Académico’s year lifecycle and avoids source inference. A server-controlled config maps source tenant/course feed to the selected target year; changing years is an explicit administrative action. | **PROPOSED recommendation for MVP.** |
+| A. Configured target AcademicYear per sync source | Safe if the mapping points to an existing target year and is versioned/audited. The source does not own the year. | **Accepted implementation.** |
+| B. Local admin creates AcademicYear; source Courses map into it | Preserves Académico’s year lifecycle and avoids source inference. A server-controlled config maps source tenant/course feed to the selected target year; changing years is an explicit administrative action. | **Accepted implementation.** |
 | C. Parse year/grade/section from mutable Course.name | Ambiguous, not represented in source schema, and unsafe as identity or lifecycle data. | **REJECTED proposal.** |
 
-Recommended rule: local Académico administration creates and owns `AcademicYear`; an approved sync configuration selects the target year for a source tenant/feed. No Course is synchronized until a target year mapping exists. Grade/level/section remain absent unless a separate source contract and target model decision adds them.
+Accepted rule: local Académico administration creates and owns `AcademicYear`; Sync configuration explicitly selects the target year for a source tenant/feed. No Course is synchronized until a target year mapping exists. Grade/level/section remain absent and are never inferred from Course.name.
 
-## 5. D-05 — final proposed source-of-truth matrix
+## 5. D-05 — final accepted source-of-truth matrix
 
-This matrix is **PROPOSED** and remains open for EduPay integration, product, security, and Academic owners. Every source field cited below is an actual inspected schema/API field; absent fields are called out explicitly.
+This matrix is **ACCEPTED**. Every source field cited below is an actual inspected field or an owner-approved addition to the supported integration contract; absent fields are called out explicitly.
 
-| Source entity/field | Target entity/field | Proposed ownership classification | Local mutation allowed | Source change behavior | Local-difference behavior | Evidence/status |
+| Source entity/field | Target entity/field | Accepted ownership classification | Local mutation allowed | Source change behavior | Local-difference behavior | Evidence/status |
 | --- | --- | --- | --- | --- | --- | --- |
 | `Tenant.id`, `Tenant.slug` | Server mapping to canonical `Tenant.id` | `NOT_SYNCED` | No client-controlled mapping | Resolve through audited mapping; do not overwrite canonical ID | Unmapped tenant blocks the run; never guess by name | **VERIFIED** source string key; **REQUIRES OWNER DECISION** mapping. |
 | `Tenant.isActive` | Identity/Academic tenant lifecycle | `NOT_SYNCED` | Canonical lifecycle remains local/Identity-owned | Do not deactivate canonical tenant automatically | Require explicit operator review | **VERIFIED** source field; ownership not equivalent. |
-| `Student.id` | `Student.source = EDUPAY`, `Student.externalReference` | `EDUPAY_AUTHORITATIVE` conditional | Immutable after link | Never change/reuse mapping | Duplicate/collision quarantined; no fuzzy remap | **VERIFIED** field; **REQUIRES OWNER DECISION** no-reuse guarantee. |
-| `Student.name` | `Student.firstName` + `Student.lastName` | `EDUPAY_AUTHORITATIVE` conditional | Local edit requires conflict policy | Apply only after an approved full-name-to-two-fields mapping | Hold/report if split is ambiguous; do not invent a surname | **VERIFIED** one full-name field; **REQUIRES OWNER DECISION** transformation. |
+| `Student.integrationId` | `Student.source = EDUPAY`, `Student.externalReference` | `EDUPAY_AUTHORITATIVE` | Immutable after link | Never change or reuse mapping | Duplicate/collision quarantined; no fuzzy remap | **ACCEPTED source contract**; generated UUID, backfilled once, never reused. |
+| `Student.firstName` | `Student.firstName` | `EDUPAY_AUTHORITATIVE` | Ordinary UI/API mutation prohibited | Apply source value | Divergence is a source-data/integrity conflict; no local override | **ACCEPTED source contract**; validated structured field. |
+| `Student.lastName` | `Student.lastName` | `EDUPAY_AUTHORITATIVE` | Ordinary UI/API mutation prohibited | Apply source value | Divergence is a source-data/integrity conflict; no local override | **ACCEPTED source contract**; validated structured field. |
+| Legacy `Student.name` | No target field | `NOT_SYNCED` | Source compatibility only | Do not parse/split | Missing structured names are source-data conflicts | **VERIFIED legacy field**; automatic splitting rejected. |
 | Student email/contact | `Student.email` | `NOT_SYNCED` | Target email remains local | No source update | No source value exists to compare | **NOT SUPPORTED BY SOURCE**. This corrects the prior incomplete proposal. |
 | `Student.rut`, `rutNormalized` | No current target field | `NOT_SYNCED` | N/A | Do not copy in MVP | Use only as a controlled reconciliation attribute if separately approved | **VERIFIED** source; target field absent. |
-| `Student.status` | `Student.status` | `EDUPAY_AUTHORITATIVE` conditional | Local override requires a separate accepted policy | `ACTIVE -> ACTIVE`; `INACTIVE -> INACTIVE`; `GRADUATED -> INACTIVE`; `deletedAt != null -> INACTIVE` | Record conflict; a failed/partial run never mass-deactivates | **VERIFIED** source enum and soft delete; target only has active/inactive. |
-| `Student.courseId` | `CourseEnrollment.studentId/courseId/status` | `EDUPAY_AUTHORITATIVE` conditional, derived | Manual enrollment needs explicit manual/source distinction | Old active membership becomes `INACTIVE`; new membership becomes `ACTIVE`; no history deletion | If target relationship differs, hold/reconcile by immutable IDs, never labels | **VERIFIED** current assignment; no source enrollment history. |
+| `Student.status` | `Student.status` | `EDUPAY_AUTHORITATIVE` | Ordinary UI/API mutation prohibited | `ACTIVE -> ACTIVE`; `INACTIVE`/`GRADUATED`/trusted tombstone -> `INACTIVE` | Divergence is an integrity/conflict result; partial runs never cause absence changes | **VERIFIED** source enum; accepted target mapping. |
+| Current `Student.courseId` | `CourseEnrollment.studentId/courseId/status` | `EDUPAY_AUTHORITATIVE`, derived | Ordinary UI/API mutation prohibited for source-owned enrollment | Old active membership becomes `INACTIVE`; new membership becomes `ACTIVE`; no history deletion | Resolve by immutable integration IDs only | **VERIFIED** current assignment; no source enrollment history. |
 | `Student.guardianId` | No target Guardian relationship | `NOT_SYNCED` | N/A | No write | Separate future privacy/model decision | **VERIFIED** source; target concept absent. |
 | `Student.financialSetup`, payments, charges | No Academic financial field | `NOT_SYNCED` | N/A | No write | Never copy financial state | **VERIFIED** source financial boundary. |
-| `Course.id` | Target Course external identity | `EDUPAY_AUTHORITATIVE` only after stable-ID contract | No mapping until target provenance exists | No automatic sync using current ID | Operator mapping/source contract required | **VERIFIED** source ID rewrites; **REQUIRES OWNER DECISION** new immutable ID. |
-| `Course.name` | `Course.label` | `EDUPAY_AUTHORITATIVE` conditional for linked Courses | No ordinary rename of source-linked row in MVP proposal | Apply source rename with conflict evidence | Source-linked row requires review/evidence; manual Courses are not label-matched | **VERIFIED** source field; mutable. |
-| `Course.deletedAt` | `Course.status = ARCHIVED` | `EDUPAY_AUTHORITATIVE` conditional for source lifecycle | No hard delete | Archive Course and inactivate source-owned enrollments | Missing data alone is not a tombstone | **VERIFIED** soft delete; ordinary API hides it. |
+| `Course.integrationId` | Course provenance / `externalReference` | `EDUPAY_AUTHORITATIVE` | Immutable after link | Never change or reuse mapping | Duplicate/collision quarantined; no label matching | **ACCEPTED source contract**; generated UUID, backfilled once, never reused. |
+| `Course.name` | `Course.label` | `EDUPAY_AUTHORITATIVE` | Ordinary UI/API mutation prohibited | Apply source rename | Divergence is an integrity/conflict result; no local override | **VERIFIED** source field; mutable display value. |
+| `Course.deletedAt` | `Course.status = ARCHIVED` | `EDUPAY_AUTHORITATIVE` | No hard delete | Trusted tombstone archives Course and inactivates source-owned enrollments | Simple absence requires two complete successful full reconciliations | **VERIFIED** soft delete; ordinary API hides it. |
 | `Course.createdAt`, `updatedAt` | Sync watermark/evidence | `DERIVED` | No business edit | Use for cursor/version only when source contract defines semantics | Stale source version is ignored/quarantined | **VERIFIED** timestamps; no incremental endpoint. |
-| `AcademicYear` | `AcademicYear` | `ACADEMICO_AUTHORITATIVE` | Local admin creates/owns it | Source cannot change it because source concept is absent | Sync blocks if configured target year is missing | **NOT SUPPORTED BY SOURCE**; local target model verified. |
+| `AcademicYear` | Local `AcademicYear` selected by Sync configuration | `ACADEMICO_AUTHORITATIVE` | Local admin creates/owns it | Source cannot change it because source concept is absent | Sync blocks if configured target year is missing | **NOT SUPPORTED BY SOURCE**; accepted local mapping. |
 | `Guardian.id`, `rut`, `name`, `email`, `phone`, association | No target Guardian model | `NOT_SYNCED` | N/A | No write in MVP | Future privacy/product decision | **VERIFIED** source; **NOT SYNCED BY MVP**. |
 | Teacher | `Teacher` | `NOT_SYNCED` | Académico local only | No write | No automatic creation | **NOT SUPPORTED BY SOURCE**. |
 | Subject | `Subject` | `NOT_SYNCED` | Académico local only | No write | No automatic creation | **NOT SUPPORTED BY SOURCE**. |
@@ -233,26 +246,26 @@ This matrix is **PROPOSED** and remains open for EduPay integration, product, se
 
 ### Required local conflict behavior
 
-For a source-linked record, a source-owned field change may update Académico only under an accepted rule and with item-level evidence. If the current local value differs, the synchronizer must report the conflict and either apply the approved source-authoritative value or hold the item for operator resolution. It must never silently choose a record by name, RUT, email, guardian, or course label.
+For a source-linked record, normal Académico UI/API must not mutate source-owned fields. The synchronizer has no competing local override in MVP. If a local divergence is found, it is an integrity/conflict result and must not be silently reconciled through a guessed value. It must never select a record by name, RUT, email, Guardian, or Course label.
 
-The present target API permits local Student name/status/email and Course label/status edits, but current audit output does not preserve before/after values. A later implementation must therefore add an accepted conflict/provenance/evidence design or choose a review-first policy. This discovery does not add that persistence.
+The present target API permits local Student name/status/email and Course label/status edits, so the implementation must enforce the accepted source-linked mutation boundary. Current audit output does not preserve before/after values; SyncItemResult evidence must capture source-data conflicts and rejected local divergence without creating a competing override.
 
 ## 6. Student status, course movement, and history
 
 ### Status mapping
 
-| EduPay source state | Proposed Academic state | History behavior |
+| EduPay source state | Accepted Academic state | History behavior |
 | --- | --- | --- |
 | `ACTIVE` | `Student.status = ACTIVE` | Keep source mapping and existing Learning/Submission history. |
 | `INACTIVE` | `Student.status = INACTIVE` | Do not delete Student, enrollments, Learning, or Submissions. |
 | `GRADUATED` | `Student.status = INACTIVE` | Preserve the source raw status in accepted sync evidence/provenance if available; target has no Graduated enum. |
-| `deletedAt != null` | `Student.status = INACTIVE` | Treat as source lifecycle evidence only after a trusted tombstone; never hard-delete target history. |
+| Trusted source tombstone | `Student.status = INACTIVE` | Apply immediately; never hard-delete target history. |
 
 ### Course movement
 
-Because EduPay stores only the current `Student.courseId`, a changed Course ID is a current-membership change, not a historical enrollment event. Proposed target behavior:
+Because EduPay stores only the current `Student.courseId`, a changed Course is a current-membership change, not a historical enrollment event. Accepted target behavior:
 
-1. Resolve the old and new Courses through immutable source mappings.
+1. Resolve the old and new Courses through immutable `integrationId` mappings.
 2. Mark the old active source-owned `CourseEnrollment` `INACTIVE`.
 3. Create or activate the new source-owned `CourseEnrollment` `ACTIVE`.
 4. Keep the old enrollment row, Learning, Submissions, and audit/reconciliation evidence.
@@ -260,21 +273,21 @@ Because EduPay stores only the current `Student.courseId`, a changed Course ID i
 
 ### Source disappearance
 
-The source’s ordinary list endpoints omit soft-deleted records, so absence is not a tombstone. A future source contract must include deleted records or an explicit deletion feed. A Student/Course may be deactivated/archived for absence only after a complete, successful full reconciliation, with an owner-approved grace rule. A partial batch, timeout, invalid tenant response, or source outage never triggers mass deactivation.
+The source’s ordinary list endpoints omit soft-deleted records, so absence is not a tombstone. The accepted integration contract must include deleted records or an explicit deletion feed. A Student/Course may be deactivated/archived for absence only after two consecutive complete successful full reconciliations. A partial batch, timeout, invalid tenant response, or source outage never triggers absence-driven lifecycle changes.
 
-## 7. D-06 — options and recommendation
+## 7. D-06 — accepted synchronization strategy
 
 | Option | Complexity | Reliability/recovery | Load/latency | Deployment coupling | Security | Evidence-specific finding |
 | --- | --- | --- | --- | --- | --- | --- |
-| A. Scheduled pull from EduPay API | Medium after source contract; bounded async processing | Replayable with cursor/full reconcile; per-item retries | Predictable; eventual consistency | API contract only | Dedicated S2S auth and tenant scope | **PROPOSED MVP.** Existing API must be extended first. |
+| A. Scheduled pull from EduPay API | Medium after source contract; bounded async processing | Replayable with cursor/full reconcile; per-item retries | Predictable; eventual consistency | API contract only | Dedicated S2S auth and tenant scope | **ACCEPTED MVP.** Dedicated API is required. |
 | B. Scheduled supported export/interface | Low-medium consumer; export operations are a dependency | Replayable batch but weaker tombstone/incremental semantics | Bursty and less fresh | Operational export coupling | Secure delivery, integrity, tenant binding, PII minimization | **Fallback only.** Existing XLSX exports are not this contract. |
 | C. Push/webhook/event | High producer and consumer complexity | Requires durable delivery, ordering, replay, DLQ, and backstop | Low latency; source load shifts to event delivery | High producer coupling | Signed, replay-protected tenant-bound delivery | **NOT SUPPORTED BY SOURCE** today. |
-| D. Hybrid events + scheduled reconciliation | Highest initial complexity; strongest eventual correctness | Events reduce latency; full reconcile repairs drift | Low latency plus periodic bounded load | Highest | Requires both secure contracts | **PROPOSED future evolution.** |
+| D. Hybrid events + scheduled reconciliation | Highest initial complexity; strongest eventual correctness | Events reduce latency; full reconcile repairs drift | Low latency plus periodic bounded load | Highest | Requires both secure contracts | **Future evolution; not MVP.** |
 | Direct database coupling | Appears simple initially | Fragile across migrations/outages; poor replay/audit boundary | Unbounded shared load | Maximal schema/deployment coupling | Expands secrets and tenant exposure | **REJECTED.** Violates target architecture. |
 
-### Recommended MVP mechanism
+### Accepted MVP mechanism
 
-**PROPOSED:** scheduled pull from a dedicated, versioned, read-only EduPay integration API. This is conditional: the current source API is insufficient, so no implementation should begin until the source-side contract below is accepted and available.
+**ACCEPTED:** scheduled pull from a dedicated, versioned, read-only EduPay integration API. The current source API is insufficient, so synchronization implementation must wait until the accepted source-side contract below is available.
 
 The existing admin CRUD API is not enough because it:
 
@@ -289,35 +302,36 @@ The existing portal API is also not suitable: `/api/v1/portal` is authenticated 
 
 ### Future evolution
 
-**PROPOSED:** signed source events or webhooks for low-latency changes, backed by scheduled full reconciliation. The source currently has only a Resend delivery webhook and no academic outbox/event producer, so this is future work and not an MVP capability.
+Signed source events or webhooks for low-latency changes, backed by scheduled full reconciliation, remain future evolution. The source currently has only a Resend delivery webhook and no academic outbox/event producer, so this is not an MVP capability.
 
 ## 8. Cadence and source behavior
 
 **VERIFIED source behavior:** records are changed manually through CRUD operations; `updatedAt` exists, but the source exposes no `updatedSince`, cursor, event stream, freshness SLA, change-volume metrics, or rate-limit contract. Therefore real-time synchronization is not justified by evidence.
 
-**PROPOSED initial cadence, subject to owner approval:**
+**Accepted cadence baseline:**
 
-- hourly incremental pull during the agreed operational window once a cursor/watermark API exists;
-- nightly complete tenant reconciliation in an agreed low-load window;
-- bounded operator-triggered full run for onboarding/recovery;
+- hourly incremental pull;
+- nightly complete tenant reconciliation;
+- bounded manual full reconciliation for onboarding/recovery;
 - exponential backoff for temporary source unavailability;
-- no deactivation based on failed, partial, stale, or tenant-ambiguous responses.
+- trusted tombstones may apply lifecycle immediately;
+- simple absence requires two consecutive complete successful full reconciliations.
 
-The exact cadence remains **REQUIRES OWNER DECISION** because source volume, manual change frequency, rate limits, and acceptable freshness were not implemented as measurable source contracts. The evidence supports eventual consistency and scheduled operation, not a real-time promise.
+This is an operational default and may be configured later. Partial/failed runs never cause absence-driven lifecycle changes. The evidence supports eventual consistency and scheduled operation, not a real-time promise.
 
 ## 9. Idempotency and stale-update protection
 
 ### Deterministic identity
 
-For Students, the proposed key is:
+For Students, the accepted key is:
 
 ```text
-(canonicalTenantId, source = "EDUPAY", entityType = "Student", externalId = String(Student.id))
+(canonicalTenantId, source = "EDUPAY", entityType = "Student", externalId = Student.integrationId)
 ```
 
-For Courses, use a new immutable source public ID/UUID and a future approved target provenance mapping. Do not use the current mutable/resequenced Course integer ID as final identity.
+For Courses, use `Course.integrationId` and the approved target Course provenance mapping. Do not use the current mutable/resequenced Course integer ID as identity.
 
-For CourseEnrollment, use a source-issued relationship ID if one is added, otherwise a deterministic pair of immutable Student and Course external IDs. The target currently lacks relationship provenance; this must be accepted before implementation.
+For CourseEnrollment, use explicit tenant-safe provenance derived from immutable Student and Course integration IDs. Target CourseEnrollment provenance may be added during implementation as approved.
 
 ### Upsert and retry rules
 
@@ -336,7 +350,7 @@ For CourseEnrollment, use a source-issued relationship ID if one is added, other
 
 ## 10. Reconciliation and observability
 
-**PROPOSED minimum evidence, with no models added in this branch:**
+**Accepted minimum evidence, with no models added in this branch:**
 
 ### Sync run
 
@@ -349,26 +363,27 @@ For CourseEnrollment, use a source-issued relationship ID if one is added, other
 
 - entity type, source external ID, target ID when known, item result, source version, retryability, conflict code, and redacted error evidence;
 - no raw credentials, tokens, payment data, or unnecessary PII;
-- duplicate IDs, invalid tenant mappings, stale updates, missing Course mappings, and ambiguous full-name transforms are explicit error/conflict categories.
+- duplicate IDs, invalid tenant mappings, stale updates, missing Course mappings, and missing/invalid structured Student names are explicit error/conflict categories.
 
-A full reconciliation is the only proposed trigger for absence-based lifecycle changes. It must not mark unseen records inactive when the source response is incomplete or untrusted.
+A full reconciliation is the only trigger for absence-based lifecycle changes. An explicit trusted tombstone may apply lifecycle immediately; simple absence requires two consecutive complete successful full reconciliations. The implementation must not mark unseen records inactive when the source response is incomplete or untrusted.
 
 ## 11. Required source API changes before implementation
 
-**PROPOSED minimal source-side contract:**
+**Accepted source-side implementation contract:**
 
 1. Add a dedicated read-only namespace such as `/api/v1/integrations/academico`; do not reuse admin CRUD or payment portal routes.
 2. Authenticate with a source-approved service-to-service mechanism and keep credentials in secret custody. The existing portal static key mechanism must not be copied by assumption.
 3. Resolve tenant scope from server-validated configuration and return the source tenant key in every response; never rely on an untrusted payload tenant.
-4. Add an immutable, never-reused public Course ID/UUID. Add an explicit no-reuse guarantee for Student IDs or expose a replacement immutable Student public ID.
-5. Provide sparse academic payloads, excluding payments, charges, authentication, roles, guardian PII, and derived financial totals. Minimum proposed fields:
+4. Add and backfill generated immutable, never-reused UUIDs `Course.integrationId` and `Student.integrationId`.
+5. Maintain validated structured `firstName` and `lastName` for Students while preserving legacy `name` where needed. Existing Students without validated structured names are source-data conflicts.
+6. Provide sparse academic payloads, excluding payments, charges, authentication, roles, Guardian PII, and derived financial totals. Minimum fields:
 
-   - Course: source tenant key, immutable public ID, `name`, `createdAt`, `updatedAt`, `deletedAt`;
-   - Student: source tenant key, immutable ID, `name`, optionally `rut` only after privacy approval, `status`, current `courseId`/Course public ID, `createdAt`, `updatedAt`, `deletedAt`.
+   - Course: source tenant key, `integrationId`, `name`, `createdAt`, `updatedAt`, `deletedAt`;
+   - Student: source tenant key, `integrationId`, `firstName`, `lastName`, `status`, current Course `integrationId`, `createdAt`, `updatedAt`, `deletedAt`.
 
-6. Provide bounded pagination with an opaque cursor or deterministic `(updatedAt, immutableId)` ordering, an incremental watermark, schema version, and complete-snapshot mode.
-7. Include soft-delete tombstones or a supported deletion feed. Define retention for tombstones and behavior for records deleted between pages.
-8. Define rate limits, timeout expectations, error codes, freshness expectations, and tenant authorization. No source data change events are required for the MVP.
+7. Provide bounded pagination with a deterministic cursor/watermark, schema version, and complete-snapshot mode.
+8. Include soft-delete tombstones or a supported deletion feed. Define retention for tombstones and behavior for records deleted between pages.
+9. Define retry-safe semantics, rate limits, timeout expectations, error codes, freshness expectations, and tenant authorization. No source data change events are required for the MVP.
 
 Guardian should remain outside this MVP contract. If later included, it needs a separate PII/privacy decision and explicit target model.
 
@@ -378,7 +393,7 @@ Guardian should remain outside this MVP contract. If later included, it needs a 
 - Store any dedicated source credential in the approved server-side secret manager; never place it in this repository’s docs, client bundles, fixtures, or logs.
 - Use a server-controlled source-tenant-to-canonical-tenant mapping and revalidate tenant scope for every page and asynchronous run.
 - Apply connection timeout, bounded retry, backoff/circuit-breaker, concurrency/page limits, and source rate limits.
-- Minimize PII: Student name is the only required personal attribute in the proposed sparse feed; RUT is conditional and Guardian contact data is excluded.
+- Minimize PII: structured Student names are the only required personal attributes in the accepted sparse feed; RUT and Guardian contact data are excluded.
 - Never copy payment/charge data, credentials, JWTs, API keys, raw payloads, or sensitive contact data into Academic logs.
 - Redact names, RUT, email, phone, tokens, and authorization headers; log opaque IDs, counts, correlation IDs, and bounded error codes.
 - Define audit access and retention for SyncRun/item evidence before implementation.
@@ -398,22 +413,20 @@ The following must **NOT** synchronize in this MVP:
 - source-to-target matching by name, RUT, email, guardian, or mutable Course label;
 - hard deletion of Academic records.
 
-## 14. Owner decisions still required
+## 14. Accepted decisions and implementation gates
 
-1. Approve D-05 field ownership, especially source authority for linked Student names/status, Course label/status, and current course membership.
-2. Decide how a source single full-name `Student.name` is safely represented by target `firstName`/`lastName`; do not split heuristically without approval.
-3. Require and approve an immutable Course public ID and Student ID no-reuse guarantee.
-4. Provide the actual mapping from source tenant key `colegio-conquistadores` to the canonical ecosystem tenant UUID.
-5. Choose and approve the AcademicYear mapping, with option B (local target AcademicYear + configured source mapping) recommended.
-6. Approve that Guardian, Teacher, Subject, CourseSubject, Learning, Submissions, and financial data are out of the MVP.
-7. Approve the dedicated source API contract, authentication mechanism, tenant scoping, sparse payload, tombstones, pagination/cursor, schema version, rate limits, and error semantics.
-8. Approve the initial hourly incremental/nightly full cadence after source volume and freshness are measured.
-9. Decide whether source-authoritative local conflicts are source-wins-with-evidence or review-first, and where before/after evidence is retained.
-10. Approve the absence grace rule before any unseen record is deactivated/archived; two consecutive complete full reconciliations is a proposal, not a decision.
-11. Approve target provenance requirements for Course, AcademicYear mapping, and CourseEnrollment before implementation.
+D-05 and D-06 are accepted. The remaining work is delivery of the approved seam, not further ownership arbitration:
+
+1. EduPay adds/backfills immutable, never-reused `Course.integrationId` and `Student.integrationId` UUIDs.
+2. EduPay maintains validated structured `firstName`/`lastName`; legacy-only Students become source-data conflicts.
+3. The dedicated API provides S2S authentication, tenant scoping, schema version, deterministic cursor/watermark, full snapshot, tombstones, bounded pages, retry-safe semantics, errors, and rate limits.
+4. Operations configures `(EDUPAY, sourceTenantId) -> canonical ecosystem tenant UUID` and selects a local AcademicYear in Sync configuration.
+5. Implementation adds approved explicit provenance to Course and CourseEnrollment without overloading display names.
+6. Implementation enforces the source-linked local mutation boundary and records SyncRun/SyncItemResult evidence.
+7. Tests cover duplicate IDs, stale/replayed records, name conflicts, course movement, status changes, tombstones, two-run absence, partial failure, outage, cross-tenant access, and preservation of Learning/Submission history.
 
 ## 15. Conclusion and decision state
 
 The source inspection materially changes the prior incomplete discovery: the source is available and confirms Student, Course, Guardian, tenant, status, soft deletion, and timestamps, but it does not provide Student email, academic year, structural course fields, enrollment history, Teacher, Subject, or an academic integration surface. Current Course IDs are not safe immutable keys.
 
-The recommended path is a separate, versioned, sparse, tenant-bound source API plus scheduled pull and full reconciliation. This remains a proposal. D-05 and D-06 remain **OPEN** until the named owners review and explicitly accept the ADRs and the source/target contract. No synchronization implementation is authorized by this document.
+The accepted architecture is a separate, versioned, sparse, tenant-bound source API plus hourly scheduled pull, nightly full reconciliation, and bounded manual full reconciliation. D-05 and D-06 are **Accepted**; no synchronization implementation is authorized until the source API and the listed implementation gates are delivered.

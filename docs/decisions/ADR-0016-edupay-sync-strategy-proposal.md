@@ -1,10 +1,10 @@
-# ADR-0016: EduPay synchronization strategy proposal
+# ADR-0016: EduPay synchronization strategy decision
 
-Status: **Proposed**; D-06 remains **OPEN**
+Status: **Accepted**; D-06 resolved 2026-08-11
 
-Date: 2026-08-10
+Date: 2026-08-11
 
-Owners to approve: EduPay integration owner, platform/operations owner, security/privacy owner, Académico product owner
+Approved by: EduPay integration owner, platform/operations owner, security/privacy owner, Académico product owner
 
 Related: [Synchronization discovery](../integration/edupay-sync-discovery.md), [ADR-0004](ADR-0004-edupay-sync-contract.md), [ADR-0011](ADR-0011-api-and-shared-contract-strategy.md)
 
@@ -30,31 +30,33 @@ Therefore, no current source interface is sufficient for a safe incremental Acad
 
 | Option | Complexity | Reliability/error recovery | Load/latency | Deployment coupling | Security | Finding |
 | --- | --- | --- | --- | --- | --- | --- |
-| A. Scheduled pull from EduPay API | Medium after contract changes; simple operational model | Retryable/replayable with cursor and full reconciliation | Predictable bounded load; eventual consistency | Depends on an explicit API contract, not DB schema | Dedicated S2S auth and tenant mapping | **Recommended MVP, conditional.** |
+| A. Scheduled pull from EduPay API | Medium after contract changes; simple operational model | Retryable/replayable with cursor and full reconciliation | Predictable bounded load; eventual consistency | Depends on an explicit API contract, not DB schema | Dedicated S2S auth and tenant mapping | **Accepted MVP; source API prerequisite.** |
 | B. Scheduled pull from supported export/interface | Low-medium consumer; export operations required | Good replay of complete files; weak incremental/tombstone semantics unless designed in | Bursty and less fresh | Operational export producer is coupled | Secure delivery, integrity, tenant binding, PII minimization | **Fallback only.** Existing XLSX is not sufficient. |
 | C. Push/webhook/event | High producer and consumer complexity | Requires durable delivery, replay, ordering, dead-lettering, and backstop | Low latency; producer must emit every change | High source/target coupling | Signed tenant-bound delivery and replay protection | **Not supported by source today.** |
 | D. Hybrid events plus scheduled reconciliation | Highest initial complexity; best eventual correctness | Events reduce latency; full run repairs drift/missed messages | Low latency plus periodic load | Highest | Two secure contracts and event operations | **Recommended future evolution.** |
 | Direct database coupling | Low initial coding effort only | Fragile across migrations and outages; poor service audit boundary | Shared/unbounded load | Maximal migration/deployment coupling | Expands credentials and tenant exposure | **Rejected.** |
 
-## Proposal
+## Accepted decision
 
 ### MVP mechanism
 
-Use a **scheduled pull from a dedicated, versioned, read-only EduPay integration API**, after the source contract requirements below are accepted and deployed. The synchronizer should be asynchronous and independent of interactive Academic requests.
+Use a **scheduled pull from a dedicated, versioned, read-only EduPay integration API**. The synchronizer must be asynchronous and independent of interactive Academic requests. Ordinary EduPay admin CRUD endpoints, portal endpoints, and direct database access are not supported sync contracts.
 
-This is a conditional proposal: the current source admin and portal interfaces do not satisfy the contract. No worker, scheduler, API client, webhook, or sync persistence model is authorized by this ADR.
+The current source admin and portal interfaces do not satisfy the contract. This ADR accepts the architecture; it does not claim that the source API or synchronization implementation exists.
 
-### Provisional cadence
+### Accepted cadence baseline
 
-The initial proposed operating cadence is:
+The operational default is:
 
 - hourly incremental pull during an agreed operational window;
 - nightly complete tenant reconciliation in an agreed low-load window;
 - bounded operator-triggered full run for onboarding and recovery;
 - exponential backoff for temporary source unavailability;
-- no deactivation or archival from a partial, failed, stale, or tenant-ambiguous response.
+- explicit trusted tombstones may apply lifecycle changes immediately;
+- simple absence may deactivate/archive only after two consecutive complete successful full reconciliations;
+- partial or failed runs never cause absence-driven lifecycle changes.
 
-This cadence is not an accepted freshness SLA. The source implementation does not provide change-volume metrics, rate limits, or business freshness requirements. The owner must recalibrate it after those facts are supplied. Evidence supports scheduled eventual consistency; it does not support a real-time requirement.
+This cadence is an operational default and may be configured later. The source implementation does not provide a real-time contract; the accepted strategy is scheduled eventual consistency.
 
 ### Future evolution
 
@@ -86,10 +88,10 @@ Guardian should remain out of the MVP API. A future Guardian contract needs a se
 Use the deterministic key:
 
 ```text
-(canonicalTenantId, source = "EDUPAY", entityType, immutable externalId)
+(canonicalTenantId, source = "EDUPAY", entityType, externalId = integrationId)
 ```
 
-For current target Students this is `(tenantId, source, externalReference)` with `source = EDUPAY` and `externalReference = String(source Student.id)`, after the source no-reuse guarantee is accepted. For Courses, use the new immutable public ID; never use the current mutable/resequenced Course integer ID. For CourseEnrollment, use a source relationship ID or the pair of immutable Student/Course IDs after target provenance is accepted.
+EduPay must add and backfill generated UUIDs `Course.integrationId` and `Student.integrationId`. They are immutable, never reused, exposed by the dedicated API, and become Académico `externalReference` values. For CourseEnrollment, use explicit tenant-safe provenance based on the source Student/Course integration IDs. Never use the current mutable/resequenced Course integer ID, RUT, name, email, or display label.
 
 ### Processing rules
 
@@ -103,7 +105,7 @@ For current target Students this is `(tenantId, source, externalReference)` with
 - A partial batch reports successful and failed items separately and is safe to retry.
 - Source outage preserves the last known Academic state.
 
-The source currently has `updatedAt` but no incremental API. A future API must define opaque cursor or `(updatedAt, immutableId)` ordering, equal-timestamp behavior, resume semantics, page bounds, schema version, and tombstones.
+The source currently has `updatedAt` but no incremental API. The required API must define a deterministic cursor/watermark, equal-timestamp behavior, resume semantics, bounded pages, schema version, and tombstones.
 
 ## Deactivation, course movement, and history
 
@@ -131,7 +133,7 @@ If a Course mapping is missing or ambiguous, quarantine the item rather than cre
 
 ### Disappearance and soft deletion
 
-Current source ordinary lists exclude `deletedAt` records. The integration API must expose tombstones or a deletion feed. An unseen source row may be deactivated/archived only after a complete successful full reconciliation and an owner-approved absence grace rule; two consecutive complete full reconciliations is a proposal, not an accepted policy. Partial batches, timeouts, invalid responses, and source outages never trigger mass deactivation.
+Current source ordinary lists exclude `deletedAt` records. The integration API must expose tombstones or a deletion feed. An unseen source row may be deactivated/archived only after two consecutive complete successful full reconciliations. Partial batches, timeouts, invalid responses, and source outages never trigger absence-driven lifecycle changes.
 
 Course deletion maps to target `Course.status = ARCHIVED` and source-owned enrollment deactivation. No Course, CourseEnrollment, Learning, or Submission hard deletion occurs.
 
@@ -173,22 +175,23 @@ Positive:
 - Full reconciliation repairs missed/duplicated changes and is the only absence-based lifecycle trigger.
 - The target preserves Academic history and pedagogical ownership.
 
-Costs and unresolved gaps:
+Implementation prerequisites:
 
-- The source must add stable Course identity, no-reuse semantics, tombstones, cursor/watermark behavior, and a supported service contract.
-- Target provenance is incomplete for Course and relationships.
-- Cadence cannot be final until source volume, rates, and freshness are measured.
-- Conflict evidence and SyncRun/SyncItemResult persistence require a later reviewed design.
+- The source must add/backfill `Course.integrationId` and `Student.integrationId`, structured Student names, tombstones, cursor/watermark behavior, and the supported service contract.
+- Target provenance for Course and CourseEnrollment must be added using the approved explicit tenant-safe model.
+- Tenant mapping and local AcademicYear selection must be configured before a run.
+- SyncRun/SyncItemResult evidence, alerting, and acceptance tests remain implementation work.
 
-## Acceptance gates
+## Implementation gates
 
-This ADR may become **Accepted** only after owner approval of:
+This ADR is **Accepted**. Synchronization implementation remains gated on:
 
-1. the source API versus formal export choice;
-2. authentication, tenant mapping, sparse payload, stable IDs, tombstones, pagination/cursor, schema version, rate limits, and error semantics;
-3. cadence and absence grace rule based on source behavior;
-4. idempotency, duplicate, stale replay, partial failure, outage, conflict, course movement, and deactivation tests;
-5. SyncRun/item observability and security/logging requirements;
-6. target provenance/schema requirements and the implementation boundary.
+1. dedicated server-to-server authentication and tenant scoping;
+2. sparse academic payloads with immutable/backfilled integration IDs and structured Student names;
+3. schema version, deterministic cursor/watermark, full snapshot, tombstones, bounded pages, retry-safe semantics, documented errors, and rate limits;
+4. configured source-tenant-to-canonical-tenant mapping and local AcademicYear selection;
+5. approved Course/CourseEnrollment provenance;
+6. idempotency, duplicate, stale replay, partial failure, outage, course movement, tombstone, two-run absence, and deactivation tests;
+7. SyncRun/item observability, security, logging, retry, and alerting implementation.
 
-Until then, D-06 remains **OPEN**, this ADR remains **Proposed**, and no synchronization worker, cron, webhook, API client, sync model, or direct database integration may be implemented from it.
+These are delivery prerequisites, not an unresolved D-06 strategy decision. No direct database integration is permitted.

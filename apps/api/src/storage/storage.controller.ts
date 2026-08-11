@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import {
   createUploadIntentSchema,
   storageFileSchema,
@@ -26,6 +27,7 @@ import {
 import type { CreateUploadIntent } from '@edupay/contracts';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { Environment } from '../config/environment';
 import type { Response } from 'express';
 import { catchError, defer, type Observable } from 'rxjs';
 
@@ -39,18 +41,6 @@ import { StorageService } from './storage.service';
 import { MAX_FILE_SIZE_BYTES } from './file-validation';
 
 const uuid = new ParseUUIDPipe({ version: '4' });
-const multipartTempRoot =
-  process.env.STORAGE_TEMP_ROOT ??
-  join(process.env.STORAGE_ROOT ?? join(process.cwd(), 'var', 'private-storage'), 'tmp');
-const boundedMultipart = FileInterceptor('file', {
-  dest: multipartTempRoot,
-  limits: {
-    fileSize: MAX_FILE_SIZE_BYTES,
-    files: 1,
-    fields: 0,
-  },
-});
-
 type MultipartFile = {
   readonly path: string;
   readonly originalname: string;
@@ -64,8 +54,18 @@ export class BoundedMultipartUploadInterceptor implements NestInterceptor {
   constructor(
     private readonly storage: StorageService,
     private readonly current: CurrentRequestContext,
+    config: ConfigService<Environment, true>,
   ) {
-    const Interceptor = boundedMultipart;
+    const tempRoot = config.get('STORAGE_TEMP_ROOT', { infer: true }) ??
+      join(config.get('STORAGE_ROOT', { infer: true }) ?? join(process.cwd(), 'var', 'private-storage'), 'tmp');
+    const Interceptor = FileInterceptor('file', {
+      dest: tempRoot,
+      limits: {
+        fileSize: MAX_FILE_SIZE_BYTES,
+        files: 1,
+        fields: 0,
+      },
+    });
     this.multerInterceptor = new Interceptor();
   }
 

@@ -10,6 +10,8 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @edupay/web --filter @edupay/api dev",
+    "bootstrap:tenant": "pnpm --filter @edupay/api bootstrap:tenant",
+    "pilot:e2e": "node scripts/pilot-cross-service-smoke.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
@@ -17,7 +19,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:validate": "pnpm --filter @edupay/api db:validate",
-    "db:generate": "pnpm --filter @edupay/api db:generate"
+    "db:generate": "pnpm --filter @edupay/api db:generate",
+    "db:migrate:status": "pnpm --filter @edupay/api db:migrate:status",
+    "release:check": "node scripts/release-check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

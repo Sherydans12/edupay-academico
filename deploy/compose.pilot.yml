@@ -1,0 +1,81 @@
+services:
+  academico-db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ACADEMICO_DB_NAME:?set ACADEMICO_DB_NAME in the deployment environment}
+      POSTGRES_USER: ${ACADEMICO_DB_USER:?set ACADEMICO_DB_USER in the deployment environment}
+      POSTGRES_PASSWORD: ${ACADEMICO_DB_PASSWORD:?set ACADEMICO_DB_PASSWORD in managed secret storage}
+    volumes:
+      - academico-db-data:/var/lib/postgresql/data
+    networks: [edupay-private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  academico-migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+      target: migrate
+    restart: "no"
+    env_file:
+      - ${ACADEMICO_API_ENV_FILE:-./deploy/env/academico-api.env}
+    depends_on:
+      academico-db:
+        condition: service_healthy
+    command: ["pnpm", "--filter", "@edupay/api", "db:migrate:deploy"]
+    networks: [edupay-private]
+
+  edupay-academico-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+      target: runtime
+    restart: unless-stopped
+    env_file:
+      - ${ACADEMICO_API_ENV_FILE:-./deploy/env/academico-api.env}
+    depends_on:
+      academico-migrate:
+        condition: service_completed_successfully
+    expose: ["3001"]
+    volumes:
+      - academico-files:/var/lib/edupay-academico/files
+      - academico-upload-tmp:/var/lib/edupay-academico/tmp
+    networks: [edupay-private]
+
+  edupay-academico-notification-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+      target: runtime
+    restart: unless-stopped
+    env_file:
+      - ${ACADEMICO_API_ENV_FILE:-./deploy/env/academico-api.env}
+    depends_on:
+      academico-migrate:
+        condition: service_completed_successfully
+    command: ["pnpm", "--filter", "@edupay/api", "worker"]
+    networks: [edupay-private]
+
+  edupay-academico-web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set the final HTTPS Academic API base URL}
+        NEXT_PUBLIC_IDENTITY_BASE_URL: ${NEXT_PUBLIC_IDENTITY_BASE_URL:?set the final HTTPS Identity API origin}
+    restart: unless-stopped
+    expose: ["3000"]
+    networks: [edupay-private]
+
+volumes:
+  academico-db-data:
+  academico-files:
+  academico-upload-tmp:
+
+networks:
+  edupay-private:
+    driver: bridge

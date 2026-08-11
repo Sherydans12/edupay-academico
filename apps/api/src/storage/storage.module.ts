@@ -36,6 +36,12 @@ import { NotificationsModule } from '../notifications/notifications.module';
       useExisting: StorageService,
     },
   ],
-  exports: [StorageService, SubmissionService, LEARNING_STUDENT_WORK_PORT, LEARNING_ATTACHMENT_PORT],
+  exports: [
+    StorageService,
+    SubmissionService,
+    LocalPrivateStorageAdapter,
+    LEARNING_STUDENT_WORK_PORT,
+    LEARNING_ATTACHMENT_PORT,
+  ],
 })
 export class StorageModule {}

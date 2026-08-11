@@ -27,8 +27,14 @@ async function main(): Promise<void> {
   );
   try {
     const worker = application.get(NotificationWorkerService);
+    if (process.argv.includes('--check')) {
+      const result = await worker.checkReadiness();
+      console.log(JSON.stringify({ service: 'edupay-academico-notification-worker', status: 'ready', ...result }));
+      return;
+    }
     if (process.argv.includes('--once')) {
-      await worker.runOnce();
+      const result = await worker.runOnce();
+      console.log(JSON.stringify({ service: 'edupay-academico-notification-worker', status: 'ok', ...result }));
       return;
     }
     await worker.runForever();

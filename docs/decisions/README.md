@@ -20,8 +20,11 @@ These records capture major architectural choices from the brief and architectur
 | [0012](ADR-0012-learning-publication-and-edit-semantics.md) | Learning publication and edit semantics | Accepted (2026-08-08) |
 | [0013](ADR-0013-submissions-and-storage-mvp-semantics.md) | MVP submission, revision, and deadline semantics | Accepted (2026-08-08) |
 | [0014](ADR-0014-academic-notifications-and-delivery.md) | Academic notification event catalog, transactional PostgreSQL outbox, worker, in-app delivery, and Academic Resend adapter | Accepted (2026-08-09) |
-| [0015](ADR-0015-edupay-source-of-truth-proposal.md) | EduPay source-of-truth proposal for Académico synchronization | Proposed; D-05 remains open; source evidence documented, owner approval required |
-| [0016](ADR-0016-edupay-sync-strategy-proposal.md) | EduPay synchronization strategy proposal | Proposed; D-06 remains open; source capability documented, owner approval required |
+| [0015](ADR-0015-edupay-source-of-truth-proposal.md) | EduPay source-of-truth decision for Académico synchronization | Accepted (2026-08-11); resolves D-05; source API prerequisites remain |
+| [0016](ADR-0016-edupay-sync-strategy-proposal.md) | EduPay synchronization strategy decision | Accepted (2026-08-11); resolves D-06; source API prerequisites remain |
+| [0017](ADR-0017-single-vps-pilot-deployment-topology.md) | Single-VPS pilot deployment topology | Proposed; does not resolve D-15 |
+| [0019](ADR-0019-audit-retention-and-support-policy.md) | Pilot audit retention and support access policy | Accepted; resolves D-17 for the pilot |
+| [0020](ADR-0020-pilot-scope-and-success-targets.md) | Colegio Conquistadores pilot scope and success targets | Accepted; resolves D-18 |
 
 ## ADR workflow
 

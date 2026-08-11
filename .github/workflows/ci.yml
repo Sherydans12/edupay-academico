@@ -18,7 +18,8 @@ jobs:
       IDENTITY_AUDIENCE: edupay-academico-api
       IDENTITY_ISSUER: http://identity.local
       IDENTITY_JWKS_URI: http://identity.local/.well-known/jwks.json
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:3001/api/v1
+      NEXT_PUBLIC_API_BASE_URL: https://academico.ci.invalid/api/v1
+      NEXT_PUBLIC_IDENTITY_BASE_URL: https://identity.ci.invalid
 
     steps:
       - name: Check out repository

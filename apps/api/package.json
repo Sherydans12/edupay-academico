@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "bootstrap:tenant": "tsx src/bootstrap/tenant-bootstrap-main.ts",
     "worker": "tsx src/notifications/notification-worker-main.ts",
+    "worker:check": "tsx src/notifications/notification-worker-main.ts --check",
     "prebuild": "pnpm --filter @edupay/contracts build",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
@@ -13,7 +15,8 @@
     "db:validate": "prisma validate",
     "db:generate": "prisma generate",
     "db:migrate:dev": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy"
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status"
   },
   "dependencies": {
     "@edupay/contracts": "workspace:*",
