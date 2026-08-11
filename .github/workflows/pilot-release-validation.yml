@@ -155,8 +155,8 @@ jobs:
           wait_for edupay-academico-api http://127.0.0.1:3001/api/v1/health/live
           wait_for edupay-academico-api http://127.0.0.1:3001/api/v1/health/ready
           wait_for edupay-academico-web http://127.0.0.1:3000/api/health
-          docker compose -p "$project" -f deploy/compose.pilot.yml run --rm --no-deps edupay-academico-notification-worker pnpm --filter @edupay/api worker:check
-          docker compose -p "$project" -f deploy/compose.pilot.yml run --rm --no-deps edupay-academico-sync-worker pnpm --filter @edupay/api sync:worker:check
+          docker compose -p "$project" -f deploy/compose.pilot.yml run --rm --no-deps edupay-academico-notification-worker node dist/notifications/notification-worker-main.js --check
+          docker compose -p "$project" -f deploy/compose.pilot.yml run --rm --no-deps edupay-academico-sync-worker node dist/sync/sync-worker-main.js --check
           test "$(docker image inspect edupay-ci-api:release --format '{{.Config.User}}')" = node
           test "$(docker image inspect edupay-ci-web:release --format '{{.Config.User}}')" = node
           if docker run --rm --name edupay-ci-invalid-api -e NODE_ENV=production edupay-ci-api:release; then exit 1; fi

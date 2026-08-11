@@ -361,7 +361,6 @@ async function main() {
   const username = `pilot.admin.${randomUUID().slice(0, 8)}`;
   const bootstrapArgs = [
     'bootstrap:tenant-admin',
-    '--',
     '--tenant-id',
     tenantId,
     '--tenant-handle',
@@ -395,7 +394,6 @@ async function main() {
     'pnpm',
     [
       'bootstrap:tenant',
-      '--',
       '--tenant-id',
       tenantId,
       '--request-id',
@@ -450,7 +448,6 @@ async function main() {
     'pnpm',
     [
       'bootstrap:tenant',
-      '--',
       '--tenant-id',
       tenantId,
       '--request-id',
@@ -473,7 +470,7 @@ async function main() {
   assert.notEqual(identityConflict.code, 0);
   const academicConflict = await run(
     'pnpm',
-    ['bootstrap:tenant', '--', '--tenant-id', tenantId, '--quota-bytes', '1'],
+    ['bootstrap:tenant', '--tenant-id', tenantId, '--quota-bytes', '1'],
     {
       cwd: root,
       env: { DATABASE_URL: academicPostgres.url },

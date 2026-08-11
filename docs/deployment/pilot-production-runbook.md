@@ -128,7 +128,7 @@ readiness endpoint remains a follow-up owned by Identity.
 Safe Academic worker probe (does not deliver email):
 
 ```sh
-pnpm --filter @edupay/api worker:check
+node dist/notifications/notification-worker-main.js --check
 ```
 
 `worker --once` is an operational delivery command and may contact the
@@ -137,7 +137,7 @@ configured Academic provider; do not use it as a healthcheck.
 Safe synchronization worker probe (does not contact EduPay or mutate roster):
 
 ```sh
-pnpm --filter @edupay/api sync:worker:check
+node dist/sync/sync-worker-main.js --check
 ```
 
 The API and notification worker do not start synchronization as a side effect.
@@ -493,10 +493,12 @@ deployment state. Review the target before running them. Never use
     `CLEAR`/`AVAILABLE` plus an authorized download. Generate the EICAR test
     string only inside the isolated gate; verify rejection, no final blob, no
     download, released quota, and empty staging. Do not retain EICAR bytes.
-22. Notification/email smoke. Run `worker --check`, `sync:worker --check`,
-    Identity email-worker checks where available, and one controlled in-app
-    notification/email delivery. Confirm exactly one Academic notification
-    worker, one Academic sync worker, and one Identity email runner/schedule.
+22. Notification/email smoke. Run the compiled worker checks
+    (`node dist/notifications/notification-worker-main.js --check` and
+    `node dist/sync/sync-worker-main.js --check`), Identity email-worker checks
+    where available, and one controlled in-app notification/email delivery.
+    Confirm exactly one Academic notification worker, one Academic sync worker,
+    and one Identity email runner/schedule.
 23. Backup. Run the scheduled backup procedure, verify checksum success, and
     confirm the dated target is outside live data volumes and has an owner.
 24. Disposable restore verification evidence. On a clearly labelled disposable

@@ -8,7 +8,8 @@ services:
     mem_limit: 1g
     cpus: 1.0
     healthcheck:
-      test: ["CMD-SHELL", "clamdscan --ping=1 --config-file=/etc/clamav/clamd.conf"]
+      test:
+        ['CMD-SHELL', 'clamdscan --ping=1 --config-file=/etc/clamav/clamd.conf']
       interval: 15s
       timeout: 5s
       retries: 10
@@ -25,7 +26,7 @@ services:
       - academico-db-data:/var/lib/postgresql/data
     networks: [edupay-private]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -35,13 +36,13 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.api
       target: migrate
-    restart: "no"
+    restart: 'no'
     env_file:
       - ${ACADEMICO_API_ENV_FILE:-./deploy/env/academico-api.env}
     depends_on:
       academico-db:
         condition: service_healthy
-    command: ["pnpm", "--filter", "@edupay/api", "db:migrate:deploy"]
+    command: ['pnpm', '--filter', '@edupay/api', 'db:migrate:deploy']
     networks: [edupay-private]
 
   edupay-academico-api:
@@ -57,7 +58,7 @@ services:
         condition: service_completed_successfully
       clamav:
         condition: service_healthy
-    expose: ["3001"]
+    expose: ['3001']
     volumes:
       - academico-files:/var/lib/edupay-academico/files
       - academico-upload-tmp:/var/lib/edupay-academico/tmp
@@ -74,7 +75,7 @@ services:
     depends_on:
       academico-migrate:
         condition: service_completed_successfully
-    command: ["pnpm", "--filter", "@edupay/api", "worker"]
+    command: ['node', 'dist/notifications/notification-worker-main.js']
     networks: [edupay-private]
 
   edupay-academico-sync-worker:
@@ -88,7 +89,7 @@ services:
     depends_on:
       academico-migrate:
         condition: service_completed_successfully
-    command: ["pnpm", "--filter", "@edupay/api", "sync:worker"]
+    command: ['node', 'dist/sync/sync-worker-main.js']
     networks: [edupay-private]
 
   edupay-academico-web:
@@ -99,7 +100,7 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set the final HTTPS Academic API base URL}
         NEXT_PUBLIC_IDENTITY_BASE_URL: ${NEXT_PUBLIC_IDENTITY_BASE_URL:?set the final HTTPS Identity API origin}
     restart: unless-stopped
-    expose: ["3000"]
+    expose: ['3000']
     networks: [edupay-private]
 
 volumes:

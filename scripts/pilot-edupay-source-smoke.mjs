@@ -168,17 +168,19 @@ async function sql(postgres, statement) {
 
 async function startSource(environment, port) {
   const logPath = join(resources.temp, 'edupay-source.log');
+  const entrypoint = ['dist/main.js', 'dist/src/main.js']
+    .map((relativePath) => join(sourceRoot, 'backend', relativePath))
+    .find((path) => existsSync(path));
+  if (!entrypoint) {
+    throw new Error('BL-002 build did not produce a supported API entrypoint.');
+  }
   const descriptor = openSync(logPath, 'a');
-  const child = spawn(
-    process.execPath,
-    [join(sourceRoot, 'backend', 'dist', 'main.js')],
-    {
-      cwd: join(sourceRoot, 'backend'),
-      env: { ...process.env, ...environment, PORT: String(port) },
-      windowsHide: true,
-      stdio: ['ignore', descriptor, descriptor],
-    },
-  );
+  const child = spawn(process.execPath, [entrypoint], {
+    cwd: join(sourceRoot, 'backend'),
+    env: { ...process.env, ...environment, PORT: String(port) },
+    windowsHide: true,
+    stdio: ['ignore', descriptor, descriptor],
+  });
   closeSync(descriptor);
   const record = { child, exitCode: undefined };
   child.on('exit', (code) => {
@@ -342,7 +344,7 @@ async function main() {
 
   const tenantId = randomUUID();
   const academicYearId = randomUUID();
-  await run('pnpm', ['bootstrap:tenant', '--', '--tenant-id', tenantId], {
+  await run('pnpm', ['bootstrap:tenant', '--tenant-id', tenantId], {
     cwd: root,
     env: academicEnv,
     label: 'bootstrap disposable Academic tenant',
@@ -353,7 +355,6 @@ async function main() {
   );
   const configureArgs = [
     'sync:configure',
-    '--',
     '--tenant-id',
     tenantId,
     '--source-tenant-id',
@@ -377,7 +378,6 @@ async function main() {
     'pnpm',
     [
       'sync:configure',
-      '--',
       '--tenant-id',
       tenantId,
       '--source-tenant-id',
@@ -394,14 +394,14 @@ async function main() {
 
   await run(
     'pnpm',
-    ['sync:run', '--', '--tenant-id', tenantId, '--mode', 'incremental'],
+    ['sync:run', '--tenant-id', tenantId, '--mode', 'incremental'],
     { cwd: root, env: academicEnv, label: 'run real BL-002 incremental sync' },
   );
-  await run(
-    'pnpm',
-    ['sync:run', '--', '--tenant-id', tenantId, '--mode', 'full'],
-    { cwd: root, env: academicEnv, label: 'run real BL-002 full sync' },
-  );
+  await run('pnpm', ['sync:run', '--tenant-id', tenantId, '--mode', 'full'], {
+    cwd: root,
+    env: academicEnv,
+    label: 'run real BL-002 full sync',
+  });
   const courseCount = Number(
     await sql(
       academicPostgres,
