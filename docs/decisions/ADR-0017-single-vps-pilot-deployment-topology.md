@@ -52,3 +52,47 @@ and firewall rules, backup destination and retention, RTO/RPO, certificate
 ownership, on-call/support path, worker scheduling/locking, restore evidence,
 and the residual single-node storage risk. This proposed ADR intentionally does
 not make those choices on the owner's behalf.
+
+## Recommended controlled-pilot baseline for owner acceptance
+
+The recommended D-15 baseline is one Ubuntu 24.04 single-node VPS with one
+public HTTPS reverse proxy. Public routes are Academic web, Academic API, and
+Identity API. Academic and Identity PostgreSQL, the Academic notification and
+sync workers, the Identity email worker, ClamAV, and Academic final/staging
+storage remain private. The two databases remain separate. TLS is managed by
+the reverse proxy through an automated public CA renewal mechanism such as
+Let's Encrypt; manually copied long-lived certificate files are not the
+baseline. Public ingress is limited to required HTTP/HTTPS and SSH management
+paths; PostgreSQL, ClamAV, storage, and worker ports are not public.
+
+For the controlled pilot, the recommended backup target is outside the live
+application volumes, with PostgreSQL and finalized private file evidence copied
+at least every six hours, at least 14 daily recovery points during/around the
+pilot, at least four weekly recovery points while evidence is operationally
+required, and a checksum on every backup. The internal operational targets are
+RPO <= 6 hours and RTO <= 8 hours; they are not contractual SLAs. A disposable
+restore must pass before real pilot data is accepted.
+
+The single-node Academic file adapter risk is explicitly accepted only for this
+small controlled pilot. The residual risks are a concentrated VPS failure
+domain, no HA/failover, and future horizontal-scaling work if shared object
+storage is required. Support has no 24x7 contractual SLA: one named technical
+owner handles immediate escalation for data loss, cross-tenant exposure,
+credential exposure, or complete outage; ordinary issues use the available
+support window; impersonation remains out of scope and support context is
+explicit, tenant-bounded, and audited.
+
+## D-15 owner-acceptance record — open
+
+Leave this ADR Proposed until every entry below is completed with an actual
+owner-approved fact. This release-validation branch must not infer values from
+the operator's location, provider defaults, or an example deployment.
+
+- Provider and product: **OWNER INPUT REQUIRED**
+- Actual VPS region: **OWNER INPUT REQUIRED**
+- Off-host backup destination and custody/access owner: **OWNER INPUT REQUIRED**
+- Reverse-proxy and certificate renewal owner: **OWNER INPUT REQUIRED**
+- Named technical/support owner and escalation window: **OWNER INPUT REQUIRED**
+- Acceptance of RPO <= 6 hours and RTO <= 8 hours for the controlled pilot: **OWNER INPUT REQUIRED**
+- Firewall/SSH management policy and private-network confirmation: **OWNER INPUT REQUIRED**
+- Restore evidence and residual single-node file-adapter risk acceptance: **OWNER INPUT REQUIRED**

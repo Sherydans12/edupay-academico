@@ -36,15 +36,15 @@ Prisma package is introduced.
 
 ## 2. Process topology and commands
 
-| Service | Production command | Replica rule |
-| --- | --- | --- |
-| `edupay-academico-web` | `pnpm --filter @edupay/web start` | One or more web replicas; build-time public URLs only. |
-| `edupay-academico-api` | `node apps/api/dist/main.js` | One API replica for the local filesystem pilot. |
-| `edupay-academico-notification-worker` | `pnpm --filter @edupay/api worker` | One instance for the pilot; the PostgreSQL claim lease supports later scale-out. |
-| `edupay-academico-sync-worker` | `pnpm --filter @edupay/api sync:worker` | One private pilot instance; tenant/source PostgreSQL leases prevent overlap. |
-| `clamav` | ClamAV image with `clamd` | One private instance; no host/public port; bounded CPU/memory. |
-| `edupay-identity-api` | `node dist/main.js` from Identity repository | One or more API replicas only after shared key/database/session operations are validated. |
-| `edupay-identity-email-worker` | `node dist/email/worker-main.js` (`pnpm email:deliver`) | One scheduled runner; do not run it inside every API replica. |
+| Service                                | Production command                                      | Replica rule                                                                              |
+| -------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `edupay-academico-web`                 | `pnpm --filter @edupay/web start`                       | One or more web replicas; build-time public URLs only.                                    |
+| `edupay-academico-api`                 | `node apps/api/dist/main.js`                            | One API replica for the local filesystem pilot.                                           |
+| `edupay-academico-notification-worker` | `pnpm --filter @edupay/api worker`                      | One instance for the pilot; the PostgreSQL claim lease supports later scale-out.          |
+| `edupay-academico-sync-worker`         | `pnpm --filter @edupay/api sync:worker`                 | One private pilot instance; tenant/source PostgreSQL leases prevent overlap.              |
+| `clamav`                               | ClamAV image with `clamd`                               | One private instance; no host/public port; bounded CPU/memory.                            |
+| `edupay-identity-api`                  | `node dist/main.js` from Identity repository            | One or more API replicas only after shared key/database/session operations are validated. |
+| `edupay-identity-email-worker`         | `node dist/email/worker-main.js` (`pnpm email:deliver`) | One scheduled runner; do not run it inside every API replica.                             |
 
 Académico migrations run in the one-shot `academico-migrate` job before the API
 and Academic worker start. Identity migrations run separately from the Identity
@@ -259,6 +259,7 @@ order. There is no public bootstrap endpoint and no shared database.
    create Identity users, passwords, demo Students, Teachers, or any HTTP
    route. Its structured output is non-secret bootstrap evidence; preserve it
    with the release record without adding database URLs or credentials.
+
 4. The initial administrator activates their Identity account using the
    one-time mechanism and chooses their password through Identity.
 5. The administrator logs in, verifies the Academic tenant context, and normal
@@ -319,3 +320,192 @@ have named owners and are tested before pilot.
 - If EduPay is unavailable, preserve the last known roster state, do not advance watermarks or absence generations, and retry only within the bounded worker budget. Do not disable tenant isolation, change the source origin, or paste a token into a manual command.
 - If service-token or signing-key material is exposed, rotate/revoke through the owning service's procedure and do not copy secrets into incident tickets.
 - If a restore is required, use the disposable restore verification procedure first and obtain the operator/data-owner decision before touching live volumes.
+
+## 12. Deterministic Ubuntu 24.04 pilot deployment sequence
+
+This is the exact operator order for the recommended single-node pilot. Values
+in angle brackets are owner- or host-specific inputs and must be supplied from
+managed configuration; they are not defaults. The Compose definition remains
+the source-level topology contract whether the services are started directly
+with Docker Compose or through a container-management platform that preserves
+the same networks, secrets, mounts, commands, and one-shot migration jobs.
+
+Commands marked **DESTRUCTIVE** can remove or overwrite disposable/live
+deployment state. Review the target before running them. Never use
+`prisma migrate dev` on a pilot or production database.
+
+0. DNS ready. Confirm the approved Academic web, Academic API, and Identity API
+   DNS records resolve to the reverse proxy and that the internal Identity and
+   EduPay source names resolve only on the intended private network.
+1. Host updates/timezone/firewall. On the approved Ubuntu 24.04 host:
+
+   ```sh
+   sudo apt-get update
+   sudo apt-get upgrade -y
+   sudo timedatectl set-timezone <approved-timezone>
+   sudo ufw default deny incoming
+   sudo ufw default allow outgoing
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+   sudo ufw allow from <approved-management-cidr> to any port 22 proto tcp
+   sudo ufw --force enable
+   ```
+
+   Do not open PostgreSQL, ClamAV, storage, worker, or internal service ports.
+   Document the SSH key/MFA, source CIDR, and emergency access policy before
+   enabling the firewall.
+
+2. Docker/Compose or existing approved container runtime. Install the
+   operator-approved Docker Engine and Compose plugin, or configure the
+   existing platform to use the checked-in `deploy/compose.pilot.yml`. Verify
+   `docker version`, `docker compose version`, and that the runtime can pull
+   the reviewed PostgreSQL and ClamAV images.
+3. Directory/volume creation and permissions:
+
+   ```sh
+   sudo install -d -o 1000 -g 1000 -m 0700 /var/lib/edupay-academico/files
+   sudo install -d -o 1000 -g 1000 -m 0700 /var/lib/edupay-academico/tmp
+   sudo find /var/lib/edupay-academico -type d -exec chmod 0700 {} +
+   sudo find /var/lib/edupay-academico -type f -exec chmod 0600 {} +
+   ```
+
+   Confirm final and staging are separate persistent mounts and are not under
+   a web/static or reverse-proxy alias.
+
+4. Managed env/secrets creation. Create the Academic, Identity, and BL-002
+   server-side environments from `docs/deployment/environment-matrix.md` and
+   `deploy/pilot-secrets.inventory.example`. Store only secret-manager
+   references in the deployment inventory. Validate each service without
+   printing values:
+
+   ```sh
+   pnpm release:config:check -- --service academico --env-file <academic-env-file>
+   node scripts/release-config-check.mjs --service identity --env-file <identity-env-file>
+   node scripts/release-config-check.mjs --service edupay --env-file <edupay-env-file>
+   ```
+
+5. Databases start privately. Start separate Academic and Identity PostgreSQL
+   services/databases on the private network. Confirm neither has a public
+   host port and that credentials are injected only into their owning service.
+6. Pre-migration backup if applicable. Run `ops/backup/backup-pilot.sh` with a
+   backup destination outside the live data volumes. Verify `SHA256SUMS` before
+   any migration. **DESTRUCTIVE:** do not point a restore or migration at the
+   live database while testing this step.
+7. Identity migrations. From the reviewed Identity checkout, run once:
+
+   ```sh
+   pnpm prisma:validate
+   pnpm prisma:generate
+   pnpm prisma:migrate:status
+   pnpm prisma:migrate:deploy
+   ```
+
+8. Academic migrations. From this reviewed Académico checkout, run once:
+
+   ```sh
+   pnpm db:validate
+   pnpm db:generate
+   pnpm --filter @edupay/api db:migrate:status
+   pnpm --filter @edupay/api db:migrate:deploy
+   ```
+
+9. BL-002 migrations if its source deployment is on the same approved
+   infrastructure. Use only the reviewed BL-002 main checkout and its own
+   PostgreSQL database:
+
+   ```sh
+   npm ci
+   npx prisma migrate deploy
+   ```
+
+   If BL-002 remains hosted elsewhere, record its owner, endpoint, and
+   migration evidence instead of running this step on the Academic host.
+
+10. Service-token generation. Generate a new server-only Identity/Académico
+    service token and a distinct BL-002 integration token using managed secret
+    custody. Record secret references, owners, and rotation dates; never paste
+    token values into a shell command, log, database, or evidence file.
+11. App services start. Start the private ClamAV service and verify its
+    healthcheck first, then Identity API, Academic API, web, and the one-shot
+    migration dependencies. Ordinary API startup is `node apps/api/dist/main.js`;
+    it must not run migrations or workers as a side effect.
+12. ClamAV health. Confirm `clamd` is healthy on the private network, has no
+    host/public port, and Academic `/api/v1/health/ready` reports
+    `malwareScanner=ok`.
+13. Identity bootstrap. Choose one canonical UUID and run the actual Identity
+    command with code or email activation:
+
+    ```sh
+    pnpm bootstrap:tenant-admin -- --tenant-id <canonical-tenant-uuid> \
+      --tenant-handle <identity-login-handle> \
+      --username <institutional-admin-username> \
+      --activation code
+    ```
+
+    Deliver the one-time code through the approved channel without retaining
+    it in operator history or release evidence. No permanent password is
+    entered or known by the operator.
+
+14. Academic bootstrap with the same UUID:
+
+    ```sh
+    pnpm bootstrap:tenant -- --tenant-id <canonical-tenant-uuid>
+    ```
+
+    Preserve only the structured non-secret Academic bootstrap result. Confirm
+    separate databases, one tenant-scoped `TENANT_ADMIN`, no `SYSTEM_ADMIN`,
+    and tenant/global quota-account rows.
+
+15. Admin activation. The administrator completes the one-time activation and
+    chooses their own password through the normal Identity flow. The operator
+    does not request, copy, or store the password.
+16. Create/activate AcademicYear. The activated administrator creates the
+    local AcademicYear through the normal Academic API/UI and changes it to
+    `ACTIVE`. Record its opaque ID.
+17. Sync configuration. Run the reviewed command from the Academic deployment:
+
+    ```sh
+    pnpm sync:configure -- --tenant-id <canonical-tenant-uuid> \
+      --source-tenant-id <source-tenant-id> \
+      --academic-year-id <active-academic-year-uuid>
+    ```
+
+    Rerun the exact command to prove idempotency; deliberately changing the
+    mapping must be refused.
+
+18. Initial full EduPay sync:
+
+    ```sh
+    pnpm sync:run -- --tenant-id <canonical-tenant-uuid> --mode full
+    ```
+
+    Review safe counts, conflicts, terminal watermarks, and snapshot
+    completion. Do not pass the source token on the command line.
+
+19. Roster reconciliation. Review Course/Student source identities,
+    source-managed flags, CourseEnrollment state, unresolved conflicts, and
+    absence evidence. Confirm no RUT, Guardian, email, payment, or source
+    token data entered Académico.
+20. Create Teacher/Subject/CourseSubject manually. Create the required
+    teacher assignments and verify that pedagogical CourseSubject state is
+    locally owned and not source-moved by synchronization.
+21. Clean/EICAR storage checks. Upload a benign synthetic file and verify
+    `CLEAR`/`AVAILABLE` plus an authorized download. Generate the EICAR test
+    string only inside the isolated gate; verify rejection, no final blob, no
+    download, released quota, and empty staging. Do not retain EICAR bytes.
+22. Notification/email smoke. Run `worker --check`, `sync:worker --check`,
+    Identity email-worker checks where available, and one controlled in-app
+    notification/email delivery. Confirm exactly one Academic notification
+    worker, one Academic sync worker, and one Identity email runner/schedule.
+23. Backup. Run the scheduled backup procedure, verify checksum success, and
+    confirm the dated target is outside live data volumes and has an owner.
+24. Disposable restore verification evidence. On a clearly labelled disposable
+    target, run `ops/backup/restore-verify-pilot.sh` with
+    `RESTORE_CONFIRM=I_UNDERSTAND_DISPOSABLE_RESTORE`, verify database structure,
+    tenant/file metadata, restored file bytes/checksums, and the application
+    health/read-authorized-evidence checks. **DESTRUCTIVE:** the helper may
+    clean only the declared restore work directory; never use a live target.
+25. Final release checklist sign-off. Attach the evidence manifest, exact
+    repository SHAs, migration/image/ClamAV results, backup/restore results,
+    support and ownership facts, and the owner decisions required by D-15.
+    Do not route real pilot traffic until D-15 is accepted by the named owner.

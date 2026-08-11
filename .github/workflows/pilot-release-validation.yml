@@ -1,0 +1,332 @@
+name: Pilot release validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - release/pilot-validation
+    paths:
+      - '.github/workflows/pilot-release-validation.yml'
+      - 'apps/**'
+      - 'packages/**'
+      - 'deploy/**'
+      - 'ops/**'
+      - 'scripts/**'
+      - 'docs/deployment/**'
+      - 'docs/decisions/ADR-0017-single-vps-pilot-deployment-topology.md'
+
+permissions:
+  contents: read
+
+jobs:
+  repository-gate:
+    name: Repository release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://release:release_password@127.0.0.1:5432/edupay_academico?schema=public
+      IDENTITY_AUDIENCE: edupay-academico-api
+      IDENTITY_ISSUER: http://identity.example.invalid
+      IDENTITY_JWKS_URI: http://identity.example.invalid/.well-known/jwks.json
+      NEXT_PUBLIC_API_BASE_URL: https://academico.example.invalid/api/v1
+      NEXT_PUBLIC_IDENTITY_BASE_URL: https://identity.example.invalid
+    steps:
+      - name: Check out Académico
+        uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+          run_install: false
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate release-shaped config inventory
+        run: node scripts/release-config-check.mjs --service academico --env-file deploy/env/academico-api.ci.env.example
+      - name: Validate Prisma schema
+        run: pnpm db:validate
+      - name: Generate Prisma client
+        run: pnpm db:generate
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Normal tests
+        run: pnpm test
+      - name: Production builds
+        run: pnpm build
+
+  postgresql-gate:
+    name: PostgreSQL-backed release tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: release
+          POSTGRES_PASSWORD: release_password
+          POSTGRES_DB: edupay_academico
+          TZ: UTC
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U release -d edupay_academico"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://release:release_password@127.0.0.1:5432/edupay_academico?schema=public
+      TEST_DATABASE_URL: postgresql://release:release_password@127.0.0.1:5432/edupay_academico?schema=public
+    steps:
+      - name: Check out Académico
+        uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+          run_install: false
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate and generate Prisma client
+        run: pnpm db:validate && pnpm db:generate
+      - name: Apply reviewed Academic migrations
+        run: pnpm --filter @edupay/api db:migrate:deploy
+      - name: Run serialized PostgreSQL-backed suites
+        run: pnpm --filter @edupay/api test -- --no-file-parallelism --reporter=verbose
+
+  docker-linux-gate:
+    name: Linux container and topology gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ACADEMICO_DB_NAME: academico
+      ACADEMICO_DB_USER: ci
+      ACADEMICO_DB_PASSWORD: ci_password
+      ACADEMICO_API_ENV_FILE: ${{ github.workspace }}/deploy/env/academico-api.ci.env.example
+      NEXT_PUBLIC_API_BASE_URL: https://academico.example.invalid/api/v1
+      NEXT_PUBLIC_IDENTITY_BASE_URL: https://identity.example.invalid
+    steps:
+      - name: Check out Académico
+        uses: actions/checkout@v4
+      - name: Build Academic API image
+        run: docker build --pull=false --tag edupay-ci-api:release -f deploy/Dockerfile.api .
+      - name: Build Academic Web image with synthetic public configuration
+        run: >-
+          docker build --pull=false --tag edupay-ci-web:release
+          --build-arg NEXT_PUBLIC_API_BASE_URL=https://academico.example.invalid/api/v1
+          --build-arg NEXT_PUBLIC_IDENTITY_BASE_URL=https://identity.example.invalid
+          -f deploy/Dockerfile.web .
+      - name: Validate Compose topology and start real services
+        shell: bash
+        run: |
+          set -euo pipefail
+          project=pilot-release-ci
+          cleanup() { docker compose -p "$project" -f deploy/compose.pilot.yml down --volumes --remove-orphans; }
+          trap cleanup EXIT
+          docker compose -p "$project" -f deploy/compose.pilot.yml config --quiet
+          docker compose -p "$project" -f deploy/compose.pilot.yml build --pull=false academico-migrate edupay-academico-api edupay-academico-web
+          docker compose -p "$project" -f deploy/compose.pilot.yml up -d academico-db clamav academico-migrate edupay-academico-api edupay-academico-web
+          docker compose -p "$project" -f deploy/compose.pilot.yml ps
+          docker compose -p "$project" -f deploy/compose.pilot.yml exec -T edupay-academico-api node -e "fetch('http://127.0.0.1:3001/api/v1/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+          docker compose -p "$project" -f deploy/compose.pilot.yml exec -T edupay-academico-api node -e "fetch('http://127.0.0.1:3001/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+          docker compose -p "$project" -f deploy/compose.pilot.yml exec -T edupay-academico-web node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+          docker compose -p "$project" -f deploy/compose.pilot.yml run --rm --no-deps edupay-academico-notification-worker pnpm --filter @edupay/api worker:check
+          docker compose -p "$project" -f deploy/compose.pilot.yml run --rm --no-deps edupay-academico-sync-worker pnpm --filter @edupay/api sync:worker:check
+          test "$(docker image inspect edupay-ci-api:release --format '{{.Config.User}}')" = node
+          test "$(docker image inspect edupay-ci-web:release --format '{{.Config.User}}')" = node
+          if docker run --rm --name edupay-ci-invalid-api -e NODE_ENV=production edupay-ci-api:release; then exit 1; fi
+          test "$(docker image inspect edupay-ci-api:release --format '{{json .Config.Cmd}}')" = '["node","dist/main.js"]'
+
+  disposable-pilot-gate:
+    name: Full disposable pilot with real ClamAV
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out Académico
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check out current Identity main read-only
+        uses: actions/checkout@v4
+        with:
+          repository: Sherydans12/edupay-identity
+          ref: main
+          path: EduPayIdentity
+          fetch-depth: 0
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+          run_install: false
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install frozen dependencies in both repositories
+        shell: bash
+        run: |
+          git switch -c release/pilot-validation
+          git -C EduPayIdentity switch -C main origin/main
+          pnpm install --frozen-lockfile
+          pnpm --dir EduPayIdentity install --frozen-lockfile
+      - name: Run full pilot:e2e against private ClamAV
+        env:
+          EDUPAY_IDENTITY_DIR: ${{ github.workspace }}/EduPayIdentity
+          PILOT_MALWARE_SCANNER: clamav
+          PILOT_CLAMAV_FAILURE_GATE: 'true'
+        run: pnpm pilot:e2e
+
+  bootstrap-gate:
+    name: Actual first-tenant bootstrap gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out Académico
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check out current Identity main read-only
+        uses: actions/checkout@v4
+        with:
+          repository: Sherydans12/edupay-identity
+          ref: main
+          path: EduPayIdentity
+          fetch-depth: 0
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+          run_install: false
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile && pnpm --dir EduPayIdentity install --frozen-lockfile
+      - name: Run actual Identity and Academic bootstrap commands
+        env:
+          EDUPAY_IDENTITY_DIR: ${{ github.workspace }}/EduPayIdentity
+        run: pnpm pilot:bootstrap:smoke
+
+  edupay-sync-gate:
+    name: Real BL-002 source synchronization gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out Académico
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check out current BL-002 main read-only
+        uses: actions/checkout@v4
+        with:
+          repository: Sherydans12/BL-002-EduPay
+          ref: main
+          path: BL-002-EduPay
+          fetch-depth: 0
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+          run_install: false
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install Académico dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run real source API and consumer incremental/full smoke
+        env:
+          EDUPAY_SOURCE_DIR: ${{ github.workspace }}/BL-002-EduPay
+        run: pnpm pilot:edupay:smoke
+
+  backup-restore-gate:
+    name: Disposable backup and restore gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: release
+          POSTGRES_PASSWORD: release_password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U release -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      IDENTITY_DATABASE_URL: postgresql://release:release_password@127.0.0.1:5432/identity
+      ACADEMIC_DATABASE_URL: postgresql://release:release_password@127.0.0.1:5432/academico
+    steps:
+      - name: Check out Académico
+        uses: actions/checkout@v4
+      - name: Check out current Identity main read-only
+        uses: actions/checkout@v4
+        with:
+          repository: Sherydans12/edupay-identity
+          ref: main
+          path: EduPayIdentity
+      - name: Install PostgreSQL client and repository dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Install pnpm and dependencies
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+          run_install: false
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install and migrate both databases
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --dir EduPayIdentity install --frozen-lockfile
+          psql postgresql://release:release_password@127.0.0.1:5432/postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE identity' -c 'CREATE DATABASE academico'
+          DATABASE_URL="$IDENTITY_DATABASE_URL" pnpm --dir EduPayIdentity prisma:generate
+          DATABASE_URL="$IDENTITY_DATABASE_URL" pnpm --dir EduPayIdentity prisma:migrate:deploy
+          DATABASE_URL="$ACADEMIC_DATABASE_URL" pnpm db:generate
+          DATABASE_URL="$ACADEMIC_DATABASE_URL" pnpm db:migrate:deploy
+      - name: Backup, checksum, restore, and file-byte verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          live="$RUNNER_TEMP/edupay-live-files"
+          staging="$RUNNER_TEMP/edupay-live-staging"
+          offhost="$RUNNER_TEMP/edupay-offhost-backups"
+          restore="$RUNNER_TEMP/edupay-restore-work"
+          mkdir -p "$live/tenants/bootstrap/files" "$staging" "$offhost"
+          printf 'synthetic retained evidence\n' > "$live/tenants/bootstrap/files/evidence.txt"
+          sha=$(sha256sum "$live/tenants/bootstrap/files/evidence.txt" | awk '{print $1}')
+          psql "$IDENTITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO tenant_realms (id, handle, status, \"updatedAt\") VALUES ('11111111-1111-4111-8111-111111111111', 'pilot-backup', 'ACTIVE', now())"
+          psql "$ACADEMIC_DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO tenants (id) VALUES ('11111111-1111-4111-8111-111111111111')"
+          psql "$ACADEMIC_DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO stored_blobs (id, tenant_id, storage_key, sha256, stored_size_bytes, detected_mime, detected_extension, lifecycle, validation_status, scan_status) VALUES ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'tenants/bootstrap/files/evidence.txt', '$sha', 28, 'text/plain', '.txt', 'AVAILABLE', 'VALID', 'CLEAR')"
+          psql "$ACADEMIC_DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO file_objects (id, tenant_id, stored_blob_id, original_filename, normalized_filename, declared_size_bytes, authoritative_size_bytes, declared_mime, detected_mime, extension, category, uploaded_by_identity_user_id) VALUES ('33333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 'evidence.txt', 'evidence.txt', 28, 28, 'text/plain', 'text/plain', '.txt', 'STUDENT_SUBMISSION', 'bootstrap-operator')"
+          ACADEMIC_STORAGE_ROOT="$live" ACADEMIC_STORAGE_TEMP_ROOT="$staging" BACKUP_ROOT="$offhost" ./ops/backup/backup-pilot.sh
+          backup_dir=$(find "$offhost" -mindepth 1 -maxdepth 1 -type d -print -quit)
+          test -f "$backup_dir/SHA256SUMS"
+          psql postgresql://release:release_password@127.0.0.1:5432/postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE identity_restore' -c 'CREATE DATABASE academico_restore'
+          RESTORE_CONFIRM=I_UNDERSTAND_DISPOSABLE_RESTORE RESTORE_TARGET_LABEL=disposable-ci-restore RESTORE_WORKDIR="$restore" IDENTITY_DATABASE_URL=postgresql://release:release_password@127.0.0.1:5432/identity_restore ACADEMIC_DATABASE_URL=postgresql://release:release_password@127.0.0.1:5432/academico_restore ACADEMIC_STORAGE_ROOT="$restore/files" IDENTITY_DB_DUMP="$backup_dir/identity.postgres.dump" ACADEMIC_DB_DUMP="$backup_dir/academico.postgres.dump" ACADEMIC_FILES_ARCHIVE="$backup_dir/academico-private-files.tar.gz" IDENTITY_HEALTH_URL=http://127.0.0.1:9 ACADEMIC_READY_URL=http://127.0.0.1:9 RESTORE_TENANT_ID=11111111-1111-4111-8111-111111111111 RESTORE_VERIFY_FILES=1 RESTORE_SKIP_HEALTH_CHECK=1 BACKUP_SECRET_SENTINEL=synthetic-never-stored-token ./ops/backup/restore-verify-pilot.sh
+          if ACADEMIC_STORAGE_ROOT="$live" ACADEMIC_STORAGE_TEMP_ROOT="$staging" BACKUP_ROOT="$live" ./ops/backup/backup-pilot.sh; then exit 1; fi

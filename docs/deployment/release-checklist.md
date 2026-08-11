@@ -4,6 +4,26 @@ Status: controlled release gate. This checklist does not provide production
 credentials and does not close D-15. D-11 is resolved for the controlled pilot
 by ADR-0018; D-17 and D-18 are resolved for the pilot by ADR-0019 and ADR-0020.
 
+## Final pilot release-validation workflow
+
+The expensive Linux/Docker gate is explicit and uses no production secrets:
+
+```sh
+pnpm release:check
+pnpm release:config:check --service academico --env-file deploy/env/academico-api.ci.env.example
+pnpm pilot:bootstrap:smoke
+pnpm pilot:edupay:smoke
+PILOT_MALWARE_SCANNER=clamav PILOT_CLAMAV_FAILURE_GATE=true pnpm pilot:e2e
+```
+
+The canonical GitHub Actions entry point is
+`.github/workflows/pilot-release-validation.yml` with `workflow_dispatch`.
+Its Ubuntu jobs build the reviewed images, exercise PostgreSQL 15, run the
+real ClamAV pilot, execute the actual bootstrap and BL-002 smoke procedures,
+and run disposable backup/restore verification. The workflow must be read as
+release evidence, not as production acceptance; the D-15 owner facts and
+production-host gates remain open until explicitly approved.
+
 ## Automated repository gate
 
 Install dependencies without changing the lockfile:

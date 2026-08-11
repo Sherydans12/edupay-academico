@@ -43,6 +43,19 @@ From the Académico repository/worktree:
 pnpm pilot:e2e
 ```
 
+The release gate runs the same smoke with the private scanner topology and
+fail-closed outage check enabled:
+
+```sh
+PILOT_MALWARE_SCANNER=clamav PILOT_CLAMAV_FAILURE_GATE=true pnpm pilot:e2e
+```
+
+That release mode starts disposable `clamav/clamav:1.4.3` without publishing
+port 3310, verifies readiness, accepts a synthetic clean file, dynamically
+generates the EICAR test string only in memory, verifies rejection and cleanup,
+and verifies that scanner unavailability fails closed. It does not persist the
+EICAR string or any binary payload.
+
 The harness intentionally performs its own Prisma generation, migration
 deployment, and service builds so it does not depend on stale generated code.
 It may need to pull the PostgreSQL image on the first run.

@@ -23,6 +23,8 @@ const identityRoot = resolve(
     join(repositoryRoot, '..', '..', 'EduPayIdentity'),
 );
 const postgresImage = process.env.PILOT_POSTGRES_IMAGE ?? 'postgres:15-alpine';
+const clamavImage = process.env.PILOT_CLAMAV_IMAGE ?? 'clamav/clamav:1.4.3';
+const useClamAv = process.env.PILOT_MALWARE_SCANNER === 'clamav';
 const requestPrefix = `pilot-${randomUUID().slice(0, 8)}`;
 const resources = {
   containers: [],
@@ -193,6 +195,52 @@ async function startPostgres(label, database) {
     database,
     url: `postgresql://pilot:${encodeURIComponent(password)}@127.0.0.1:${port}/${database}?schema=public`,
   };
+}
+
+async function startClamAv() {
+  const name = `edupay-pilot-clamav-${process.pid}-${randomUUID().slice(0, 8)}`;
+  assert.match(name, /^edupay-pilot-clamav-\d+-[a-f0-9]+$/);
+  await run(
+    'docker',
+    [
+      'run',
+      '--detach',
+      '--rm',
+      '--name',
+      name,
+      '--publish',
+      '127.0.0.1::3310',
+      '--health-cmd',
+      'clamdscan --ping=1 --config-file=/etc/clamav/clamd.conf',
+      '--health-interval',
+      '15s',
+      '--health-timeout',
+      '5s',
+      '--health-retries',
+      '10',
+      '--health-start-period',
+      '60s',
+      clamavImage,
+    ],
+    { label: 'start disposable ClamAV service' },
+  );
+  resources.containers.push(name);
+  await waitUntil(
+    'disposable ClamAV',
+    async () => {
+      const result = await run(
+        'docker',
+        ['inspect', '--format', '{{.State.Health.Status}}', name],
+        { allowFailure: true },
+      );
+      return result.stdout.trim() === 'healthy';
+    },
+    180_000,
+  );
+  const portResult = await run('docker', ['port', name, '3310/tcp']);
+  const match = portResult.stdout.trim().match(/:(\d+)$/);
+  assert(match, 'Docker did not publish a ClamAV port.');
+  return { container: name, host: '127.0.0.1', port: Number(match[1]) };
 }
 
 function startProcess(label, cwd, entrypoint, environment) {
@@ -483,6 +531,49 @@ async function uploadText(
   return { bytes, file };
 }
 
+async function uploadTextExpectedFailure(
+  apiBaseUrl,
+  token,
+  learningItemId,
+  filename,
+  content,
+) {
+  const bytes = Buffer.from(content, 'utf8');
+  const intent = await requestJson(apiBaseUrl, '/file-upload-intents', {
+    method: 'POST',
+    expected: 201,
+    token,
+    body: {
+      parentType: 'LEARNING_ITEM',
+      parentId: learningItemId,
+      category: 'STUDENT_SUBMISSION',
+      filename,
+      mimeType: 'text/plain',
+      sizeBytes: bytes.length,
+    },
+  });
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: 'text/plain' }), filename);
+  const response = await fetch(new URL(intent.upload.path, apiBaseUrl), {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${token}`,
+      'x-request-id': `${requestPrefix}-${++requestNumber}`,
+    },
+    body: form,
+    redirect: 'error',
+  });
+  const body = await response.text();
+  let errorCode;
+  try {
+    errorCode = JSON.parse(body)?.error?.code;
+  } catch {
+    errorCode = undefined;
+  }
+  return { intentId: intent.id, status: response.status, errorCode, bytes };
+}
+
 function byType(page, type) {
   return page.items.filter((notification) => notification.type === type);
 }
@@ -702,6 +793,10 @@ async function main() {
   checkpoint(
     'topology: separate disposable PostgreSQL 15 containers are healthy',
   );
+  const clamav = useClamAv ? await startClamAv() : undefined;
+  if (clamav) {
+    checkpoint('malware: private disposable ClamAV/clamd service is healthy');
+  }
   await prepareRepositories(identityPostgres.url, academicPostgres.url);
 
   const bootstrap = {
@@ -852,7 +947,10 @@ async function main() {
     STORAGE_TEMP_ROOT: storageTempRoot,
     STORAGE_MIN_FREE_BYTES: '0',
     STORAGE_MIN_FREE_PERCENTAGE: '0',
-    ACADEMIC_MALWARE_SCANNER: 'fake',
+    ACADEMIC_MALWARE_SCANNER: useClamAv ? 'clamav' : 'fake',
+    ACADEMIC_CLAMAV_HOST: clamav?.host ?? '',
+    ACADEMIC_CLAMAV_PORT: String(clamav?.port ?? 3310),
+    ACADEMIC_CLAMAV_TIMEOUT_MS: '10000',
     ACADEMIC_MALWARE_SCAN_CONCURRENCY: '2',
     ACADEMIC_RESEND_API_KEY: '',
     ACADEMIC_EMAIL_FROM: 'EduPay Académico <academic@example.test>',
@@ -1661,6 +1759,85 @@ async function main() {
   checkpoint(
     'security/storage: other Student denied; tenant-local dedup and exact quota accounting verified',
   );
+
+  if (clamav) {
+    const eicarBytes = [
+      'X5O!P%@AP[4\\PZX54(P^)7CC)7}$',
+      'EICAR-STANDARD-ANTIVIRUS-TEST-FILE',
+      '!$H+H*',
+    ].join('');
+    const usageBeforeEicar = await requestJson(apiBaseUrl, '/storage/usage', {
+      token: adminA.accessToken,
+      expected: 200,
+    });
+    const eicar = await uploadTextExpectedFailure(
+      apiBaseUrl,
+      studentLogin.accessToken,
+      assignment.id,
+      'security-check.txt',
+      eicarBytes,
+    );
+    assert.equal(eicar.status, 400);
+    assert.equal(eicar.errorCode, 'MALWARE_DETECTED');
+    assert.equal(
+      await scalar(
+        academicPostgres,
+        `SELECT status FROM upload_intents WHERE tenant_id=${sqlLiteral(bootstrap.tenantAId)} AND id=${sqlLiteral(eicar.intentId)}::uuid;`,
+      ),
+      'FAILED',
+    );
+    const usageAfterEicar = await requestJson(apiBaseUrl, '/storage/usage', {
+      token: adminA.accessToken,
+      expected: 200,
+    });
+    assert.equal(usageAfterEicar.reservedBytes, 0);
+    assert.equal(usageAfterEicar.usedBytes, usageBeforeEicar.usedBytes);
+    assert.equal(usageAfterEicar.fileCount, usageBeforeEicar.fileCount);
+    assert.equal(usageAfterEicar.blobCount, usageBeforeEicar.blobCount);
+    await requestBytes(
+      apiBaseUrl,
+      `/files/${randomUUID()}/download`,
+      studentLogin.accessToken,
+      [403, 404],
+    );
+    const eicarOnDisk = await Promise.all(
+      (await listFilesRecursively(storageRoot)).map(async (path) =>
+        (await readFile(path)).includes(Buffer.from(eicarBytes, 'ascii')),
+      ),
+    );
+    assert.equal(eicarOnDisk.some(Boolean), false);
+    assert.deepEqual(await listFilesRecursively(storageTempRoot), []);
+    checkpoint(
+      'malware: clean files remained available; dynamically generated EICAR was rejected, unreleased, and not downloadable',
+    );
+
+    if (process.env.PILOT_CLAMAV_FAILURE_GATE !== 'false') {
+      await run('docker', ['stop', clamav.container], {
+        label: 'stop disposable ClamAV for fail-closed check',
+      });
+      await requestJson(apiBaseUrl, '/health/ready', { expected: 503 });
+      const unavailable = await uploadTextExpectedFailure(
+        apiBaseUrl,
+        studentLogin.accessToken,
+        assignment.id,
+        'scanner-unavailable.txt',
+        'safe retry after scanner outage\n',
+      );
+      assert.equal(unavailable.status, 503);
+      assert.equal(unavailable.errorCode, 'MALWARE_SCANNER_UNAVAILABLE');
+      assert.equal(
+        await scalar(
+          academicPostgres,
+          `SELECT status FROM upload_intents WHERE tenant_id=${sqlLiteral(bootstrap.tenantAId)} AND id=${sqlLiteral(unavailable.intentId)}::uuid;`,
+        ),
+        'FAILED',
+      );
+      assert.deepEqual(await listFilesRecursively(storageTempRoot), []);
+      checkpoint(
+        'malware: scanner outage failed readiness and rejected uploads closed',
+      );
+    }
+  }
 
   const yearB = await requestJson(apiBaseUrl, '/academic-years', {
     method: 'POST',

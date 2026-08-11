@@ -13,6 +13,24 @@ if [[ "$ACADEMIC_STORAGE_ROOT" == "$ACADEMIC_STORAGE_TEMP_ROOT" ]]; then
   exit 1
 fi
 
+final_root="$(realpath -m "$ACADEMIC_STORAGE_ROOT")"
+temp_root="$(realpath -m "$ACADEMIC_STORAGE_TEMP_ROOT")"
+backup_root="$(realpath -m "$BACKUP_ROOT")"
+
+is_same_or_below() {
+  local parent="$1"
+  local candidate="$2"
+  [[ "$candidate" == "$parent" || "$candidate" == "$parent"/* ]]
+}
+
+if is_same_or_below "$final_root" "$backup_root" || \
+  is_same_or_below "$temp_root" "$backup_root" || \
+  is_same_or_below "$backup_root" "$final_root" || \
+  is_same_or_below "$backup_root" "$temp_root"; then
+  echo "Backup refused: backup target must be separate from final and staging storage roots." >&2
+  exit 1
+fi
+
 if [[ ! -d "$ACADEMIC_STORAGE_ROOT" || ! -r "$ACADEMIC_STORAGE_ROOT" ]]; then
   echo "Backup refused: Academic file root is unavailable." >&2
   exit 1
@@ -22,6 +40,7 @@ umask 077
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 target="$BACKUP_ROOT/$stamp"
 mkdir -p "$target"
+chmod 700 "$target"
 cleanup() {
   rm -f "$target"/*.partial
 }
