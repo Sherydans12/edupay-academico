@@ -6,6 +6,37 @@ Previous evidence base: `a6cbeb41ea1c80ed85c64f09cfd6f73711b02da3`
 
 Recorded: 2026-08-13
 
+## Native Identity key-custody continuation: stopped at ACL prerequisite
+
+The owner-configured native Coolify Persistent Storage record was confirmed
+through the official API for `/opt/edupay-pilot/keys` to `/keys` (storage UUID
+`f66qy02pu6icsqhmzdzsazk3`). The stale unsupported custom Docker run options
+were removed. A private native Identity deployment then proved that the
+generated container receives the directory at `/keys`; inspection showed the
+actual Docker bind mount as read-write.
+
+Host key metadata remains unchanged: the directory is owned by UID/GID
+`1000:1000`, mode `755`, and the two keyset files are owned by UID/GID
+`1000:1000`, mode `600`. The native runtime remains UID 10001.
+
+The required POSIX ACL tooling (`getfacl` and `setfacl`) is not available on
+the production host. Therefore a root-only ACL rollback record could not be
+created and the minimum UID 10001 read-only ACL could not be expressed and
+verified safely. No ACL, ownership, mode, or key contents were changed. No
+key fingerprints or destructive permission probes were run, because the
+required permission model was not in place.
+
+The private native Identity instance was stopped through the official API.
+The gate remains blocked: a supported, reviewable way to create and restore
+the POSIX ACL is required before UID 10001 read access, write/delete/chmod
+denial, key-byte equality, private JWKS, and redeploy-survival checks can be
+performed. Cutover was not resumed; maintenance, backup, database migration,
+domain routing, email correction, password recovery, and worker changes were
+not entered. Manual production remained healthy throughout.
+
+The temporary Coolify token file was removed after the API operations; only
+its absence was verified.
+
 ## Authorized cutover attempt: stopped at private Identity validation
 
 The merged Identity SHA `21a8cd9b10660bd4cb38679298393387a60b9eee`
