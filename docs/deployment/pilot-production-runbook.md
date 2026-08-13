@@ -10,19 +10,20 @@ Current Operational State: **HOLD_PENDING_EXTERNAL_PRODUCTION_GATES**
 | **Host Inventory & Topology** | `PRODUCTION PASS` | Hostinger VPS (`187.77.250.148`, Ubuntu 24.04 LTS, Brazil - Campinas). |
 | **PostgreSQL Migrations** | `PRODUCTION PASS` | Identity (2 migrations) & Académico (6 migrations) applied 100% cleanly. |
 | **Container Orchestration** | `PRODUCTION PASS` | Containers healthy: `edupay-identity-api`, `edupay-academico-api`, `edupay-academico-web`, `clamav`, singletons `notification-worker`, `sync-worker`. |
-| **Coordinated Tenant Bootstrap** | `PRODUCTION PASS` | Tenant ID `6dc797a8-2012-4c28-b212-c1449109a12f` (`colegio-conquistadores`) created in both Identity & Académico. |
-| **Admin Activation & Login** | `PRODUCTION PASS` | Membership `0f00d914-c064-4209-8a8f-616dd0ef26d1` `ACTIVE`. RSA JWT login verified. Deployment session revoked & file removed. |
+| **Coordinated Tenant Bootstrap** | `PRODUCTION PASS` | Tenant ID `6dc797a8-2012-4c28-b212-c1449109a12f` (`colegio-conquistadores`) created in both services. |
+| **Admin Activation & Login** | `PRODUCTION PASS` | Membership `0f00d914-c064-4209-8a8f-616dd0ef26d1` `ACTIVE`. Session revoked & file removed. |
 | **AcademicYear 2026** | `PRODUCTION PASS` | AcademicYear `2330fa9a-1ab1-4c45-99ef-4116c25554c7` created and activated (`ACTIVE`). |
 | **Malware Scanner Gate** | `PRODUCTION PASS` | Clean 70B PDF stored & downloaded clear. 68B EICAR malware string rejected with HTTP 400 `MALWARE_DETECTED` and purged. |
-| **Local Production Backup** | `PRODUCTION PASS` | Bundle `/var/lib/edupay-backup-staging/20260813T000750Z` created with pg_dumps, files archive, and `SHA256SUMS`. |
-| **Disposable Restore Verification** | `DISPOSABLE PASS` | Database dumps restored into isolated test DBs (`test_restore_identity` & `test_restore_academico`). Tenant record counts & file hashes verified. |
-| **Public DNS & TLS** | `PRODUCTION PENDING` | Awaiting DNS configuration for `academico.edupay.baselogic.cl`, `academico-api.edupay.baselogic.cl`, `identity.edupay.baselogic.cl`. |
-| **Cloudflare R2 Backup Sync** | `PRODUCTION PENDING` | Awaiting Cloudflare R2 credentials (`BACKUP_R2_ENDPOINT`, `BACKUP_R2_BUCKET`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY`). |
-| **R2-Sourced Restore Verification**| `PRODUCTION PENDING` | Awaiting restore test sourced from R2 off-host backup custody. |
-| **Production Email Delivery** | `PRODUCTION PENDING` | Awaiting live `RESEND_API_KEY` and verified domain routing. |
-| **EduPay BL-002 Roster Sync** | `PRODUCTION PENDING` | Awaiting live BL-002 source integration token (`EDUPAY_INTEGRATION_TOKEN`) & live source API connection. |
-| **Final Roster Reconciliation** | `PRODUCTION PENDING` | Awaiting official Colegio Conquistadores roster synchronization. |
-| **Final Release Sign-off** | `PRODUCTION PENDING` | Awaiting completion of all pending external production gates. |
+| **Public DNS Resolution** | `PRODUCTION PASS` | `academico.edupay.baselogic.cl`, `academico-api.edupay.baselogic.cl`, `identity.edupay.baselogic.cl` -> `187.77.250.148`. |
+| **Public TLS Certificates** | `PRODUCTION PASS` | Valid Let's Encrypt SSL/TLS certificates active; HTTP 200 verified across all 5 public HTTPS endpoints. |
+| **Resend Production Delivery** | `PRODUCTION PASS` | Controlled delivery accepted by Resend API (Identity `75061e91-3363-4922-a0ed-598f0a1fb3b7`, Academic `e8d75250-dbf5-4807-8459-ebae63363f1b`). |
+| **Admin Password Rotation** | `PENDING_HUMAN_RESET` | Initiated via Identity recovery API (`accepted: true`). Email sent to admin; awaiting human password reset via web link. |
+| **Cloudflare R2 Off-Host Backup** | `PRODUCTION PASS` | Off-host backup set `20260813T012336Z` uploaded to Cloudflare R2 bucket `edupay-academico-pilot-backups` (`edupay-academico/pilot/20260813T012336Z`) with strict SHA256SUMS and size verification. |
+| **R2-Sourced Restore Verification**| `DISPOSABLE PASS` | Backup set downloaded from R2; restored into isolated test DBs (`r2_test_restore_identity` & `r2_test_restore_academico`) with 100% record match. |
+| **Synthetic Data Isolation** | `PRODUCTION PASS` | Renamed Course (`TEST-ONLY — 1° Medio A`) and updated records to `ARCHIVED`/`INACTIVE` status. Audit history preserved. |
+| **EduPay BL-002 Roster Sync** | `PENDING_BL002_SOURCE` | High-entropy integration token & cursor secret generated. Awaiting deployment of BL-002 source container (`abc3776631d5940759d1a45ad949413174f2acf9`). |
+| **Coolify Management Hardening** | `ACTION_REQUIRED` | Ports 8000, 8080, 6001, 6002 exposed. Recorded `OWNER_HOSTINGER_FIREWALL_ACTION_REQUIRED` to restrict ports to admin IPs via provider firewall. |
+| **Final Release Sign-off** | `PRODUCTION PENDING` | Awaiting human admin password reset and BL-002 live roster synchronization. |
 
 ---
 
