@@ -1,10 +1,41 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_EXTERNAL_PRODUCTION_GATES**
+Status: **HOLD_PENDING_NATIVE_IDENTITY_KEY_MOUNT**
 
 Previous evidence base: `a6cbeb41ea1c80ed85c64f09cfd6f73711b02da3`
 
 Recorded: 2026-08-13
+
+## Authorized cutover attempt: stopped at private Identity validation
+
+The merged Identity SHA `21a8cd9b10660bd4cb38679298393387a60b9eee`
+was configured through the official Coolify API. Its reviewed `migrate` image
+was built, and the reviewed migration command completed successfully against
+the disposable native Identity PostgreSQL resource. The `runtime` image then
+built and reached private health HTTP 200.
+
+This attempt did **not** enter maintenance, take a pre-cutover backup, dump or
+restore either manual database, run the operator email correction, dispatch a
+password recovery message, start native workers, change a domain, or alter the
+manual stack.
+
+Private Identity JWKS validation returned HTTP 500. Container inspection found
+the precise cause: Coolify API configuration retained the requested read-only
+`/keys` bind and UID/GID override, but Coolify `4.0.0-beta.473` did not apply
+either option to the generated native application container. That container
+ran as the image UID 10001 and had no `/keys` mount, whereas the preserved key
+files are mode `600` and owned by UID/GID `1000:1000`. The manual Identity
+container continues to use the same key directory read-only as UID 1000.
+
+No weaker key permissions, writable key mount, direct Coolify database change,
+or product-code workaround was introduced. The failed private native Identity
+instance was stopped through the Coolify API. This is the current cutover
+blocker: native Identity must receive the existing signing keys through a
+verified read-only mount and return private JWKS HTTP 200 before any
+maintenance or database migration is authorized.
+
+The temporary Coolify token file was removed after all authorized API work;
+only its absence was verified.
 
 ## Authenticated continuation
 
@@ -36,15 +67,15 @@ Discovered identifiers:
 | `clamav` (`clamav/clamav:1.4.3`) | `ttrrmrkod9hmqo68er6q2ghs` | private and `running:healthy`; no public port; internal alias configured |
 | `academico-db` (`postgres:15-alpine`) | `v5w9hacwtftulf4m46l1rn2g` | new native DB, private and `running:healthy` |
 | `identity-db` (`postgres:15-alpine`) | `bluypktxta8uisbrfzu6p9pw` | new native DB, private and `running:healthy` |
-| `edupay-identity-api` | `tbv6wqmv2h0u4flrufjzch4b` | prepared but not buildable at reviewed SHA; no domain |
+| `edupay-identity-api` | `tbv6wqmv2h0u4flrufjzch4b` | reviewed runtime and migrate images built at `21a8cd9b...`; stopped after private JWKS mount failure; no domain |
 
 Academic source-linked resources use `Sherydans12/edupay-academico`, branch
 `main`, reviewed SHA `5b0ad1f5f8ab0552ed1c502f30840b4afcc13fd8`, with the
 reviewed Dockerfile paths under `deploy/`. No canonical domain was assigned.
-The Identity resource uses reviewed SHA
-`16838f526a4ee48fbb518b840fe0c19e766395cf`; the repository does not contain
-the configured root `Dockerfile` at that SHA, so no product Dockerfile was
-invented.
+The Identity resource now uses reviewed SHA
+`21a8cd9b10660bd4cb38679298393387a60b9eee`, its root `Dockerfile`, and its
+reviewed `runtime` and `migrate` targets. Its runtime remains stopped pending
+the verified signing-key mount and JWKS gate.
 
 The bounded Identity email operation was prepared as disabled scheduled task
 `identity-email-runner`, UUID `v11g6tkhxbb2ebhdrlw2uli9`, command
@@ -59,8 +90,9 @@ triggered. Final Identity cutover also waits for the separate reviewed
   live files. The host directories are owned by UID/GID `1000:1000`, mode
   `700`, matching the runtime user expectation.
 - The existing Identity key directory is preserved at `/opt/edupay-pilot/keys`
-  and configured as a read-only `/keys` bind mount. No signing keys were
-  regenerated.
+  and the manual Identity mount remains read-only. No signing keys were
+  regenerated. Native Coolify application configuration alone did not create
+  the required runtime mount; this is the blocking validation failure.
 - Known manual runtime configuration was transferred into native resources
   in memory through Coolify-managed environment entries; values were not
   printed or committed. Preview duplicates were removed; final checks found
@@ -74,9 +106,9 @@ triggered. Final Identity cutover also waits for the separate reviewed
 
 ## Remaining cutover procedure
 
-1. Obtain the merged Identity email-fix SHA and resolve the reviewed Identity
-   Dockerfile/source gate.
-2. Build and privately validate Identity; verify all native resources and
+1. Resolve the Coolify native Identity read-only key-mount propagation issue
+   and revalidate private Identity health and JWKS.
+2. Verify all native resources and
    configuration again.
 3. Enter maintenance/no-write mode and stop the manual singleton workers.
 4. Create and verify a fresh off-host R2 backup, then take final logical dumps
