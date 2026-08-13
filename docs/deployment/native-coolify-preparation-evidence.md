@@ -1,10 +1,71 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_NATIVE_IDENTITY_KEY_MOUNT**
+Status: **HOLD_PENDING_OFFHOST_BACKUP_CONFIGURATION**
 
 Previous evidence base: `a6cbeb41ea1c80ed85c64f09cfd6f73711b02da3`
 
 Recorded: 2026-08-13
+
+## Native Identity POSIX ACL key-custody gate: passed
+
+The authorized Ubuntu `acl` package was installed without a system upgrade.
+`getfacl` and `setfacl` are available. Before modification, ACL metadata was
+saved at `/root/edupay-identity-keys-pre-native.acl`; it is non-empty,
+root-owned, and mode `0600`. It is retained as the rollback source for
+`setfacl --restore`.
+
+The owner-configured Coolify Persistent Storage bind (UUID
+`f66qy02pu6icsqhmzdzsazk3`) was validated in the actual native Identity
+container: `/opt/edupay-pilot/keys` reaches `/keys`. Docker reports transport
+`rw=true`, but the effective native runtime identity (UID 10001) is read-only
+through POSIX ACLs. The key directory grants UID 10001 `r-x`; each static key
+file grants UID 10001 `r--`. No write/default ACL was added.
+
+The original key owners remain UID/GID `1000:1000`; no keys were regenerated,
+replaced, copied, or read into output. POSIX ACL mask presentation changes the
+displayed group-mode bits to `640`; this was not a `chmod` change and does not
+grant the owning group access because the effective group entry remains
+`group::---`. The owner permissions remain `rw-`, other users remain `---`,
+and UID 10001 has no effective write permission.
+
+Host and native-container tests passed without examining key content:
+
+- both required files can be opened for read by UID 10001;
+- write-open of a real private key is denied;
+- native directory write is denied;
+- a disposable UID-1000 mode-600 ACL-equivalent probe confirmed append,
+  truncate, delete, rename, and chmod are all denied;
+- the probe was removed by root after each test;
+- host and container SHA256 fingerprints of both preserved files matched;
+- native Identity health and structurally valid JWKS each returned HTTP 200;
+- JWKS key ID matched the manual production keyset.
+
+The Coolify application was redeployed a second time. The fresh container
+again ran as UID 10001, retained the `/keys` bind, had matching fingerprints,
+and passed read-only, health, and JWKS checks. Therefore:
+
+`NATIVE_IDENTITY_KEY_GATE=PASS`
+
+## Cutover continuation blocked before maintenance
+
+After the key gate passed, pre-cutover health was revalidated: manual Academic
+Web, Academic API live/ready, Identity health/JWKS, and exactly one manual
+notification and sync worker were healthy. No maintenance mode was entered.
+
+The reviewed off-host backup script requires five runtime-managed R2 variables
+(`BACKUP_R2_ENDPOINT`, `BACKUP_R2_BUCKET`, `BACKUP_R2_PREFIX`,
+`BACKUP_R2_ACCESS_KEY_ID`, and `BACKUP_R2_SECRET_ACCESS_KEY`). Their presence
+was checked without printing values in the manual application environments,
+approved backup locations, and root AWS configuration. They are unavailable,
+so a required `BACKUP_REQUIRE_OFFHOST=1` recovery point cannot be created or
+remotely verified. The cutover stopped before workers, applications, or
+databases were stopped and before any dump, restore, email correction, domain
+change, or password-recovery action.
+
+The temporary Coolify API token file was removed after final API use; only its
+absence was verified. The current external gate is provision of the reviewed
+runtime R2 backup configuration, after which the sequence resumes at the
+fresh pre-cutover off-host backup.
 
 ## Native Identity key-custody continuation: stopped at ACL prerequisite
 
@@ -137,8 +198,8 @@ triggered. Final Identity cutover also waits for the separate reviewed
 
 ## Remaining cutover procedure
 
-1. Resolve the Coolify native Identity read-only key-mount propagation issue
-   and revalidate private Identity health and JWKS.
+1. Provide the reviewed runtime R2 backup configuration required to create and
+   remotely verify the mandatory pre-cutover recovery point.
 2. Verify all native resources and
    configuration again.
 3. Enter maintenance/no-write mode and stop the manual singleton workers.
