@@ -11,19 +11,20 @@ Current Operational State: **HOLD_PENDING_EXTERNAL_PRODUCTION_GATES**
 | **PostgreSQL Migrations** | `PRODUCTION PASS` | Identity (2 migrations) & Académico (6 migrations) applied 100% cleanly. |
 | **Container Orchestration** | `PRODUCTION PASS` | Containers healthy: `edupay-identity-api`, `edupay-academico-api`, `edupay-academico-web`, `clamav`, singletons `notification-worker`, `sync-worker`. |
 | **Coordinated Tenant Bootstrap** | `PRODUCTION PASS` | Tenant ID `6dc797a8-2012-4c28-b212-c1449109a12f` (`colegio-conquistadores`) created in both services. |
-| **Admin Activation & Login** | `PRODUCTION PASS` | Membership `0f00d914-c064-4209-8a8f-616dd0ef26d1` `ACTIVE`. Session revoked & file removed. |
+| **Admin Activation & Session** | `PRODUCTION PASS` | Membership `0f00d914-c064-4209-8a8f-616dd0ef26d1` `ACTIVE`. Session revoked & file removed. |
 | **AcademicYear 2026** | `PRODUCTION PASS` | AcademicYear `2330fa9a-1ab1-4c45-99ef-4116c25554c7` created and activated (`ACTIVE`). |
 | **Malware Scanner Gate** | `PRODUCTION PASS` | Clean 70B PDF stored & downloaded clear. 68B EICAR malware string rejected with HTTP 400 `MALWARE_DETECTED` and purged. |
 | **Public DNS Resolution** | `PRODUCTION PASS` | `academico.edupay.baselogic.cl`, `academico-api.edupay.baselogic.cl`, `identity.edupay.baselogic.cl` -> `187.77.250.148`. |
-| **Public TLS Certificates** | `PRODUCTION PASS` | Valid Let's Encrypt SSL/TLS certificates active; HTTP 200 verified across all 5 public HTTPS endpoints. |
+| **Public TLS & 504 Resolution**| `PRODUCTION PASS` | 504 Gateway Timeout resolved (fixed Traefik YAML syntax & NestJS HTTPS validation). All 5 public HTTPS endpoints return HTTP 200 OK. |
 | **Resend Production Delivery** | `PRODUCTION PASS` | Controlled delivery accepted by Resend API (Identity `75061e91-3363-4922-a0ed-598f0a1fb3b7`, Academic `e8d75250-dbf5-4807-8459-ebae63363f1b`). |
-| **Admin Password Rotation** | `PENDING_HUMAN_RESET` | Initiated via Identity recovery API (`accepted: true`). Email sent to admin; awaiting human password reset via web link. |
-| **Cloudflare R2 Off-Host Backup** | `PRODUCTION PASS` | Off-host backup set `20260813T012336Z` uploaded to Cloudflare R2 bucket `edupay-academico-pilot-backups` (`edupay-academico/pilot/20260813T012336Z`) with strict SHA256SUMS and size verification. |
+| **Admin Email Correction** | `ACTION_REQUIRED` | Real admin email `nicolas.18.111@gmail.com` recorded. Identified `IDENTITY_ADMIN_EMAIL_CHANGE_GAP` (Identity service lacks post-bootstrap email update API). |
+| **Cloudflare R2 Off-Host Backup** | `PRODUCTION PASS` | Off-host backup set `20260813T012336Z` uploaded to Cloudflare R2 bucket `edupay-academico-pilot-backups` with strict SHA256SUMS. |
 | **R2-Sourced Restore Verification**| `DISPOSABLE PASS` | Backup set downloaded from R2; restored into isolated test DBs (`r2_test_restore_identity` & `r2_test_restore_academico`) with 100% record match. |
 | **Synthetic Data Isolation** | `PRODUCTION PASS` | Renamed Course (`TEST-ONLY — 1° Medio A`) and updated records to `ARCHIVED`/`INACTIVE` status. Audit history preserved. |
-| **EduPay BL-002 Roster Sync** | `PENDING_BL002_SOURCE` | High-entropy integration token & cursor secret generated. Awaiting deployment of BL-002 source container (`abc3776631d5940759d1a45ad949413174f2acf9`). |
-| **Coolify Management Hardening** | `ACTION_REQUIRED` | Ports 8000, 8080, 6001, 6002 exposed. Recorded `OWNER_HOSTINGER_FIREWALL_ACTION_REQUIRED` to restrict ports to admin IPs via provider firewall. |
-| **Final Release Sign-off** | `PRODUCTION PENDING` | Awaiting human admin password reset and BL-002 live roster synchronization. |
+| **BL-002 Source Discovery** | `PRODUCTION PASS` | Discovered existing BL-002 production application `portal-de-pagos-conquistadores-prod` (`ehuaxp1lx6zjqhmeu4tk3uke`) at `https://portal.edupay.baselogic.cl`. Currently running commit `49b29d6d6e908358e4f9f9b01ef4033461b1fb00`. |
+| **Coolify Deployment Ownership**| `ACTION_REQUIRED` | Evaluated manual vs native Coolify applications. Recorded `COOLIFY_UI_OR_API_OWNER_ACTION_REQUIRED` with complete UI specification. |
+| **Coolify Management Hardening** | `ACTION_REQUIRED` | Recorded `OWNER_HOSTINGER_FIREWALL_ACTION_REQUIRED` to restrict management ports 8000, 8080, 6001, 6002 via provider firewall. |
+| **Final Release Sign-off** | `PRODUCTION PENDING` | Awaiting owner Coolify UI setup, admin email code update, and BL-002 commit upgrade to `abc3776631d5940759d1a45ad949413174f2acf9`. |
 
 ---
 
