@@ -1,11 +1,30 @@
 # Colegio Conquistadores pilot production runbook
 
-Status: owner-approved controlled-pilot operational baseline; production
-execution evidence is still pending. ADR-0017 is Accepted for the controlled
-Colegio Conquistadores pilot on 2026-08-11. D-11 is resolved for the controlled
-pilot by ADR-0018; D-17 is resolved for the pilot by ADR-0019 and D-18 is
-resolved for the pilot baseline by ADR-0020. D-16 remains independent branding
-and UX polish.
+Status: owner-approved controlled-pilot operational baseline.
+Current Operational State: **HOLD_PENDING_EXTERNAL_PRODUCTION_GATES**
+
+## Reconciled Pilot Deployment Matrix (2026-08-13)
+
+| Phase / Requirement | Result Category | Description & Verification Evidence |
+| :--- | :--- | :--- |
+| **Host Inventory & Topology** | `PRODUCTION PASS` | Hostinger VPS (`187.77.250.148`, Ubuntu 24.04 LTS, Brazil - Campinas). |
+| **PostgreSQL Migrations** | `PRODUCTION PASS` | Identity (2 migrations) & Académico (6 migrations) applied 100% cleanly. |
+| **Container Orchestration** | `PRODUCTION PASS` | Containers healthy: `edupay-identity-api`, `edupay-academico-api`, `edupay-academico-web`, `clamav`, singletons `notification-worker`, `sync-worker`. |
+| **Coordinated Tenant Bootstrap** | `PRODUCTION PASS` | Tenant ID `6dc797a8-2012-4c28-b212-c1449109a12f` (`colegio-conquistadores`) created in both Identity & Académico. |
+| **Admin Activation & Login** | `PRODUCTION PASS` | Membership `0f00d914-c064-4209-8a8f-616dd0ef26d1` `ACTIVE`. RSA JWT login verified. Deployment session revoked & file removed. |
+| **AcademicYear 2026** | `PRODUCTION PASS` | AcademicYear `2330fa9a-1ab1-4c45-99ef-4116c25554c7` created and activated (`ACTIVE`). |
+| **Malware Scanner Gate** | `PRODUCTION PASS` | Clean 70B PDF stored & downloaded clear. 68B EICAR malware string rejected with HTTP 400 `MALWARE_DETECTED` and purged. |
+| **Local Production Backup** | `PRODUCTION PASS` | Bundle `/var/lib/edupay-backup-staging/20260813T000750Z` created with pg_dumps, files archive, and `SHA256SUMS`. |
+| **Disposable Restore Verification** | `DISPOSABLE PASS` | Database dumps restored into isolated test DBs (`test_restore_identity` & `test_restore_academico`). Tenant record counts & file hashes verified. |
+| **Public DNS & TLS** | `PRODUCTION PENDING` | Awaiting DNS configuration for `academico.edupay.baselogic.cl`, `academico-api.edupay.baselogic.cl`, `identity.edupay.baselogic.cl`. |
+| **Cloudflare R2 Backup Sync** | `PRODUCTION PENDING` | Awaiting Cloudflare R2 credentials (`BACKUP_R2_ENDPOINT`, `BACKUP_R2_BUCKET`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY`). |
+| **R2-Sourced Restore Verification**| `PRODUCTION PENDING` | Awaiting restore test sourced from R2 off-host backup custody. |
+| **Production Email Delivery** | `PRODUCTION PENDING` | Awaiting live `RESEND_API_KEY` and verified domain routing. |
+| **EduPay BL-002 Roster Sync** | `PRODUCTION PENDING` | Awaiting live BL-002 source integration token (`EDUPAY_INTEGRATION_TOKEN`) & live source API connection. |
+| **Final Roster Reconciliation** | `PRODUCTION PENDING` | Awaiting official Colegio Conquistadores roster synchronization. |
+| **Final Release Sign-off** | `PRODUCTION PENDING` | Awaiting completion of all pending external production gates. |
+
+---
 
 ## Approved pilot target
 
