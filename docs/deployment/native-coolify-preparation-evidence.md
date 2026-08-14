@@ -1,6 +1,51 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_FINAL_CUTOVER_REVIEW**
+Status: **HOLD_PENDING_VALID_OFFHOST_BACKUP**
+
+## Authorized final native cutover window — aborted safely at backup gate (2026-08-14)
+
+The final pre-maintenance gate passed: Coolify `4.1.2` and authenticated API
+health were available; the manual Academic web, API liveness, and Identity/JWKS
+endpoints returned HTTP 200; Academic readiness returned HTTP 200 three
+consecutive times; manual ClamAV, both manual PostgreSQL containers, and one
+manual notification and sync worker were healthy.  R2 authentication passed.
+The permanent native API targets remained `runtime`, the native Identity key
+custody gate remained passed, and native ClamAV was started with its retained
+`4g` limit.  Its bounded validation passed (healthy, no OOM, clamd ping, and
+private TCP 3310).
+
+Final maintenance began at `2026-08-14T19:47:10Z`.  The manual Identity API,
+Academic API, Academic web, notification worker, and sync worker were stopped;
+the manual PostgreSQL databases and manual ClamAV were kept running.  No
+manual application or worker writer remained, so `MANUAL_WRITE_FREEZE=PASS`.
+
+The required fresh off-host recovery-point command was then invoked using the
+reviewed `backup-pilot.sh` and the retained R2 runtime configuration.  It
+refused before any dump, archive, checksum, or upload because the invocation
+did not provide the required `ACADEMIC_DATABASE_URL` variable to the script.
+This is a controlled backup-launch configuration failure, not a data or R2
+failure.  Consequently no new `PRE_NATIVE_CUTOVER_RECOVERY_POINT` exists and
+the prior historical recovery point was not reused.
+
+Per the mandatory backup hard-stop, the cutover was aborted before final
+database dumps, native restore, production migration, operator email
+correction, canonical routing, public native validation, malware upload
+validation, password recovery, worker transition, or post-cutover backup.
+The native candidate applications and native ClamAV were stopped.  The manual
+Compose stack was restored against its retained volumes; final maintenance
+ended at `2026-08-14T19:50:21Z`.  Manual public web/API/Identity/JWKS checks
+returned HTTP 200, Academic readiness again returned HTTP 200 three times,
+manual ClamAV and both databases were healthy, and exactly one manual
+notification and sync worker were running.  No canonical domain, BL-002, or
+firewall change occurred.
+
+The R2 runtime secret file, Identity ACL rollback metadata, and Coolify
+pre-upgrade backup remain root-only with their required permissions.  The
+temporary Coolify token file was removed after the rollback verification.
+The next authorized cutover attempt must first prove a corrected, secure
+backup launcher can supply both required database URLs to `backup-pilot.sh`,
+then create and verify a new immediate off-host recovery point before any
+database migration work.
 
 ## Source-backed Docker Compose migration build proof — passed before maintenance (2026-08-14)
 
