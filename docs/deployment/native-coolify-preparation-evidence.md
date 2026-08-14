@@ -1,10 +1,45 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_OFFHOST_BACKUP_CONFIGURATION**
+Status: **HOLD_PENDING_MANUAL_CLAMAV_HEALTH**
 
 Previous evidence base: `a6cbeb41ea1c80ed85c64f09cfd6f73711b02da3`
 
 Recorded: 2026-08-13
+
+## Cutover continuation: R2 gate passed; manual health gate failed
+
+The owner-provided R2 runtime secret file was verified root-owned and mode
+`0600`. Its five required variables were present without printing values, and
+the approved endpoint, bucket, and prefix matched the reviewed configuration.
+A non-destructive AWS CLI listing confirmed R2 authentication and bucket/prefix
+access. The secret file remains retained at its owner-controlled location for
+ongoing backups.
+
+The production host was missing the reviewed backup script's PostgreSQL client
+dependency. Only Ubuntu's `postgresql-client` package was installed; it
+provides `pg_dump` and `pg_restore` version 16.14. No server, Docker, Coolify,
+Traefik, or system upgrade was performed.
+
+Before maintenance, the mandatory production health revalidation found a
+regression in the authoritative manual stack:
+
+- Academic Web and API liveness were HTTP 200, but Academic API readiness was
+  HTTP 503;
+- manual ClamAV was `unhealthy`;
+- a direct non-destructive Academic API to manual ClamAV TCP PING check failed;
+- Identity health/JWKS, both manual databases, and both manual workers
+  remained healthy.
+
+Manual ClamAV's container healthcheck reported a refused local clamd socket;
+its update logs showed signature activity, but the actual Academic-to-ClamAV
+connection failure means the manual production system is not eligible for a
+database cutover. Per the cutover safety rule, no maintenance, worker stop,
+backup artifact, database dump/restore, operator email correction, routing
+change, password recovery, or worker cutover was performed.
+
+The current required remediation is restoration of manual ClamAV reachability
+and Academic readiness, followed by a new immediate pre-maintenance health
+check. The temporary Coolify token file was removed after API use.
 
 ## Native Identity POSIX ACL key-custody gate: passed
 
