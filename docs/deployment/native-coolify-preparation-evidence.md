@@ -735,3 +735,79 @@ database URL, token, or credential value is recorded here.
   window must not open until the official Coolify Service creation/deployment
   API failure is diagnosed and the one-shot production migration path is
   proven without touching authoritative production data.
+
+## 2026-08-14 migration-runner API repair preflight
+
+This was a preflight-only continuation. The manual stack remained online and
+authoritative throughout; no maintenance state, database restore, routing
+change, BL-002 operation, Identity operator correction, or password recovery
+was performed.
+
+### HTTP 500 diagnosis
+
+- `MIGRATION_SERVICE_HTTP500_ROOT_CAUSE=malformed/non-minimal Service-create
+  payload`. The failed attempt sent `connect_to_docker_network` to
+  `POST /api/v1/services`, although that field belongs to the documented
+  Service update route. Its generated Compose string also serialized newline
+  escapes rather than real YAML line endings. The field was Base64-encoded,
+  but its decoded content was not valid runner Compose input.
+- Bounded Coolify logs did not retain a stack trace. The diagnosis was instead
+  confirmed by controlled comparison: a basic Service PATCH and a Base64
+  no-op PATCH of the existing decoded Compose both returned HTTP 200, followed
+  by successful patches using real-line-ending Base64 Compose and a separate
+  documented network PATCH. API authentication and the proven image artifacts
+  were therefore not the cause.
+
+### Permanent runners
+
+- Reused Identity Service `npp3f3xrpktvwvo33j4frhxi` as
+  `edupay-identity-migrate-runner`.
+- Reused Academic Service `ayj9cwg9ycvy338gb7ehrzpf` as
+  `edupay-academico-migrate-runner`.
+- Both are private, one-shot (`restart: 'no'`), carry
+  `exclude_from_hc: true`, and are connected to the Coolify predefined
+  network through the documented separate PATCH. They have no domain or public
+  port and retain only a managed `DATABASE_URL` environment entry.
+- Identity is pinned to source-backed proof image
+  `bgaqul218khdtq3se4pf8dnj_migrate:c511716f077752f69d0b0dff7e5f9174d51a3103`
+  with image ID
+  `sha256:d4bea300ee2eff6fd33d89287ba9145ffe0932052efe80d80d19eadc686130b9`.
+- Academic is pinned to source-backed proof image
+  `h1j4z41841v4d8qx2cwmrbht_migrate:a75e8d7b6c57850a52b5bcccb1c606a25b80cd02`
+  with image ID
+  `sha256:385164d3153317b80ed9b73e18bd1fbf59e5338daef12c90a6ffb565f69de720`.
+- Their managed database targets were verified by non-secret host/port/database
+  metadata as the matching native PostgreSQL resources only; manual databases
+  were not used.
+
+### One-shot execution and idempotency
+
+- Identity runner executed twice by the official Service start endpoint.
+  Both resulting containers used the expected image ID, exited `0`, had restart
+  count `0`, and reported two migration records with no pending migration.
+- Academic runner executed twice under the same conditions, reporting six
+  migration records with no pending migration.
+- Both Services are now `exited` and ready for the future maintenance
+  procedure without resource creation, Compose mutation, target switching, or
+  image substitution. Native database contents remain stale/non-authoritative.
+- No public PostgreSQL port is published. Native notification and sync worker
+  applications were explicitly stopped; no corresponding native worker
+  container was running.
+
+### Regression result and next gate
+
+- Manual Web, Academic live/readiness (three consecutive checks), Identity,
+  and JWKS all returned HTTP 200. Manual ClamAV and both manual PostgreSQL
+  containers were healthy, with exactly one manual notification worker and one
+  manual sync worker.
+- `IDENTITY_MIGRATION_RUNNER_READY=PASS`.
+- `ACADEMIC_MIGRATION_RUNNER_READY=PASS`.
+- `MIGRATION_RUNNER_DOUBLE_EXECUTION=PASS`.
+- `MANUAL_PRODUCTION_UNCHANGED=PASS`.
+- `MIGRATION_SERVICE_API_REPAIR_GATE=PASS`.
+- The temporary Coolify token file was removed after API work:
+  `COOLIFY_TEMP_TOKEN_FILE_REMOVED=YES`.
+- Next state: `HOLD_PENDING_FINAL_CUTOVER_RETRY`. A later authorized
+  maintenance window may only verify the existing stopped runners' target and
+  image, then start them after fresh native restore; it must not create or
+  reconfigure a migration Service in the critical path.
