@@ -1,6 +1,6 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_FINAL_CUTOVER_REVIEW**
+Status: **HOLD_PENDING_MIGRATION_COMPOSE_BUILD_PROOF**
 
 ## Stable Coolify control-plane and native runtime preflight — passed before maintenance (2026-08-14)
 
@@ -54,7 +54,10 @@ and `exclude_from_hc: true` then produced the required behavior:
 | Academic migration | `ayj9cwg9ycvy338gb7ehrzpf` | migrated image executed on the predefined Coolify network; exited `0`; no healthcheck required; six migrations found and none pending |
 
 This proves that a successful one-shot exit is not treated as an HTTP runtime
-failure on Coolify 4.1.2.  The old experimental Dockerfile migration
+failure on Coolify 4.1.2.  The service test used already-built reviewed
+`migrate` target images, so it does **not** yet prove a source-backed Compose
+`build.target: migrate` path under 4.1.2.  That final build-path proof remains
+required before a future maintenance window.  The old experimental Dockerfile migration
 applications `w14ok9mcfn0ntjsr443wkjrb` and `ax0c9tmr72i7qjnzg9o0tks1` were
 explicitly labelled experimental/superseded and kept stopped; they were not
 deleted.  Future controlled migrations must use the separate Service Compose
@@ -83,7 +86,7 @@ change occurred.  The native databases are still stale and therefore require
 a new write freeze, backup, final logical dumps, and restore in the next
 separately authorized cutover window.
 
-`COOLIFY_STABLE_PREFLIGHT_GATE=PASS`
+`COOLIFY_STABLE_PREFLIGHT_GATE=HOLD_PENDING_MIGRATION_COMPOSE_BUILD_PROOF`
 
 
 ## Runtime/migration architecture preflight — blocked before maintenance (2026-08-14)
