@@ -659,3 +659,79 @@ native databases; validate native services privately; controlled proxy/domain
 switch; browser/API/auth validation; and manual-stack stop-with-rollback
 retention. Do not run two active worker sets or delete the manual rollback
 resources before successful validation.
+
+## 2026-08-14 final-cutover continuation: validated backup launcher and safe pre-routing rollback
+
+This continuation began from `HOLD_PENDING_VALID_OFFHOST_BACKUP`. The manual
+deployment remained authoritative throughout the launcher proof; no secret,
+database URL, token, or credential value is recorded here.
+
+### Secure backup launcher
+
+- Installed root-only launcher: `/root/run-edupay-pilot-backup.sh`
+  (`root:root`, mode `0700`). It has strict shell options, disables tracing,
+  uses a root-only umask, obtains exactly the two manual `DATABASE_URL` values
+  from the corresponding manual runtime or approved root-only fallback file,
+  and contains no database URL or credential literal.
+- The helper uses an ephemeral, read-only `docker run` execution context on
+  the existing private `edupay-private` network. It has no public ports,
+  mounts finalized Academic storage read-only, and uses only the staging path
+  as writable output. No PostgreSQL port or host firewall setting changed.
+- The manual targets were confirmed by safe metadata only as the manual
+  Academic and Identity database services on port `5432`; no native database
+  URL was used for the launcher proof.
+- `BACKUP_LAUNCHER_PROOF=20260814T200528Z`: reviewed
+  `backup-pilot.sh` completed online, producing both custom PostgreSQL dumps,
+  the Academic private-files archive, and `SHA256SUMS`. Local checksum
+  validation, R2 upload, remote existence, and remote size verification all
+  passed.
+
+### Frozen-state recovery and restore
+
+- Final maintenance began at `2026-08-14T20:08:39Z`; all manual application
+  writers and both manual workers were stopped while the manual databases and
+  scanner stayed available. `MANUAL_WRITE_FREEZE=PASS`.
+- `PRE_NATIVE_CUTOVER_RECOVERY_POINT=20260814T200903Z` was created after the
+  freeze. It passed local SHA256 verification and R2 upload, existence, and
+  remote-size verification.
+- Fresh frozen logical dumps were created at `20260814T200938Z`:
+  Identity SHA256 `65e40dc24a66f0be7310b7cac74a858740a4cccafefb4c7d1ab01665986b1d73`
+  (45,138 bytes) and Academic SHA256
+  `da9ea77d2f33380db8245cf1292b88d23a1994309ad42a1eb4728334273a3471`
+  (131,931 bytes).
+- Both disposable native databases restored successfully from those fresh
+  dumps. Strict public-table count reconciliation passed: Identity 16 tables
+  and Academic 32 tables. The native canonical tenant, active AcademicYear,
+  and `admin.conquistadores` `TENANT_ADMIN` relationship were also confirmed
+  read-only.
+
+### Abort condition and rollback
+
+- Native ClamAV was started only for bounded validation and was healthy,
+  `OOMKilled=false`, with the configured 4 GiB limit.
+- Before migrations, creation of the required production one-shot Coolify
+  Service Compose job using the proven source-backed migrate artifact returned
+  HTTP `500` from the official Coolify API. No job ran, no API target changed,
+  and no canonical routing changed. Bounded Coolify logs did not provide a
+  safe actionable root cause.
+- Per the pre-routing rollback policy, native Identity, Academic API, Web,
+  and ClamAV candidates were stopped through the official API. The manual
+  applications and singleton workers were restored from their existing
+  Compose deployment at `2026-08-14T20:23:59Z`.
+- Post-rollback public checks were all `HTTP 200` three times for Academic
+  Web/live/ready and Identity/JWKS. Manual ClamAV was healthy and exactly one
+  manual notification worker plus one manual sync worker were running.
+- No migration, native runtime activation, operator email correction, route
+  cutover, password recovery, BL-002 change, or production sync occurred.
+
+### Retained controls
+
+- `/root/edupay-r2-backup.env`, the Identity-key ACL rollback metadata, and
+  the Coolify pre-upgrade backup remain retained under their required
+  root-only permissions.
+- The temporary Coolify token file was removed after API work:
+  `COOLIFY_TEMP_TOKEN_FILE_REMOVED=YES`.
+- State is `HOLD_PENDING_MIGRATION_SERVICE_API_REPAIR`; another maintenance
+  window must not open until the official Coolify Service creation/deployment
+  API failure is diagnosed and the one-shot production migration path is
+  proven without touching authoritative production data.
