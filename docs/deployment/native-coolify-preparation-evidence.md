@@ -1,8 +1,89 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_MIGRATION_COMPOSE_BUILD_PROOF**
+Status: **HOLD_PENDING_FINAL_CUTOVER_REVIEW**
 
-## Stable Coolify control-plane and native runtime preflight — passed before maintenance (2026-08-14)
+## Source-backed Docker Compose migration build proof — passed before maintenance (2026-08-14)
+
+Temporary operations-only proof branches were created from the reviewed source
+commits and pushed without touching either `main` branch:
+
+| Repository | Proof branch | Final proof commit | Reviewed base |
+| --- | --- | --- | --- |
+| Identity | `ops/coolify-migrate-compose-proof` | `c511716f077752f69d0b0dff7e5f9174d51a3103` | `21a8cd9b10660bd4cb38679298393387a60b9eee` |
+| Academic | `ops/coolify-migrate-compose-proof` | `a75e8d7b6c57850a52b5bcccb1c606a25b80cd02` | `5b0ad1f5f8ab0552ed1c502f30840b4afcc13fd8` |
+
+For both repositories the complete diff from the reviewed base contains
+exactly `deploy/compose.migrate.preflight.yml`.  No Dockerfile, application
+source, package, schema, migration, lockfile, or product configuration was
+changed.  Each Compose file defines an unpersisted `postgres:15-alpine` `db`
+and a no-domain `migrate` service with `exclude_from_hc: true`,
+`restart: "no"`, `build`, and a per-resource `PREFLIGHT_DB_PASSWORD` managed
+only by Coolify.  The file uses `build.context: .`: Coolify runs Compose with
+the cloned checkout as its project directory, so this is the repository root
+in the actual stable deployment path.
+
+Two private-GitHub-App, Docker Compose-build-pack applications were created
+with auto-deploy and generated domains disabled:
+
+| Proof application | UUID | Repository / pinned proof commit | Compose checkout path |
+| --- | --- | --- | --- |
+| Identity source proof | `bgaqul218khdtq3se4pf8dnj` | `Sherydans12/edupay-identity` / `c511716f...` | `/deploy/compose.migrate.preflight.yml` |
+| Academic source proof | `h1j4z41841v4d8qx2cwmrbht` | `Sherydans12/edupay-academico` / `a75e8d7b...` | `/deploy/compose.migrate.preflight.yml` |
+
+Coolify deployment logs proved private GitHub App authentication, source
+import/clone, branch lookup, exact detached checkout, loading the Compose file
+from that checkout, and `docker compose build --pull --no-cache`.  The source
+build itself loaded the reviewed root `Dockerfile` for Identity and
+`deploy/Dockerfile.api` for Academic.  BuildKit explicitly executed the
+respective `migrate` stages; the generated source-built migration images were
+`bgaqul218khdtq3se4pf8dnj_migrate:c511716f...` (container image ID
+`sha256:d4bea300ee2eff6fd33d89287ba9145ffe0932052efe80d80d19eadc686130b9`)
+and `h1j4z41841v4d8qx2cwmrbht_migrate:a75e8d7b...` (container image ID
+`sha256:385164d3153317b80ed9b73e18bd1fbf59e5338daef12c90a6ffb565f69de720`).
+No old migration image reference appears in either proof Compose file.
+
+| Proof deployment | Deployment UUID | Command / exit | Disposable DB evidence | One-shot result |
+| --- | --- | --- | --- | --- |
+| Identity | `xx0dj6z0ro0bsqbvurad7b1p` | `pnpm prisma:migrate:deploy`; exit `0` | `_prisma_migrations` count `2` | no Docker healthcheck; `exclude_from_hc` effective; no restart loop |
+| Academic | `ukhk3snkl2c2xo8ckd9mj1xa` | `pnpm --filter @edupay/api db:migrate:deploy`; exit `0` | `_prisma_migrations` count `6` | no Docker healthcheck; `exclude_from_hc` effective; no restart loop |
+
+Both proof applications were stopped through the official Coolify API after
+evidence collection.  Docker verification found zero remaining containers for
+either Compose project, including their disposable PostgreSQL services.  The
+proof resources were retained for review; their UI status can remain stale
+after cleanup, but they have no running container or accessible proof
+database.  The associated preview-only duplicate secret entries were removed,
+leaving one non-preview disposable password entry per proof resource without
+printing any value.
+
+The manual authoritative stack was rechecked after the proof: Academic web and
+live checks were HTTP 200, readiness was HTTP 200 three times, and Identity
+health/JWKS were HTTP 200.  Manual ClamAV and both manual PostgreSQL resources
+were healthy, with exactly one notification worker and one sync worker.  R2
+authentication also passed.  Identity and Academic native API applications
+remain permanently configured for Dockerfile target `runtime`; the native
+Identity key-custody gate remains passed.  Native ClamAV retains its `4g`
+limit and remains intentionally stopped after its bounded validation, so the
+non-authoritative native Academic runtime can appear unhealthy while its
+private scanner dependency is intentionally offline.
+
+No production maintenance was entered.  No manual or native production data,
+domains, routing, workers, email correction, password recovery, BL-002
+resource, firewall, recovery point, dump, or restore was changed.  The native
+databases remain stale and require a fresh, separately controlled cutover
+window.  The temporary Coolify token was removed after final API work;
+root-only R2 configuration, Identity ACL rollback metadata, and the local
+Coolify pre-upgrade backup remain retained.
+
+`IDENTITY_SOURCE_BACKED_MIGRATE_BUILD=PASS`
+
+`ACADEMIC_SOURCE_BACKED_MIGRATE_BUILD=PASS`
+
+`MIGRATION_COMPOSE_BUILD_PROOF=PASS`
+
+`COOLIFY_STABLE_PREFLIGHT_GATE=PASS`
+
+## Historical stable Coolify control-plane and native runtime preflight (2026-08-14)
 
 The owner confirmed completion of their UI backup action.  Before the approved
 control-plane upgrade, an additional root-only local recovery directory was
@@ -86,7 +167,9 @@ change occurred.  The native databases are still stale and therefore require
 a new write freeze, backup, final logical dumps, and restore in the next
 separately authorized cutover window.
 
-`COOLIFY_STABLE_PREFLIGHT_GATE=HOLD_PENDING_MIGRATION_COMPOSE_BUILD_PROOF`
+At this historical checkpoint,
+`COOLIFY_STABLE_PREFLIGHT_GATE=HOLD_PENDING_MIGRATION_COMPOSE_BUILD_PROOF`.
+The source-backed Compose build proof above supersedes that hold.
 
 
 ## Runtime/migration architecture preflight — blocked before maintenance (2026-08-14)
