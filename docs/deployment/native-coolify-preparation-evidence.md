@@ -1,6 +1,90 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_COOLIFY_RUNTIME_TARGET_REBUILD**
+Status: **HOLD_PENDING_FINAL_CUTOVER_REVIEW**
+
+## Stable Coolify control-plane and native runtime preflight — passed before maintenance (2026-08-14)
+
+The owner confirmed completion of their UI backup action.  Before the approved
+control-plane upgrade, an additional root-only local recovery directory was
+created at `/root/coolify-pre-4.1.2-20260814T052155Z` (mode `0700`).  It
+contains a custom-format logical Coolify PostgreSQL dump, the Coolify source
+environment and SSH-key recovery material, the proxy control configuration,
+and `SHA256SUMS`.  The dump was structurally validated with `pg_restore
+--list`; checksum verification passed.  Individual retained backup files are
+root-only, the total backup size is 5,430,598 bytes, and no control-plane
+secrets were exported to the EduPay R2 prefix.
+
+Coolify was upgraded using the official version-pinned installer from
+`4.0.0-beta.473` to `4.1.2`.  Docker Engine, Ubuntu, PostgreSQL major version,
+Traefik, the manual EduPay stack, and the host firewall were not changed.  The
+post-upgrade Coolify API authenticated successfully, and Coolify, its internal
+PostgreSQL, Redis, and proxy were healthy.  The recorded resource UUIDs still
+resolved.  The manually routed Academic web/API and Identity public checks
+remained HTTP 200 (Academic readiness was checked three consecutive times),
+manual ClamAV and both manual databases were healthy, and precisely one manual
+notification and sync worker remained active.
+
+The permanent API targets were re-pinned without target toggling:
+
+| Runtime application | UUID | Reviewed SHA | Dockerfile target | Runtime evidence |
+| --- | --- | --- | --- | --- |
+| Identity API | `tbv6wqmv2h0u4flrufjzch4b` | `21a8cd9b10660bd4cb38679298393387a60b9eee` | `runtime` | image `sha256:7e485ee702564b02118fc180ce4969bf9d48136984bf168d2655816cb47763da`; `node dist/main.js`; HEALTHCHECK present; internal `3000/tcp` |
+| Academic API | `d8dqmfqwp45hkk2hdqodohav` | `5b0ad1f5f8ab0552ed1c502f30840b4afcc13fd8` | `runtime` | image `sha256:ef09ee1c31e5dcf0b66ee82ac9798f754dd310fb630782d05c3960b4f30ea7aa`; `node dist/main.js`; HEALTHCHECK present; internal `3001/tcp` |
+
+Both runtime applications accepted the supported forced rebuild operation.
+Identity deployment `nlwctu5l5ag7yv0cv09peuhm` and Academic deployment
+`csdp8x6ioi68sdlkfe62ig2u` built verified runtime images instead of reusing
+the old migration-target images.  Identity private health and JWKS were HTTP
+200, `/keys` was present, the runtime UID was `10001`, and a host/container
+key-manifest fingerprint comparison passed without disclosing key material.
+Academic private live and ready checks were HTTP 200, including private
+scanner connectivity.  The previously passed `NATIVE_IDENTITY_KEY_GATE`
+remains valid.
+
+Stable Coolify's documented Compose one-shot model was tested only against the
+stale/disposable native databases.  Application-style Compose resources could
+not load an inline compose definition because their deployment path expects a
+repository `docker-compose.yaml`; those stopped test applications were left
+intact.  The supported Service Compose API with `connect_to_docker_network`
+and `exclude_from_hc: true` then produced the required behavior:
+
+| One-shot Service | UUID | Result |
+| --- | --- | --- |
+| Identity migration | `npp3f3xrpktvwvo33j4frhxi` | migrated image executed on the predefined Coolify network; exited `0`; no healthcheck required; two migrations found and none pending |
+| Academic migration | `ayj9cwg9ycvy338gb7ehrzpf` | migrated image executed on the predefined Coolify network; exited `0`; no healthcheck required; six migrations found and none pending |
+
+This proves that a successful one-shot exit is not treated as an HTTP runtime
+failure on Coolify 4.1.2.  The old experimental Dockerfile migration
+applications `w14ok9mcfn0ntjsr443wkjrb` and `ax0c9tmr72i7qjnzg9o0tks1` were
+explicitly labelled experimental/superseded and kept stopped; they were not
+deleted.  Future controlled migrations must use the separate Service Compose
+mechanism and must never toggle either API application's Dockerfile target.
+
+The runtime rolling-deployment defect was further ruled out with two further
+forced runtime redeployments per API: Identity deployments
+`nkwrfu59kn5hpkra2x3l0f24` and `hmg1b0hbi5hjxrk8anql1m8x`, and Academic
+deployments `extng6bnu8lp8u6spqey5e4i` and `zd8tylkkam0hatcetkq527bf`, each
+retained the correct command and HEALTHCHECK and passed their private health
+checks.  Identity also retained the key bind and valid JWKS on both fresh
+containers.
+
+Native ClamAV was configured through Coolify's supported limit setting to
+`4g`.  A bounded native preflight found `clamav/clamav:1.4.3` healthy,
+`OOMKilled=false`, `clamdscan --ping=1` passing, and private TCP `3310`
+listening.  It was then stopped through the Coolify API to avoid unnecessary
+duplicate scanner memory pressure while the manual scanner remains
+authoritative.  Its signature persistence was not removed or changed.
+
+R2 authentication was revalidated non-destructively with the retained
+root-only runtime secret file.  No new maintenance window, recovery point,
+production dump or restore, operator email correction, password-recovery
+dispatch, domain/routing change, worker switch, BL-002 action, or firewall
+change occurred.  The native databases are still stale and therefore require
+a new write freeze, backup, final logical dumps, and restore in the next
+separately authorized cutover window.
+
+`COOLIFY_STABLE_PREFLIGHT_GATE=PASS`
+
 
 ## Runtime/migration architecture preflight — blocked before maintenance (2026-08-14)
 
