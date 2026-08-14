@@ -1,6 +1,6 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_VALID_OFFHOST_BACKUP**
+Status: **HOLD_PENDING_REVIEWED_IDENTITY_EMAIL_VERIFICATION_FIX**
 
 ## Authorized final native cutover window — aborted safely at backup gate (2026-08-14)
 
@@ -811,3 +811,81 @@ was performed.
   maintenance window may only verify the existing stopped runners' target and
   image, then start them after fresh native restore; it must not create or
   reconfigure a migration Service in the critical path.
+
+## 2026-08-14 final native cutover retry — aborted safely at Identity email-verification gate
+
+### Pre-maintenance and backup proof
+
+- The manual authoritative production gate passed: Coolify API, Web, Academic
+  live/readiness (three consecutive checks), Identity/JWKS, manual ClamAV,
+  both manual databases, and exactly one manual notification and sync worker
+  were healthy. The permanent migration runners were unchanged, stopped, on
+  the predefined network, and pinned to their proven images and native DB
+  targets.
+- Added root-only native backup launcher `/root/run-edupay-native-backup.sh`
+  (`root:root`, mode `0700`). It contains logic only, uses the official
+  Coolify API to obtain only the two native database URLs at runtime, verifies
+  their native targets, and runs in an ephemeral private-network helper with
+  no public PostgreSQL port.
+- `NATIVE_BACKUP_LAUNCHER_PROOF=20260814T220226Z` passed against stale native
+  databases: both dumps, private-files archive, local SHA256 validation, R2
+  upload, remote existence, and remote-size verification all passed. This was
+  explicitly not a production recovery point.
+- Native ClamAV bounded precheck passed with 4 GiB, healthy status, no OOM,
+  successful clamd ping, and private TCP 3310.
+
+### Frozen authoritative data and native candidate
+
+- Final maintenance started at `2026-08-14T22:06:18Z`.
+  `MANUAL_WRITE_FREEZE=PASS`: manual Identity/Academic APIs, Web, and both
+  workers were stopped; manual PostgreSQL and ClamAV remained running.
+- `PRE_NATIVE_CUTOVER_RECOVERY_POINT=20260814T220642Z` was created from the
+  frozen manual state and passed all required local checksum and off-host R2
+  upload/existence/size checks.
+- Fresh final logical dumps were created at `20260814T220701Z`:
+  Identity SHA256 `dc0c5856b6d356cd74a3e4e22fa7782023399ee4f323321e21592fa1a8f450d3`
+  and Academic SHA256
+  `060d594c921a5c27413f8e685004eefc14db051ff47fc2036fa72ff80981c7a3`.
+- Fresh logical restores to both disposable native databases passed. Strict
+  reconciliation against frozen manual data passed for all Identity 16 and
+  Academic 32 public tables, including the canonical tenant, active
+  AcademicYear, and `TENANT_ADMIN` relation.
+- The existing runners—not new or reconfigured Services—ran on the restored
+  native DBs. Identity and Academic used their respective expected source
+  image IDs, exited `0`, had restart count `0`, and reported no pending
+  migrations with counts 2 and 6 respectively.
+- Private native validation passed: Identity health/JWKS, Academic live and
+  ready three times, Web HTTP response, preserved Identity key fingerprint,
+  Academic storage probe/cleanup, Academic-to-native-Identity connectivity,
+  Academic-to-native-ClamAV connectivity, and ClamAV scanner mode all passed.
+
+### Blocking email-verification result and rollback
+
+- The reviewed operator command returned `corrected` for the masked intended
+  destination and preserved the `TENANT_ADMIN` relation. It revoked one active
+  session; there were no active reset, invitation, or activation artifacts to
+  revoke. Audit evidence for the request ID exists.
+- The mandatory read-only verification gate then failed: the corrected email
+  identifier did not have the required verified state. This is a policy gate,
+  not an authorization to patch the database directly.
+- Therefore no canonical route was changed, no public native validation,
+  malware upload test, password recovery, Resend delivery, notification-worker
+  activation, sync activation, or post-cutover backup was performed.
+- Pre-routing rollback completed at `2026-08-14T22:20:57Z`: native candidate
+  applications, ClamAV, and both native workers were stopped through the
+  official API; the manual Compose applications and both singleton workers
+  were restored against untouched manual volumes. Manual public health then
+  returned HTTP 200 three consecutive times for Web, Academic live/readiness,
+  Identity, and JWKS; manual ClamAV and both databases were healthy.
+
+### Current hold
+
+- The native DB copies contain the aborted candidate state and are not
+  authoritative. Manual production is authoritative and writable again.
+- `COOLIFY_TEMP_TOKEN_FILE_REMOVED=YES` after the rollback checks.
+- The native and manual backup launchers, R2 runtime secret file, ACL rollback
+  metadata, and Coolify pre-upgrade backup remain retained under root-only
+  permissions.
+- A future retry requires a reviewed Identity email-verification fix or an
+  approved, auditable operator behavior that satisfies the verification policy;
+  it must begin with a new maintenance window and fresh manual backup/restore.
