@@ -1,10 +1,65 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_MANUAL_CLAMAV_HEALTH**
+Status: **HOLD_PENDING_COOLIFY_RUNTIME_TARGET_REBUILD**
 
 Previous evidence base: `a6cbeb41ea1c80ed85c64f09cfd6f73711b02da3`
 
 Recorded: 2026-08-13
+
+## Authorized cutover attempt: recovered manual ClamAV, then rolled back before routing
+
+The manual ClamAV failure was proven to be memory-cgroup exhaustion, not DNS
+or an Academic configuration error. The container had `OOMKilled=true`, a
+1 GiB memory limit, and kernel evidence of `clamd` being killed during
+signature reloads. Host available memory was approximately 9.3 GiB. The
+native private ClamAV resource (about 964 MiB resident with no explicit
+limit) was stopped through the Coolify API to reduce concurrent pressure.
+
+Only the manual `clamav` service was recreated from its existing Compose file.
+Its `mem_limit` was changed from `1g` to `4g` after a preserved copy of the
+Compose file was made. The image remained `clamav/clamav:1.4.3` and the
+existing `clamav-signatures` volume remained attached. After recovery, manual
+ClamAV was healthy, `clamdscan --ping=1` passed, TCP 3310 was listening,
+Academic resolved and reached the private `clamav` service, and three
+consecutive public Academic readiness checks returned HTTP 200. Scanner mode
+remains `clamav`.
+
+The pre-cutover recovery point `20260814T043815Z` was created through the
+reviewed backup script with `BACKUP_REQUIRE_OFFHOST=1`. It includes both
+logical database dumps, the Academic private-files archive, and SHA256SUMS;
+local checksum verification, R2 upload, remote object existence, and remote
+size verification all passed. The reviewed R2 runtime secret configuration
+was verified without recording credential values.
+
+After controlled maintenance began at `2026-08-14T04:37:44Z`, manual writers
+and applications were stopped while manual PostgreSQL and ClamAV remained
+running. Fresh final logical dumps were created in
+`final-cutover-20260814T043847Z` and checksum-verified. Both dumps restored
+successfully into the disposable native PostgreSQL resources using logical
+`pg_restore --clean --if-exists`; all public-table record counts matched the
+manual sources exactly. Migration histories also matched (Identity 2,
+Academic 6), and the reviewed migration commands found no pending work.
+
+Native private runtime validation then exposed a Coolify
+`4.0.0-beta.473` deployment defect: after switching applications from the
+reviewed `migrate` Dockerfile target to `runtime`, Coolify reused the same
+SHA-tagged migrate image and skipped rebuilding the runtime target. The
+generated containers therefore lacked the Dockerfile `HEALTHCHECK`; Coolify
+failed its own rolling-update inspection and removed the new Identity and
+Academic API containers. This is a platform deployment-target/rebuild issue,
+not a product source or restored-data failure.
+
+Per rollback policy, no canonical domains were assigned and no native service
+became authoritative. Manual Identity, Academic API/Web, notification worker,
+and sync worker were restarted against their untouched original volumes and
+returned public HTTP 200 health/JWKS/readiness. Native ClamAV was stopped
+again. Since the manual stack resumed writes, the restored native database
+copies are now stale and must be refreshed from a new maintenance-window dump
+before any future cutover attempt. No operator email correction, password
+recovery, BL-002 change, or native worker activation occurred.
+
+The temporary Coolify token file was removed after API operations. The R2
+runtime secret file and root-only ACL rollback metadata remain retained.
 
 ## Cutover continuation: R2 gate passed; manual health gate failed
 
