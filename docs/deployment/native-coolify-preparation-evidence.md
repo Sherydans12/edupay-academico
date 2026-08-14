@@ -2,6 +2,76 @@
 
 Status: **HOLD_PENDING_COOLIFY_RUNTIME_TARGET_REBUILD**
 
+## Runtime/migration architecture preflight — blocked before maintenance (2026-08-14)
+
+Authenticated Coolify API access was validated with the temporary owner-issued
+token. The two existing API resources were explicitly re-pinned without a
+deployment to their permanent runtime targets:
+
+| Resource | UUID | SHA | Dockerfile target | Domain |
+| --- | --- | --- | --- | --- |
+| Identity API | `tbv6wqmv2h0u4flrufjzch4b` | `21a8cd9b10660bd4cb38679298393387a60b9eee` | `runtime` | none |
+| Academic API | `d8dqmfqwp45hkk2hdqodohav` | `5b0ad1f5f8ab0552ed1c502f30840b4afcc13fd8` | `runtime` | none |
+
+Two separate no-domain, no-auto-deploy migration applications were created.
+Each has only a Coolify-managed `DATABASE_URL` runtime entry transferred
+internally from its corresponding native API application; no value was
+printed or recorded. No Identity signing-key storage was attached.
+
+| Resource | UUID | Permanent target | Build/deployment UUID |
+| --- | --- | --- | --- |
+| Identity migration | `w14ok9mcfn0ntjsr443wkjrb` | `migrate` | `w5byai0xbeemlsjeg7fipool` |
+| Academic migration | `ax0c9tmr72i7qjnzg9o0tks1` | `migrate` | `k7ou3c09zfsw9m2f4jhh0jig` |
+
+Coolify accepted the official `POST /applications/{uuid}/start?force=true`
+requests and both deployment logs proved a no-cache Docker build using the
+requested `migrate` target. The resulting local migration image identities
+were distinct:
+
+| Migration image | Local image identity | Command | Dockerfile HEALTHCHECK |
+| --- | --- | --- | --- |
+| Identity | `sha256:ef1244474ea6a0c8b629a82dfdf945f8ee57dc2ab3527f3501f9bd935bcdf304` | `pnpm prisma:migrate:deploy` | absent |
+| Academic | `sha256:4e72a733c6619b84eca12aac1ff850174be62249502d78c2fc32818d501b5917` | `pnpm --filter @edupay/api db:migrate:deploy` | absent |
+
+Both one-shot deployments nevertheless failed before a successful migration
+exit could be observed. In Coolify `4.0.0-beta.473`, the rolling-update job
+inspected the full source Dockerfile, detected the runtime-stage
+`HEALTHCHECK`, and attempted to inspect `.State.Health` on the actual
+`migrate` target image. That image correctly has no healthcheck, so the
+deployment failed with Docker's missing-`Health` template error and Coolify
+removed the newly created one-shot container. This occurred even though the
+application setting `health_check_enabled=false` was stored. It is a Coolify
+one-shot deployment/orchestrator incompatibility, not a Prisma migration
+failure. No fake HTTP healthcheck, custom Docker run option, internal database
+change, product-code change, or production database was used to bypass it.
+
+The old SHA-tagged API images remain evidence of the prior target collision:
+they still contain the migration commands and no Dockerfile healthcheck
+(`sha256:28edcd5f17bbf3974d892aa7854a0bb6a622ab3aa9d46f5200833fd4379c41c5`
+for Identity and
+`sha256:1ac6e3e18f18dad1250f61208b16c54bbc20d15f0486da77ef029d9318fdb3e9`
+for Academic). Therefore a runtime force rebuild and its redeploy tests were
+not attempted after the one-shot gate failed; the actual runtime target still
+cannot be proven until the Coolify one-shot behavior is corrected through a
+supported mechanism.
+
+No maintenance window was opened. No new R2 recovery point, final dump,
+database restore, migration, operator email correction, canonical routing
+change, password recovery, worker cutover, BL-002 action, or firewall action
+occurred. The manual authoritative public checks remained HTTP 200 for the
+Academic web, Academic live/ready, Identity health, and JWKS endpoints;
+manual ClamAV and both manual PostgreSQL instances remained healthy, and the
+manual notification and sync workers remained active.
+
+The R2 runtime secret file and ACL rollback metadata were retained root-owned
+with mode `0600`. The temporary Coolify token file was removed after the API
+work and its absence was verified. The required next action is an
+owner-approved Coolify upgrade or a documented beta.473-supported one-shot
+execution method that does not misapply a runtime Dockerfile healthcheck to a
+`migrate` target. Until then:
+**COOLIFY_RUNTIME_REBUILD_GATE=HOLD** and
+**HOLD_PENDING_COOLIFY_RUNTIME_TARGET_REBUILD** remain in force.
+
 Previous evidence base: `a6cbeb41ea1c80ed85c64f09cfd6f73711b02da3`
 
 Recorded: 2026-08-13
