@@ -1,6 +1,6 @@
 # Native Coolify pilot preparation evidence
 
-Status: **HOLD_PENDING_REVIEWED_IDENTITY_EMAIL_VERIFICATION_FIX**
+Status: **HOLD_PENDING_REVIEWED_IDENTITY_EMAIL_VERIFICATION_GATE**
 
 ## Authorized final native cutover window — aborted safely at backup gate (2026-08-14)
 
@@ -865,9 +865,11 @@ was performed.
   destination and preserved the `TENANT_ADMIN` relation. It revoked one active
   session; there were no active reset, invitation, or activation artifacts to
   revoke. Audit evidence for the request ID exists.
-- The mandatory read-only verification gate then failed: the corrected email
-  identifier did not have the required verified state. This is a policy gate,
-  not an authorization to patch the database directly.
+- The mandatory read-only verification gate then failed. Subsequent forensics
+  established that this historical query incorrectly required the global EMAIL
+  identifier to have the tenant-scoped username identifier's `tenantRealmId`.
+  This is a policy-gate query defect, not authorization to patch a database
+  directly.
 - Therefore no canonical route was changed, no public native validation,
   malware upload test, password recovery, Resend delivery, notification-worker
   activation, sync activation, or post-cutover backup was performed.
@@ -886,6 +888,77 @@ was performed.
 - The native and manual backup launchers, R2 runtime secret file, ACL rollback
   metadata, and Coolify pre-upgrade backup remain retained under root-only
   permissions.
-- A future retry requires a reviewed Identity email-verification fix or an
-  approved, auditable operator behavior that satisfies the verification policy;
-  it must begin with a new maintenance window and fresh manual backup/restore.
+- A future retry requires the reviewed deterministic Identity verification
+  gate; it must begin with a new maintenance window and fresh manual
+  backup/restore.
+
+## 2026-08-14 Identity operator email-verification forensic and preflight repair
+
+### Read-only native forensics and provenance
+
+- The stale native Identity candidate was inspected read-only through the
+  canonical relation: tenant-scoped USERNAME identifier -> `userId` -> global
+  EMAIL identifier. It has exactly one EMAIL identifier for the resolved user,
+  its destination matches the intended masked Gmail account, its
+  `tenantRealmId` is `NULL` by design, and `verifiedAt` is non-null.
+- The aborted-candidate `OPERATOR_EMAIL_CORRECTED` audit event is present with
+  `emailChanged=true`, `emailVerification` metadata, one session revocation,
+  and no reset, invitation, or activation revocations. No email value was
+  included in the evidence.
+- The exact failed gate queried `login_identifiers` using the canonical tenant,
+  normalized destination, and non-null `verifiedAt`, but omitted the resolved
+  `userId`, EMAIL kind, and identifier-count constraints. Its tenant filter is
+  invalid for global EMAIL identifiers, whose `tenantRealmId` is `NULL`.
+  `FAILED_GATE_WAS_CORRECT=NO`.
+- The retained native runtime image is a genuine runtime image (CMD
+  `node dist/main.js`, HEALTHCHECK present). Its correction artifacts matched
+  an isolated runtime image built from reviewed Identity
+  `21a8cd9b10660bd4cb38679298393387a60b9eee` byte-for-byte:
+  `identity-email-correction.js` SHA256
+  `55e1b023a61f1afa4b3ab3b334b4a24a391f9446ef926eff6d76e82845d69c4b`
+  and `identity-email-correction-main.js` SHA256
+  `c5a004d8e15258e72bfac4fdd6ffbf928458d474821602ff0a2ea63d3ad85513`.
+
+### Production-shaped disposable reproduction
+
+- The checksum-valid `20260814T220642Z` frozen Identity dump was restored into
+  an ephemeral PostgreSQL 15 container on an internal-only disposable network.
+  No manual or native production database was written.
+- Before correction the resolved production-shaped account had no EMAIL
+  identifier, an active `TENANT_ADMIN` membership, one active session, and no
+  valid reset, invitation, or activation artifacts. The reviewed operator
+  command returned `corrected`.
+- Canonical readback then found exactly one global EMAIL identifier, matching
+  the intended masked destination with non-null `verifiedAt`; username,
+  membership, and `TENANT_ADMIN` were preserved, the active session was
+  revoked, and audit evidence exists. The historical failed query still
+  returned `FAIL`, proving it was not a valid verification mechanism.
+
+### Deterministic read-only verification gate awaiting review
+
+- Identity branch `fix/operator-email-verification-postcondition`, commit
+  `d634704ea204c5276cd878f28c188dc2fbe17e9a`, adds
+  `operator:verify-email-state`. It is read-only, resolves the tenant-scoped
+  USERNAME first, then queries the user's global EMAIL identifiers by `userId`.
+  It emits only IDs, username, a masked destination, identifier count,
+  destination-match, verified-state, and `TENANT_ADMIN` presence.
+- The verifier refuses ambiguous multiple-EMAIL state and reports false for a
+  missing, unverified, or mismatched EMAIL without mutation. PostgreSQL
+  integration tests cover the correction and verification postconditions,
+  including verified and unverified replacements, no-email creation,
+  idempotency, collision refusal, membership/role preservation, revocation,
+  invitation/challenge handling, audit metadata, and ambiguity refusal.
+- Local ephemeral PostgreSQL 15 validation passed: `pnpm lint`, `pnpm
+  typecheck`, `pnpm prisma:validate`, `pnpm prisma:migrate:deploy`, `pnpm
+  test` (89 passing), and `pnpm build`. The production runtime Docker target
+  smoke test found `dist/main.js`, the correction CLI, and the verification
+  CLI. The branch is pushed and PR #3 targets Identity `main`; it has not been
+  merged or deployed.
+- No maintenance, manual-stack stop, manual-database write, native runtime
+  rebuild, domain change, BL-002 change, or password recovery occurred during
+  this forensic/preflight task. Manual public health remained green at task
+  end, including Academic readiness three consecutive times and exactly one
+  manual notification and sync worker.
+- `IDENTITY_EMAIL_CORRECTION_GATE=HOLD_PENDING_REVIEWED_VERIFIER`. A future
+  cutover needs the reviewed/merged Identity verifier, then a separately
+  authorized fresh maintenance window, backup, dump, and restore sequence.
