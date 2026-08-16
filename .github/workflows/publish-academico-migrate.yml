@@ -1,0 +1,42 @@
+name: Publish academico migration runner
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_SHA: a75e8d7b6c57850a52b5bcccb1c606a25b80cd02
+      IMAGE: ghcr.io/sherydans12/edupay-academico-migrate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a75e8d7b6c57850a52b5bcccb1c606a25b80cd02
+          fetch-depth: 1
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify migration target command
+        run: |
+          docker build --file deploy/Dockerfile.api --target migrate --tag local/academico-migrate-proof .
+          test "$(docker image inspect local/academico-migrate-proof --format '{{json .Config.Cmd}}')" = '["pnpm","--filter","@edupay/api","db:migrate:deploy"]'
+          test -z "$(docker image inspect local/academico-migrate-proof --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -Ei 'DATABASE_URL|TOKEN|SECRET|PASSWORD|PRIVATE_KEY' || true)"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.api
+          target: migrate
+          push: true
+          tags: ghcr.io/sherydans12/edupay-academico-migrate:a75e8d7b6c57850a52b5bcccb1c606a25b80cd02
+          labels: |
+            org.opencontainers.image.source=https://github.com/Sherydans12/edupay-academico
+            org.opencontainers.image.revision=a75e8d7b6c57850a52b5bcccb1c606a25b80cd02
+            org.opencontainers.image.title=EduPay Academico migration runner
