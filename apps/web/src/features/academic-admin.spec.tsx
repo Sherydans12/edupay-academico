@@ -332,5 +332,17 @@ describe('Academic admin screens', () => {
     expect(await screen.findByText('Sin permiso para este espacio')).toBeTruthy();
     expect(screen.getByText(/tu sesión está autenticada/i)).toBeTruthy();
   });
+
+  it('renders total student count in overview stat card and students pagination bar', async () => {
+    const client = adminClient({
+      listStudents: vi.fn(async () => ({ items: [studentEduPay, studentManual], nextCursor: 'opaque-next', totalCount: 229 })),
+    });
+    render(<AcademicAdminScreen api={client} view="overview" />);
+    expect(await screen.findByText('229')).toBeTruthy();
+    expect(screen.getByText('alumnos registrados')).toBeTruthy();
+
+    render(<AcademicAdminScreen api={client} view="people" />);
+    expect(await screen.findByText('Mostrando 2 de 229 alumnos')).toBeTruthy();
+  });
 });
 

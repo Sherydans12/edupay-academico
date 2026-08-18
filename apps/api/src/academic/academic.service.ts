@@ -369,15 +369,18 @@ export class AcademicService {
           }
         : {}),
     };
-    const records = await this.prisma.student.findMany({
-      where,
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      ...(query.cursor
-        ? { cursor: { paginationToken: query.cursor }, skip: 1 }
-        : {}),
-      take: query.limit + 1,
-    });
-    return this.page(records, query.limit, mapStudent);
+    const [records, totalCount] = await Promise.all([
+      this.prisma.student.findMany({
+        where,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        ...(query.cursor
+          ? { cursor: { paginationToken: query.cursor }, skip: 1 }
+          : {}),
+        take: query.limit + 1,
+      }),
+      this.prisma.student.count({ where }),
+    ]);
+    return this.page(records, query.limit, mapStudent, totalCount);
   }
 
   async getStudent(
@@ -509,15 +512,18 @@ export class AcademicService {
           }
         : {}),
     };
-    const records = await this.prisma.teacher.findMany({
-      where,
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      ...(query.cursor
-        ? { cursor: { paginationToken: query.cursor }, skip: 1 }
-        : {}),
-      take: query.limit + 1,
-    });
-    return this.page(records, query.limit, mapTeacher);
+    const [records, totalCount] = await Promise.all([
+      this.prisma.teacher.findMany({
+        where,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        ...(query.cursor
+          ? { cursor: { paginationToken: query.cursor }, skip: 1 }
+          : {}),
+        take: query.limit + 1,
+      }),
+      this.prisma.teacher.count({ where }),
+    ]);
+    return this.page(records, query.limit, mapTeacher, totalCount);
   }
 
   async getTeacher(
@@ -1345,12 +1351,14 @@ export class AcademicService {
     records: T[],
     limit: number,
     mapper: (record: T) => TResult,
-  ): { items: TResult[]; nextCursor: string | null } {
+    totalCount?: number,
+  ): { items: TResult[]; nextCursor: string | null; totalCount?: number } {
     const hasMore = records.length > limit;
     const visible = hasMore ? records.slice(0, limit) : records;
     return {
       items: visible.map(mapper),
       nextCursor: hasMore ? (visible.at(-1)?.paginationToken ?? null) : null,
+      ...(totalCount !== undefined ? { totalCount } : {}),
     };
   }
 
