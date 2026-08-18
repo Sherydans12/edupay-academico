@@ -113,6 +113,15 @@ export function identityErrorMessage(error: unknown): string {
   if (!(error instanceof IdentityApiError)) {
     return 'No pudimos conectar con EduPay Identity. Revisa tu conexión e inténtalo nuevamente.';
   }
+  if (error.status === 400) {
+    if (error.code === 'PASSWORD_POLICY_FAILED') {
+      return 'La contraseña debe tener al menos 12 caracteres y no contener caracteres de control.';
+    }
+    if (error.code === 'VALIDATION_FAILED' || error.code === 'VALIDATION_ERROR') {
+      return 'Los datos ingresados no son válidos. Revisa el formulario e inténtalo nuevamente.';
+    }
+    return error.message || 'Los datos de la solicitud no son válidos.';
+  }
   if (error.status === 401) return 'No pudimos verificar las credenciales. Revisa los datos e inténtalo nuevamente.';
   if (error.status === 403) return 'Tu cuenta no tiene permiso para completar esta acción.';
   if (error.status === 404) return 'El recurso solicitado no está disponible.';

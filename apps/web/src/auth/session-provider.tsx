@@ -41,7 +41,15 @@ export interface IdentitySessionContextValue {
   createActivationChallenge(membershipId: string): Promise<ActivationChallenge>;
 }
 
-const publicRoutes = new Set(['/login', '/activate', '/activate-code', '/forgot-password', '/reset-password', '/componentes']);
+const publicRoutes = new Set([
+  '/',
+  '/login',
+  '/activate',
+  '/activate-code',
+  '/forgot-password',
+  '/reset-password',
+  '/componentes',
+]);
 
 function roleWorkspace(roles: readonly string[]): { workspace: WorkspaceKind; roleLabel: string } | null {
   if (roles.includes('TENANT_ADMIN')) return { workspace: 'tenant-admin', roleLabel: 'Administración académica' };
@@ -84,7 +92,7 @@ function trustedSession(response: IdentityTokenResponse, userId: string): Truste
 }
 
 function isOrdinaryUnauthenticated(error: unknown): boolean {
-  return error instanceof IdentityApiError && error.status === 401;
+  return error instanceof IdentityApiError && (error.status === 401 || error.code === 'TOKEN_INVALID' || error.code === 'UNAUTHENTICATED');
 }
 
 export function useIdentitySession(): IdentitySessionContextValue | null {
@@ -157,10 +165,14 @@ export function IdentitySessionProvider({ children, client: suppliedClient }: { 
     setStatus('loading');
     try {
       await refresh();
-    } catch {
-      setStatus('error');
+    } catch (error) {
+      if (isOrdinaryUnauthenticated(error)) {
+        clearMemory();
+      } else {
+        setStatus('error');
+      }
     }
-  }, [refresh]);
+  }, [clearMemory, refresh]);
 
   const adapter = useMemo<IdentitySessionAdapter>(() => ({
     getCurrentSession: async () => session,
@@ -185,12 +197,18 @@ export function IdentitySessionProvider({ children, client: suppliedClient }: { 
 
   useEffect(() => {
     const isPublic = publicRoutes.has(pathname);
-    if (status === 'unauthenticated' && !isPublic) {
-      const returnTo = pathname.startsWith('/') ? pathname : '/';
-      router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+    if (status === 'unauthenticated') {
+      if (pathname === '/') {
+        router.replace('/login');
+      } else if (!isPublic) {
+        const returnTo = pathname.startsWith('/') ? pathname : '/';
+        router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      }
     }
-    if (status === 'authenticated' && session && pathname === '/login') {
-      router.replace(destinationForRoles(session.roles));
+    if (status === 'authenticated' && session) {
+      if (pathname === '/login' || pathname === '/') {
+        router.replace(destinationForRoles(session.roles));
+      }
     }
     if (status === 'authenticated' && session) {
       const requiredRole = pathname.startsWith('/administracion') ? 'TENANT_ADMIN'
