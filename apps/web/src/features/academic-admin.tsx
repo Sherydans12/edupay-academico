@@ -36,6 +36,8 @@ interface AdminData {
   studentsNextCursor?: string | null;
   teachersNextCursor?: string | null;
   subjectsNextCursor?: string | null;
+  studentsTotalCount?: number;
+  teachersTotalCount?: number;
 }
 
 const emptyData: AdminData = {
@@ -48,6 +50,8 @@ const emptyData: AdminData = {
   studentsNextCursor: null,
   teachersNextCursor: null,
   subjectsNextCursor: null,
+  studentsTotalCount: 0,
+  teachersTotalCount: 0,
 };
 
 function errorMessage(error: unknown): { title: string; message: string } {
@@ -100,6 +104,8 @@ function useAdminData(api: AcademicApiClient) {
         studentsNextCursor: students.nextCursor,
         teachersNextCursor: teachers.nextCursor,
         subjectsNextCursor: subjects.nextCursor,
+        studentsTotalCount: students.totalCount ?? students.items.length,
+        teachersTotalCount: teachers.totalCount ?? teachers.items.length,
       });
     } catch (nextError) {
       setError(nextError);
@@ -302,7 +308,7 @@ function AdminOverview({ api, data }: { api: AcademicApiClient; data: AdminData 
         <Card className="compact-stat">
           <span><Icon name="people" /></span>
           <div>
-            <strong>{data.students.length}</strong>
+            <strong>{data.studentsTotalCount ?? data.students.length}</strong>
             <small>alumnos registrados</small>
           </div>
         </Card>
@@ -1200,17 +1206,20 @@ function StudentsView({
   api,
   initialStudents,
   initialCursor,
+  initialTotalCount,
   identityActions,
   onSaved,
 }: {
   api: AcademicApiClient;
   initialStudents: AdminData['students'];
   initialCursor?: string | null | undefined;
+  initialTotalCount?: number | undefined;
   identityActions?: AccountProvisioningActions | undefined;
   onSaved: () => void;
 }) {
   const [queriedStudents, setQueriedStudents] = useState<AdminData['students'] | null>(null);
   const [queriedCursor, setQueriedCursor] = useState<string | null | undefined>(undefined);
+  const [queriedTotalCount, setQueriedTotalCount] = useState<number | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState('');
   const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1223,6 +1232,8 @@ function StudentsView({
 
   const displayedStudents = queriedStudents ?? initialStudents;
   const currentCursor = queriedStudents !== null ? queriedCursor : initialCursor;
+  const currentTotalCount = queriedStudents !== null ? queriedTotalCount : initialTotalCount;
+  const totalCountLabel = currentTotalCount !== undefined ? currentTotalCount : displayedStudents.length;
 
   const handleSearch = useCallback(async (query: string) => {
     setSearching(true);
@@ -1230,10 +1241,12 @@ function StudentsView({
       if (!query.trim()) {
         setQueriedStudents(null);
         setQueriedCursor(undefined);
+        setQueriedTotalCount(undefined);
       } else {
         const res = await api.listStudents(query.trim());
         setQueriedStudents(res.items);
         setQueriedCursor(res.nextCursor);
+        setQueriedTotalCount(res.totalCount);
       }
     } catch {
       // Keep existing list on error
@@ -1249,6 +1262,7 @@ function StudentsView({
       const res = await api.listStudents(searchTerm.trim() || undefined, currentCursor);
       setQueriedStudents((prev) => [...(prev ?? initialStudents), ...res.items]);
       setQueriedCursor(res.nextCursor);
+      setQueriedTotalCount(res.totalCount);
     } catch {
       // ignore
     } finally {
@@ -1385,11 +1399,16 @@ function StudentsView({
         ) : null}
       </div>
 
-      {currentCursor ? (
+      {displayedStudents.length > 0 ? (
         <div className="pagination-bar">
-          <Button loading={loadingMore} variant="secondary" onClick={() => void handleLoadMore()}>
-            Cargar más alumnos
-          </Button>
+          <span className="pagination-info">
+            Mostrando {displayedStudents.length} de {totalCountLabel} {searchTerm.trim() ? 'resultados' : 'alumnos'}
+          </span>
+          {currentCursor ? (
+            <Button loading={loadingMore} variant="secondary" onClick={() => void handleLoadMore()}>
+              Cargar más alumnos
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -1886,6 +1905,7 @@ function PeopleView({
           identityActions={identityActions}
           initialCursor={data.studentsNextCursor}
           initialStudents={data.students}
+          initialTotalCount={data.studentsTotalCount}
           onSaved={onSaved}
         />
       ) : null}
