@@ -6,16 +6,61 @@ import type { AccountProvisioningActions } from './account-provisioning';
 import { AccountProvisioning } from './account-provisioning';
 
 const timestamp = '2026-08-09T12:00:00Z';
-const student = { id: 'student-1', identityUserId: null, source: 'MANUAL', externalReference: null, firstName: 'Sofía', lastName: 'Herrera', email: 'sofia@example.test', status: 'ACTIVE', createdAt: timestamp, updatedAt: timestamp };
-const teacher = { ...student, id: 'teacher-1', firstName: 'Camila', lastName: 'Rojas', email: null };
+const edupayStudentNoEmail = {
+  id: 'student-edupay-1',
+  identityUserId: null,
+  source: 'EDUPAY',
+  externalReference: 'STU-EDU-99',
+  firstName: 'Claudio',
+  lastName: 'Arrau',
+  email: null,
+  status: 'ACTIVE',
+  createdAt: timestamp,
+  updatedAt: timestamp,
+};
 
-function provisioned(role: 'STUDENT' | 'TEACHER', email: boolean) {
-  return { userId: `user-${role.toLowerCase()}`, membershipId: `membership-${role.toLowerCase()}`, tenantId: 'tenant-1', institutionalUsername: role === 'STUDENT' ? 'sofia.herrera' : 'camila.rojas', ...(email ? { email: 'sofia@example.test' } : {}), status: 'PENDING_ACTIVATION' as const, roles: [role], activation: { emailInvitationAvailable: email, activationChallengeAvailable: !email } };
+const studentWithEmail = {
+  id: 'student-1',
+  identityUserId: null,
+  source: 'MANUAL',
+  externalReference: null,
+  firstName: 'Sofía',
+  lastName: 'Herrera',
+  email: 'sofia@example.test',
+  status: 'ACTIVE',
+  createdAt: timestamp,
+  updatedAt: timestamp,
+};
+
+const teacher = {
+  id: 'teacher-1',
+  identityUserId: null,
+  source: 'MANUAL',
+  externalReference: null,
+  firstName: 'Camila',
+  lastName: 'Rojas',
+  email: null,
+  status: 'ACTIVE',
+  createdAt: timestamp,
+  updatedAt: timestamp,
+};
+
+function provisioned(role: 'STUDENT' | 'TEACHER', email?: string) {
+  return {
+    userId: `user-${role.toLowerCase()}`,
+    membershipId: `membership-${role.toLowerCase()}`,
+    tenantId: 'tenant-1',
+    institutionalUsername: role === 'STUDENT' ? 'claudio.arrau' : 'camila.rojas',
+    ...(email ? { email } : {}),
+    status: 'PENDING_ACTIVATION' as const,
+    roles: [role],
+    activation: { emailInvitationAvailable: Boolean(email), activationChallengeAvailable: !email },
+  };
 }
 
 function identityActions(overrides: Partial<AccountProvisioningActions> = {}): AccountProvisioningActions {
   return {
-    provisionMembership: vi.fn(async (input) => provisioned(input.role, Boolean(input.email))),
+    provisionMembership: vi.fn(async (input) => provisioned(input.role, input.email)),
     inviteMembership: vi.fn(async (membershipId) => ({ membershipId, invitationId: 'invitation-1', status: 'PENDING_DELIVERY', expiresAt: '2026-08-10T12:00:00Z' })),
     createActivationChallenge: vi.fn(async (membershipId) => ({ membershipId, username: 'camila.rojas', activationCode: 'shown-once-secret', expiresAt: '2026-08-10T12:00:00Z' })),
     ...overrides,
@@ -24,7 +69,9 @@ function identityActions(overrides: Partial<AccountProvisioningActions> = {}): A
 
 function academicApi(overrides: Partial<AcademicApiClient> = {}): AcademicApiClient {
   return {
-    linkStudentIdentity: vi.fn(async (_id, input) => ({ ...student, identityUserId: input.identityUserId })),
+    updateStudent: vi.fn(async (id, input) => ({ ...edupayStudentNoEmail, id, email: input.email ?? null })),
+    updateTeacher: vi.fn(async (id, input) => ({ ...teacher, id, email: input.email ?? null })),
+    linkStudentIdentity: vi.fn(async (_id, input) => ({ ...edupayStudentNoEmail, identityUserId: input.identityUserId })),
     linkTeacherIdentity: vi.fn(async (_id, input) => ({ ...teacher, identityUserId: input.identityUserId })),
     ...overrides,
   } as unknown as AcademicApiClient;
@@ -36,15 +83,62 @@ afterEach(() => {
 });
 
 describe('AccountProvisioning', () => {
-  it('creates only a STUDENT membership, links the returned user, and asks Identity to send the invitation', async () => {
+  it('handles an EduPay student without email by requiring email in normal invitation flow and synchronizing it to Academic and Identity', async () => {
     const identity = identityActions();
     const api = academicApi();
-    render(<AccountProvisioning api={api} identityActions={identity} kind="student" onLinked={vi.fn()} person={student} />);
+    render(<AccountProvisioning api={api} identityActions={identity} kind="student" onLinked={vi.fn()} person={edupayStudentNoEmail} />);
+
     fireEvent.click(screen.getByRole('button', { name: 'Crear acceso' }));
     expect(screen.getByText('STUDENT')).toBeTruthy();
-    expect(screen.queryByRole('option', { name: /admin/i })).toBeNull();
-    expect(screen.getByLabelText('Correo para invitación (opcional)')).toHaveProperty('value', 'sofia@example.test');
-    fireEvent.click(screen.getByRole('button', { name: 'Crear y vincular' }));
+
+    // Verify admin never sees or sets password fields
+    expect(screen.queryByLabelText(/contraseña/i)).toBeNull();
+    expect(screen.queryByPlaceholderText(/contraseña/i)).toBeNull();
+
+    const usernameInput = screen.getByLabelText('Usuario institucional') as HTMLInputElement;
+    expect(usernameInput.value).toBe('claudio.arrau');
+
+    const emailInput = screen.getByLabelText('Correo para invitación') as HTMLInputElement;
+    expect(emailInput.value).toBe('');
+    expect(emailInput.required).toBe(true);
+
+    // Enter email
+    fireEvent.change(emailInput, { target: { value: ' Claudio.Arrau@Piano.CL ' } });
+
+    // Submit normal invitation
+    fireEvent.click(screen.getByRole('button', { name: 'Crear acceso e invitar' }));
+
+    await screen.findByText('Identity registró la entrega del correo. No se expuso ningún token de invitación.');
+
+    // Verify exact normalized email was supplied to Identity
+    expect(identity.provisionMembership).toHaveBeenCalledWith({
+      institutionalUsername: 'claudio.arrau',
+      email: 'claudio.arrau@piano.cl',
+      role: 'STUDENT',
+    });
+
+    // Verify contact email was persisted to Academic Student record
+    expect(api.updateStudent).toHaveBeenCalledWith('student-edupay-1', {
+      email: 'claudio.arrau@piano.cl',
+    });
+
+    // Verify existing student was linked without duplicating record
+    expect(api.linkStudentIdentity).toHaveBeenCalledWith('student-edupay-1', {
+      identityUserId: 'user-student',
+    });
+
+    // Verify Identity invitation was triggered
+    expect(identity.inviteMembership).toHaveBeenCalledWith('membership-student');
+  });
+
+  it('creates only a STUDENT membership when email was already present, links the user and requests invitation', async () => {
+    const identity = identityActions();
+    const api = academicApi();
+    render(<AccountProvisioning api={api} identityActions={identity} kind="student" onLinked={vi.fn()} person={studentWithEmail} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Crear acceso' }));
+    expect(screen.getByText('STUDENT')).toBeTruthy();
+    expect(screen.getByLabelText('Correo para invitación')).toHaveProperty('value', 'sofia@example.test');
+    fireEvent.click(screen.getByRole('button', { name: 'Crear acceso e invitar' }));
 
     await screen.findByText('Identity registró la entrega del correo. No se expuso ningún token de invitación.');
     expect(identity.provisionMembership).toHaveBeenCalledWith({ institutionalUsername: 'sofia.herrera', email: 'sofia@example.test', role: 'STUDENT' });
@@ -52,20 +146,31 @@ describe('AccountProvisioning', () => {
     expect(identity.inviteMembership).toHaveBeenCalledWith('membership-student');
   });
 
-  it('creates only a TEACHER membership, links it, and displays the no-email code only in current UI state', async () => {
+  it('supports explicit no-email activation-code fallback without sending an invitation email', async () => {
     const identity = identityActions();
     const api = academicApi();
     const storageWrite = vi.spyOn(Storage.prototype, 'setItem');
     const consoleWrite = vi.spyOn(console, 'log');
+
     render(<AccountProvisioning api={api} identityActions={identity} kind="teacher" onLinked={vi.fn()} person={teacher} />);
     fireEvent.click(screen.getByRole('button', { name: 'Crear acceso' }));
     expect(screen.getByText('TEACHER')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Crear y vincular' }));
+
+    const noEmailCheckbox = screen.getByRole('checkbox', { name: /activar sin correo/i });
+    fireEvent.click(noEmailCheckbox);
+
+    expect(screen.getByText(/modo excepcional sin correo/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Crear acceso con código' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear acceso con código' }));
 
     expect(await screen.findByText('shown-once-secret')).toBeTruthy();
     expect(identity.provisionMembership).toHaveBeenCalledWith({ institutionalUsername: 'camila.rojas', role: 'TEACHER' });
     expect(api.linkTeacherIdentity).toHaveBeenCalledWith('teacher-1', { identityUserId: 'user-teacher' });
     expect(identity.createActivationChallenge).toHaveBeenCalledWith('membership-teacher');
+    expect(identity.inviteMembership).not.toHaveBeenCalled();
+
+    // Ensure secret code is never stored in persistent browser storage or console logged
     expect(storageWrite).not.toHaveBeenCalled();
     expect(consoleWrite).not.toHaveBeenCalled();
 
@@ -79,12 +184,18 @@ describe('AccountProvisioning', () => {
       .mockRejectedValueOnce(new AcademicApiError({ code: 'IDENTITY_LINK_FAILED', details: [], message: 'link failed', requestId: 'req-link', status: 409 }))
       .mockResolvedValueOnce({ ...teacher, identityUserId: 'user-teacher' });
     const api = academicApi({ linkTeacherIdentity });
+
     render(<AccountProvisioning api={api} identityActions={identity} kind="teacher" onLinked={vi.fn()} person={teacher} />);
     fireEvent.click(screen.getByRole('button', { name: 'Crear acceso' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Crear y vincular' }));
+
+    // Toggle no-email mode
+    fireEvent.click(screen.getByRole('checkbox', { name: /activar sin correo/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear acceso con código' }));
 
     expect(await screen.findByText('Identity creó la cuenta, pero falta el vínculo académico')).toBeTruthy();
     expect(screen.getByText('user-teacher')).toBeTruthy();
+
+    // Retry link without creating another Identity account
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar vínculo académico' }));
     expect(await screen.findByText('shown-once-secret')).toBeTruthy();
     expect(identity.provisionMembership).toHaveBeenCalledOnce();

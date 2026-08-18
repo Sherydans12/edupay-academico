@@ -408,16 +408,19 @@ export class AcademicApiClient {
   createStudent(input: CreateStudent) { return this.request('students', studentSchema, { method: 'POST', body: JSON.stringify(createStudentSchema.parse(input)) }); }
   updateStudent(id: string, input: UpdateStudent) { return this.request(`students/${id}`, studentSchema, { method: 'PATCH', body: JSON.stringify(updateStudentSchema.parse(input)) }); }
   activateStudent(id: string) { return this.request(`students/${id}/activate`, studentSchema, { method: 'POST' }); }
+  inactivateStudent(id: string) { return this.request(`students/${id}/inactivate`, studentSchema, { method: 'POST' }); }
   linkStudentIdentity(id: string, input: VerifiedIdentityLink) {
     return this.request(`students/${id}/identity-link`, studentSchema, {
       method: 'PUT', body: JSON.stringify(verifiedIdentityLinkSchema.parse(input)),
     });
   }
+  getStudentEffectiveSubjects(studentId: string) { return this.request(`students/${studentId}/effective-course-subjects`, courseSubjectSchema.array()); }
 
   listTeachers(search?: string, cursor?: string) { return this.request(addQuery('teachers', { search, cursor, limit: 50 }), teacherPageSchema); }
   createTeacher(input: CreateTeacher) { return this.request('teachers', teacherSchema, { method: 'POST', body: JSON.stringify(createTeacherSchema.parse(input)) }); }
   updateTeacher(id: string, input: UpdateTeacher) { return this.request(`teachers/${id}`, teacherSchema, { method: 'PATCH', body: JSON.stringify(updateTeacherSchema.parse(input)) }); }
   activateTeacher(id: string) { return this.request(`teachers/${id}/activate`, teacherSchema, { method: 'POST' }); }
+  inactivateTeacher(id: string) { return this.request(`teachers/${id}/inactivate`, teacherSchema, { method: 'POST' }); }
   linkTeacherIdentity(id: string, input: VerifiedIdentityLink) {
     return this.request(`teachers/${id}/identity-link`, teacherSchema, {
       method: 'PUT', body: JSON.stringify(verifiedIdentityLinkSchema.parse(input)),
@@ -434,9 +437,12 @@ export class AcademicApiClient {
   getCourseSubjectRoster(id: string) { return this.request(`course-subjects/${id}/roster`, courseSubjectRosterItemSchema.array()); }
   getAssignedTeachers(id: string) { return this.request(`course-subjects/${id}/teachers`, courseSubjectTeacherSchema.array()); }
   assignCourseSubjectTeachers(input: AssignCourseSubjectTeachers) { return this.request('course-subject-teachers', courseSubjectTeacherSchema.array(), { method: 'POST', body: JSON.stringify(assignCourseSubjectTeachersSchema.parse(input)) }); }
+  deactivateTeacherAssignment(id: string) { return this.request(`course-subject-teachers/${id}/deactivate`, courseSubjectTeacherSchema, { method: 'POST' }); }
 
   enrollStudent(input: CreateCourseEnrollment) { return this.request('course-enrollments', courseEnrollmentSchema, { method: 'POST', body: JSON.stringify(createCourseEnrollmentSchema.parse(input)) }); }
+  deactivateEnrollment(id: string) { return this.request(`course-enrollments/${id}/deactivate`, courseEnrollmentSchema, { method: 'POST' }); }
   directlyEnrollStudent(input: CreateStudentSubjectEnrollment) { return this.request('student-subject-enrollments', studentSubjectEnrollmentSchema, { method: 'POST', body: JSON.stringify(createStudentSubjectEnrollmentSchema.parse(input)) }); }
+  deactivateDirectEnrollment(id: string) { return this.request(`student-subject-enrollments/${id}/deactivate`, studentSubjectEnrollmentSchema, { method: 'POST' }); }
 
   getStudentContextSubjects() { return this.request('student-context/course-subjects', courseSubjectSchema.array()); }
   getTeacherContextSubjects() { return this.request('teacher-context/course-subjects', courseSubjectSchema.array()); }

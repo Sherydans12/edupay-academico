@@ -31,6 +31,17 @@ describe('AuthorizationService', () => {
   const authorization = new AuthorizationService();
 
   it('allows only mapped role capabilities', () => {
+    const admin = principal(['TENANT_ADMIN']);
+    const adminContext = TrustedTenantContext.fromPrincipal(admin);
+
+    expect(() =>
+      authorization.requireCapability(
+        admin,
+        adminContext,
+        TenantCapability.AdministerAcademicStructure,
+      ),
+    ).not.toThrow();
+
     const teacher = principal(['TEACHER']);
     const context = TrustedTenantContext.fromPrincipal(teacher);
 
@@ -45,6 +56,24 @@ describe('AuthorizationService', () => {
       authorization.requireCapability(
         teacher,
         context,
+        TenantCapability.AdministerAcademicStructure,
+      ),
+    ).toThrow(/not authorized/);
+
+    const student = principal(['STUDENT']);
+    const studentContext = TrustedTenantContext.fromPrincipal(student);
+
+    expect(() =>
+      authorization.requireCapability(
+        student,
+        studentContext,
+        TenantCapability.AccessTenant,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      authorization.requireCapability(
+        student,
+        studentContext,
         TenantCapability.AdministerAcademicStructure,
       ),
     ).toThrow(/not authorized/);
