@@ -201,4 +201,33 @@ describe('AccountProvisioning', () => {
     expect(identity.provisionMembership).toHaveBeenCalledOnce();
     expect(linkTeacherIdentity).toHaveBeenCalledTimes(2);
   });
+
+  it('handles ambiguous network failure on Identity provisioning by safely receiving the recovered membership on retry and continuing Academic linkage', async () => {
+    const recovered = provisioned('STUDENT', 'claudio.arrau@piano.cl');
+    const provisionMembership = vi.fn()
+      .mockRejectedValueOnce(new Error('Network connection interrupted'))
+      .mockResolvedValueOnce(recovered);
+
+    const identity = identityActions({ provisionMembership });
+    const api = academicApi();
+    render(<AccountProvisioning api={api} identityActions={identity} kind="student" onLinked={vi.fn()} person={edupayStudentNoEmail} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear acceso' }));
+    const emailInput = screen.getByLabelText('Correo para invitación');
+    fireEvent.change(emailInput, { target: { value: 'claudio.arrau@piano.cl' } });
+
+    // Initial attempt fails due to network drop
+    fireEvent.click(screen.getByRole('button', { name: 'Crear acceso e invitar' }));
+    expect(await screen.findByText(/no pudimos conectar con edupay identity/i)).toBeTruthy();
+
+    // Client retries: Identity returns the recovered membership and flow seamlessly completes
+    fireEvent.click(screen.getByRole('button', { name: 'Crear acceso e invitar' }));
+    await screen.findByText('Identity registró la entrega del correo. No se expuso ningún token de invitación.');
+
+    expect(provisionMembership).toHaveBeenCalledTimes(2);
+    expect(api.linkStudentIdentity).toHaveBeenCalledWith('student-edupay-1', {
+      identityUserId: 'user-student',
+    });
+    expect(identity.inviteMembership).toHaveBeenCalledWith('membership-student');
+  });
 });
