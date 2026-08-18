@@ -42,7 +42,7 @@ export function configureApplication(application: INestApplication): void {
       }
     },
     credentials: false,
-    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Accept',
       'Content-Type',

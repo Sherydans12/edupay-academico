@@ -89,4 +89,26 @@ describe('Health endpoint (e2e)', () => {
 
     expect(untrusted.headers['access-control-allow-origin']).toBeUndefined();
   });
+
+  it('permits CORS preflight with PUT method and required headers for student identity linking', async () => {
+    const preflight = await request(application.getHttpServer())
+      .options('/api/v1/students/54431c75-10be-4e3f-b7f1-06f8f99b42ff/identity-link')
+      .set('Origin', 'http://localhost:3000')
+      .set('Access-Control-Request-Method', 'PUT')
+      .set('Access-Control-Request-Headers', 'authorization,content-type,x-request-id')
+      .expect(204);
+
+    expect(preflight.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(preflight.headers['access-control-allow-methods']).toContain('PUT');
+    expect(preflight.headers['access-control-allow-headers']).toBeDefined();
+
+    const untrusted = await request(application.getHttpServer())
+      .options('/api/v1/students/54431c75-10be-4e3f-b7f1-06f8f99b42ff/identity-link')
+      .set('Origin', 'https://untrusted-attacker.test')
+      .set('Access-Control-Request-Method', 'PUT')
+      .set('Access-Control-Request-Headers', 'authorization,content-type,x-request-id')
+      .expect(404);
+
+    expect(untrusted.headers['access-control-allow-origin']).toBeUndefined();
+  });
 });
