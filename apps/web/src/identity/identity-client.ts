@@ -149,7 +149,7 @@ export class IdentityBrowserClient {
 
   constructor(options: IdentityBrowserClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
   }
 
   private async request<T>(

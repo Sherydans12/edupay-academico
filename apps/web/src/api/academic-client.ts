@@ -230,7 +230,7 @@ export class AcademicApiClient {
 
   constructor(options: AcademicApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
     this.sessionAdapter = options.sessionAdapter ?? null;
     this.multipartUploadImpl = options.multipartUploadImpl ?? uploadMultipartWithXhr;
   }
