@@ -1360,17 +1360,13 @@ function StudentsView({
                   </Badge>
                 </td>
                 <td data-label="Acceso Identity">
-                  {student.identityUserId ? (
-                    <Badge tone="success">Acceso vinculado</Badge>
-                  ) : (
-                    <AccountProvisioning
-                      api={api}
-                      identityActions={identityActions}
-                      kind="student"
-                      person={student}
-                      onLinked={onSaved}
-                    />
-                  )}
+                  <AccountProvisioning
+                    api={api}
+                    identityActions={identityActions}
+                    kind="student"
+                    person={student}
+                    onLinked={onSaved}
+                  />
                 </td>
                 <td data-label="Acciones">
                   <Button
@@ -1603,17 +1599,13 @@ function TeachersView({
                   </Badge>
                 </td>
                 <td data-label="Acceso Identity">
-                  {teacher.identityUserId ? (
-                    <Badge tone="success">Acceso vinculado</Badge>
-                  ) : (
-                    <AccountProvisioning
-                      api={api}
-                      identityActions={identityActions}
-                      kind="teacher"
-                      person={teacher}
-                      onLinked={onSaved}
-                    />
-                  )}
+                  <AccountProvisioning
+                    api={api}
+                    identityActions={identityActions}
+                    kind="teacher"
+                    person={teacher}
+                    onLinked={onSaved}
+                  />
                 </td>
                 <td data-label="Acciones">
                   <Button

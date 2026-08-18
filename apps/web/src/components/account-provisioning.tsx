@@ -159,7 +159,7 @@ export function AccountProvisioning({
       {isAlreadyLinked ? (
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <Badge tone="success">Acceso vinculado</Badge>
-          <Button disabled={!identity} onClick={() => setOpen(true)} size="sm" variant="ghost">
+          <Button disabled={!identity} onClick={() => setOpen(true)} size="sm" variant="secondary">
             Reenviar invitación
           </Button>
         </div>

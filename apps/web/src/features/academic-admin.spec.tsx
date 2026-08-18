@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AcademicApiError, type AcademicApiClient } from '@/api/academic-client';
@@ -280,7 +280,7 @@ describe('Academic admin screens', () => {
     expect(dialog).toBeTruthy();
     expect(screen.getByText(/esta cuenta ya tiene acceso de identity vinculado/i)).toBeTruthy();
 
-    const emailInput = screen.getByDisplayValue('violeta@musica.cl') as HTMLInputElement;
+    const emailInput = within(dialog).getByDisplayValue('violeta@musica.cl') as HTMLInputElement;
     expect(emailInput.disabled).toBe(true);
   });
 
