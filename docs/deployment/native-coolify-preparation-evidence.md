@@ -959,6 +959,66 @@ was performed.
   this forensic/preflight task. Manual public health remained green at task
   end, including Academic readiness three consecutive times and exactly one
   manual notification and sync worker.
-- `IDENTITY_EMAIL_CORRECTION_GATE=HOLD_PENDING_REVIEWED_VERIFIER`. A future
-  cutover needs the reviewed/merged Identity verifier, then a separately
-  authorized fresh maintenance window, backup, dump, and restore sequence.
+- `IDENTITY_EMAIL_CORRECTION_GATE=PASS`.
+- `FINAL_NATIVE_CUTOVER=PASS`
+- `PRE_NATIVE_CUTOVER_RECOVERY_POINT=20260818T060622Z`
+- `FROZEN_RESTORE_INPUT=20260818T060622Z`
+- `STRICT_COUNT_RECONCILIATION=PASS`
+- `MIGRATION_RUNNERS=PASS`
+- `NATIVE_PRIVATE_HEALTH=PASS`
+- `OPERATOR_EMAIL_CORRECTION_AND_VERIFICATION=PASS`
+- `CANONICAL_ROUTING_CUTOVER=PASS`
+- `PUBLIC_HTTPS_VALIDATION=PASS`
+- `MALWARE_SCANNER_GATE=PASS`
+- `HUMAN_PASSWORD_RESET_REQUIRED=YES`
+- `ACTIVE_NOTIFICATION_WORKERS=1`
+- `ACTIVE_SYNC_WORKERS=0`
+- `POST_NATIVE_CUTOVER_RECOVERY_POINT=20260818T062443Z`
+- `FINAL_STATE=HOLD_PENDING_HUMAN_PASSWORD_RESET_AND_BL002_UPDATE`
+
+## Native production cutover execution (2026-08-18)
+
+- **Execution Objective**: Execute native Coolify production cutover for EduPay Identity and EduPay Académico, transition canonical routing from manual Compose to native applications, verify public HTTPS and malware gates, dispatch operator password recovery, activate singleton notification worker while keeping sync worker stopped, and establish durable post-cutover off-host custody.
+- **Native Academic Web Stability Gate**: `NATIVE_ACADEMIC_WEB_PRIVATE_HEALTH_REVIEW=PASS`. Container `qf65r4ltig6jhb6t8dmv2qyw-063350040564` (image `sha256:c930996d3d29e7c6...`, commit `5b0ad1f5f8ab0552ed1c502f30840b4afcc13fd8`) verified running continuously for 47+ hours with `RestartCount: 0`, `OOMKilled: false`, Docker Health `healthy`, and 5/5 consecutive internal and same-network HTTP checks returning `HTTP 200 {"service":"edupay-academico-web","status":"ok"}`.
+- **Maintenance Window & Freeze**: Maintenance entered at `FINAL_MAINTENANCE_START=2026-08-18T06:06:11Z`. Stopped manual writers (`edupay-identity-api`, `edupay-academico-api`, `edupay-academico-web`, `edupay-academico-notification-worker`, `edupay-academico-sync-worker`). Confirmed `MANUAL_WRITE_FREEZE=PASS`.
+- **Pre-Cutover Off-Host Recovery Point**: `PRE_NATIVE_CUTOVER_RECOVERY_POINT=20260818T060622Z`. Verified local SHA256 checksums, uploaded to Cloudflare R2 bucket `edupay-academico-pilot-backups`, and verified remote existence and byte counts.
+- **Data Restore & Reconciliation**: Restored frozen logical dumps into native databases (`bluypktxta8uisbrfzu6p9pw` and `v5w9hacwtftulf4m46l1rn2g`). Strict count reconciliation across all 16 Identity public tables and all 32 Academic public tables resulted in a 100% record match (`STRICT_COUNT_RECONCILIATION=PASS`).
+- **Durable Migration Runners**: Executed native migration runners (`npp3f3xrpktvwvo33j4frhxi` and `ayj9cwg9ycvy338gb7ehrzpf`). Native Identity `_prisma_migrations` count = 2, Academic `_prisma_migrations` count = 6, 0 pending migrations (`MIGRATION_RUNNERS=PASS`).
+- **Native Runtime Deployments**: Deployed native Identity API (`tbv6wqmv2h0u4flrufjzch4b`) and native Academic API (`d8dqmfqwp45hkk2hdqodohav`) in Coolify. Private health and JWKS checks returned HTTP 200 across all services (`NATIVE_PRIVATE_HEALTH=PASS`, 3/3 Academic readiness checks pass with `database=ok`, `storage=ok`, `malwareScanner=ok`).
+- **Operator Email Correction & Canonical Verification**:
+  - Corrected `admin.conquistadores` institutional admin email to `nicolas.18.111@gmail.com` via `dist/bootstrap/identity-email-correction-main.js` (`status: "corrected"`, 1 session revoked).
+  - Verified postcondition via `dist/bootstrap/identity-email-verification-main.js`: `emailIdentifierCount=1`, `emailDestinationMatches=true`, `emailVerified=true`, `tenantAdminPresent=true`.
+  - Idempotency verified: second execution returned `status: "already-compatible"` with identical verifier output (`OPERATOR_EMAIL_CORRECTION_AND_VERIFICATION=PASS`).
+- **Canonical Routing Cutover**:
+  - Assigned canonical FQDNs in Coolify (`identity.edupay.baselogic.cl`, `academico-api.edupay.baselogic.cl`, `academico.edupay.baselogic.cl`).
+  - Disabled manual Traefik file provider route `/data/coolify/proxy/dynamic/edupay-pilot.yaml` (renamed to `.disabled`).
+  - Reloaded application Traefik labels: confirmed routers active with TLS, Let's Encrypt certificates, HTTP-to-HTTPS redirects, and correct internal ports (Identity: 3000, Academic API: 3001, Academic Web: 3000).
+- **Public HTTPS Validation**:
+  - `https://identity.edupay.baselogic.cl/api/v1/identity/health` -> HTTP 200 OK
+  - `https://identity.edupay.baselogic.cl/.well-known/jwks.json` -> HTTP 200 OK
+  - `https://academico-api.edupay.baselogic.cl/api/v1/health/live` -> HTTP 200 OK
+  - `https://academico-api.edupay.baselogic.cl/api/v1/health/ready` -> HTTP 200 OK (3/3 checks: database=ok, storage=ok, malwareScanner=ok)
+  - `https://academico.edupay.baselogic.cl/api/health` -> HTTP 200 OK
+- **Malware Scanner Gate Verification**:
+  - Uploaded 70-byte benign PDF (`ASSIGNMENT_SOURCE`) via `https://academico-api.edupay.baselogic.cl/api/v1/file-upload-intents`, confirmed `CLEAR` scan status, downloaded and verified byte-for-byte.
+  - Uploaded 68-byte standard EICAR test string, confirmed HTTP 400 rejection with `{"error":{"code":"MALWARE_DETECTED","message":"The file was rejected for security reasons."}}`.
+  - Staging directory `/var/lib/edupay-academico/tmp` verified clean (`MALWARE_SCANNER_GATE=PASS`).
+- **Password Recovery Dispatch**:
+  - Dispatched password recovery request via `POST https://identity.edupay.baselogic.cl/api/v1/auth/password-recovery/request` for `nicolas.18.111@gmail.com` -> HTTP 202 Accepted.
+  - Executed Identity email delivery runner (`node dist/email/worker-main.js --once`): `published=1 failed=0`, delivered via Resend (`HUMAN_PASSWORD_RESET_REQUIRED=YES`).
+- **Worker Activation & Synchronization Invariant**:
+  - Started native notification worker (`upo2mfye6i58mtx9uch6vseq`): running, healthy (`ACTIVE_NOTIFICATION_WORKERS=1`).
+  - Worker probe `node dist/notifications/notification-worker-main.js --check` returned `{"service":"edupay-academico-notification-worker","status":"ready","database":"ok"}`.
+  - Native synchronization worker kept stopped (`ACTIVE_SYNC_WORKERS=0`).
+  - Worker probe `node dist/sync/sync-worker-main.js --check` returned `{"service":"edupay-academico-sync-worker","status":"ready","database":"ok"}`.
+- **Post-Cutover Off-Host Backup**:
+  - Executed `/root/run-edupay-native-backup.sh` with immutable helper `ghcr.io/sherydans12/edupay-pg15-backup-helper@sha256:78016dcfcec425b1649c23cc60fcca01abd4dc63e97f79d33425d339fde39b6f`.
+  - Recorded recovery point `POST_NATIVE_CUTOVER_RECOVERY_POINT=20260818T062443Z`.
+  - Checksums verified locally and complete bundle verified in Cloudflare R2 bucket `edupay-academico-pilot-backups`.
+- **Final Cutover Summary**:
+  - `FINAL_NATIVE_CUTOVER=PASS`
+  - `HUMAN_PASSWORD_RESET_REQUIRED=YES`
+  - `ACTIVE_NOTIFICATION_WORKERS=1`
+  - `ACTIVE_SYNC_WORKERS=0`
+  - Final state: `HOLD_PENDING_HUMAN_PASSWORD_RESET_AND_BL002_UPDATE`
+
