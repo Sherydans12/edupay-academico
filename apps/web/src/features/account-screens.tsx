@@ -108,7 +108,12 @@ function SecretPasswordFlow({ kind }: { kind: 'invitation' | 'reset' }) {
       if (isInvitation) await client.acceptInvitation(token, password);
       else await client.confirmPasswordRecovery(token, password);
       setPassword(''); setConfirmation(''); removeSensitiveQuery(pathname); setState('success');
-    } catch (nextError) { setError(nextError); } finally { setLoading(false); }
+    } catch (nextError) {
+      if (typeof console !== 'undefined') {
+        console.error('[SecretPasswordFlow] Error confirming password:', nextError);
+      }
+      setError(nextError);
+    } finally { setLoading(false); }
   }
 
   return <AccountShell title={isInvitation ? 'Activa tu cuenta' : 'Crea una nueva contraseña'} description={isInvitation ? 'Elige tu contraseña permanente. La invitación define la institución y el rol; no puedes cambiarlos desde este enlace.' : 'Este enlace es personal y de un solo uso. Al confirmar, Identity revocará las sesiones que correspondan.'}>

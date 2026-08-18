@@ -171,7 +171,10 @@ export class IdentityBrowserClient {
         ...(browserCredentials ? { credentials: 'include' as const } : {}),
         headers,
       });
-    } catch {
+    } catch (networkError) {
+      if (typeof console !== 'undefined') {
+        console.error(`[IdentityBrowserClient] Network error calling ${this.baseUrl}${path}:`, networkError);
+      }
       throw new IdentityApiError({ code: 'NETWORK_ERROR', message: 'Identity is unavailable.', status: 0 });
     }
 
