@@ -406,6 +406,44 @@ a.submission-row:hover { background: var(--surface-secondary); }
 .academic-roster small { color: var(--text-secondary); }
 .academic-roster p { margin: 0; font-size: 0.7rem; }
 
+.admin-tabs-nav { display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border-default); padding-bottom: 0.25rem; margin-bottom: 0.5rem; overflow-x: auto; }
+.admin-tab-button { border: 0; background: transparent; padding: 0.65rem 1rem; font-size: 0.84rem; font-weight: 700; color: var(--text-secondary); border-radius: var(--radius-sm) var(--radius-sm) 0 0; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -0.35rem; transition: color var(--motion-fast) ease, border-color var(--motion-fast) ease; white-space: nowrap; }
+.admin-tab-button:hover { color: var(--text-primary); }
+.admin-tab-button--active { color: var(--brand-primary); border-bottom-color: var(--brand-primary); }
+
+.search-filter-toolbar { display: flex; align-items: flex-end; gap: 1rem; margin: 1rem 0 0.5rem; }
+.search-input-wrapper { flex: 1; min-width: 0; }
+.searching-indicator { color: var(--text-secondary); font-size: 0.75rem; font-style: italic; padding-bottom: 0.6rem; }
+
+.pagination-bar { display: flex; justify-content: center; margin-top: 1.25rem; }
+
+.course-select-bar { margin: 1rem 0; max-width: 24rem; }
+.section-subheading { margin-bottom: 1rem; }
+.section-subheading h3 { margin: 0; font-size: 1.05rem; }
+.section-subheading p { margin: 0.25rem 0 0; color: var(--text-secondary); font-size: 0.76rem; }
+
+.course-subjects-container { display: grid; gap: 1.4rem; }
+.course-subjects-list { display: grid; gap: 0.9rem; }
+.course-subject-card { display: grid; gap: 0.8rem; padding: 1.1rem; }
+.course-subject-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.course-subject-card__header h4 { margin: 0; font-size: 0.95rem; }
+.course-subject-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.35rem; }
+.sort-order-tag { font-size: 0.7rem; color: var(--text-secondary); background: var(--surface-secondary); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); }
+.card-header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.archived-hint { color: var(--text-secondary); font-size: 0.75rem; font-style: italic; }
+
+.course-subject-teachers { display: grid; gap: 0.5rem; border-top: 1px solid var(--border-default); padding-top: 0.75rem; margin-top: 0.25rem; }
+.course-subject-teachers h4 { margin: 0; font-size: 0.82rem; color: var(--text-secondary); }
+.teacher-badge-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.teacher-assignment-chip { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--surface-selected); color: var(--brand-primary); padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
+.chip-remove-button { border: 0; background: transparent; color: var(--brand-primary); font-size: 1rem; line-height: 1; cursor: pointer; padding: 0 0.15rem; border-radius: 50%; opacity: 0.7; }
+.chip-remove-button:hover { opacity: 1; background: rgb(0 0 0 / 0.08); }
+.assign-teacher-inline { display: flex; align-items: flex-end; gap: 0.6rem; max-width: 24rem; margin-top: 0.4rem; }
+.empty-subtext { margin: 0; font-size: 0.75rem; color: var(--text-secondary); font-style: italic; }
+
+.table-actions { display: flex; align-items: center; gap: 0.4rem; }
+
+
 .subject-card__route { min-height: 2.5rem; display: flex; align-items: center; justify-content: space-between; gap: 0.65rem; margin-top: auto; border-top: 1px solid var(--border-default); padding-top: 0.75rem; color: var(--text-secondary); font-size: 0.65rem; }
 .subject-card__route span { display: inline-flex; align-items: center; gap: 0.35rem; }
 .subject-card__route svg { width: 0.9rem; height: 0.9rem; color: var(--brand-primary); }
