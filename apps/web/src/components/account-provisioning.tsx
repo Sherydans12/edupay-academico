@@ -152,21 +152,34 @@ export function AccountProvisioning({
     }
   }
 
-  if (person.identityUserId) return <Badge tone="success">Acceso vinculado</Badge>;
+  const isAlreadyLinked = Boolean(person.identityUserId);
 
   return (
     <>
-      <Button disabled={!identity} onClick={() => setOpen(true)} size="sm" variant="secondary">
-        Crear acceso
-      </Button>
+      {isAlreadyLinked ? (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <Badge tone="success">Acceso vinculado</Badge>
+          <Button disabled={!identity} onClick={() => setOpen(true)} size="sm" variant="ghost">
+            Reenviar invitación
+          </Button>
+        </div>
+      ) : (
+        <Button disabled={!identity} onClick={() => setOpen(true)} size="sm" variant="secondary">
+          Crear acceso
+        </Button>
+      )}
       <Dialog
-        description={`Provisiona una membresía ${role} y vincúlala al registro académico de ${personName}.`}
+        description={
+          isAlreadyLinked
+            ? `Envía una nueva invitación o genera un código de activación para ${personName}.`
+            : `Provisiona una membresía ${role} y vincúlala al registro académico de ${personName}.`
+        }
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
           if (!nextOpen) resetVolatileState();
         }}
         open={open}
-        title="Crear acceso a Académico"
+        title={isAlreadyLinked ? 'Gestionar acceso a Académico' : 'Crear acceso a Académico'}
       >
         <div className="provisioning-dialog">
           <div className="provisioning-role">
@@ -241,7 +254,13 @@ export function AccountProvisioning({
                   loading={phase === 'provisioning'}
                   onClick={() => void provision()}
                 >
-                  {noEmailMode ? 'Crear acceso con código' : 'Crear acceso e invitar'}
+                  {isAlreadyLinked
+                    ? noEmailMode
+                      ? 'Generar código'
+                      : 'Reenviar invitación'
+                    : noEmailMode
+                      ? 'Crear acceso con código'
+                      : 'Crear acceso e invitar'}
                 </Button>
               </div>
             </>
