@@ -56,23 +56,6 @@ function courseName(item: { course?: { label: string } | undefined; courseId: st
   return item.course?.label ?? `Curso ${item.courseId.slice(0, 8)}`;
 }
 
-export function StudentAcademicSubjectsScreen({ api, session = demoSessions.student }: { api?: AcademicApiClient; session?: TrustedCurrentSession }) {
-  const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
-  const currentSession = useTrustedCurrentSession(session).session;
-  const { error, items, load, loading } = useContextSubjects(client, 'student');
-  return <AppShell dataMode="real" session={currentSession}>
-    <PageHeading description="Tus espacios efectivos se calculan en Académico a partir de tus inscripciones activas." title="Mis asignaturas" />
-    <ContextState error={error} loading={loading} onRetry={() => void load()}>
-      {items.length ? <div className="academic-context-grid">{items.map((item) => <Card className="academic-context-card" key={item.id}>
-        <div className="academic-context-card__mark">{subjectName(item).slice(0, 3).toUpperCase()}</div>
-        <div><h2>{subjectName(item)}</h2><p>{courseName(item)}</p><Badge tone={item.defaultForCourse ? 'info' : 'creative'}>{item.defaultForCourse ? 'Parte de tu curso' : 'Asignación directa'}</Badge></div>
-        <Link className="button-link button-link--primary" href={`/estudiante/asignaturas/${item.id}`}>Abrir ruta <Icon name="chevron-right" /></Link>
-        <div className="academic-context-card__boundary"><Icon name="layers" /><span>Aprendizaje conectado al Learning API</span></div>
-      </Card>)}</div> : <EmptyState icon={<Icon name="book" />} title="Aún no tienes asignaturas efectivas" description="Cuando Académico registre una inscripción activa o una asignación directa, aparecerá aquí." />}
-    </ContextState>
-  </AppShell>;
-}
-
 export function TeacherAcademicSubjectsScreen({ api, session = demoSessions.teacher }: { api?: AcademicApiClient; session?: TrustedCurrentSession }) {
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const currentSession = useTrustedCurrentSession(session).session;

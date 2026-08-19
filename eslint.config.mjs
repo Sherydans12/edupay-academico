@@ -17,5 +17,6 @@ export default defineConfig([
     '**/node_modules/**',
     '**/src/generated/**',
     'apps/web/next-env.d.ts',
+    '.claude/**',
   ]),
 ]);

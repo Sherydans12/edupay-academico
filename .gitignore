@@ -43,6 +43,9 @@ deploy/env/*.env
 *.swo
 *.swn
 
+# Local Claude Code agent settings (personal hooks/automation, not shared)
+.claude/settings.local.json
+
 # Operating-system metadata
 .DS_Store
 Thumbs.db
