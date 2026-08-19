@@ -24,7 +24,7 @@ overrides anything above it:
 | Skill | Source | Type | Purpose | When to use | Update mechanism | Notes |
 |---|---|---|---|---|---|---|
 | **impeccable** | Vendored at `.claude/skills/impeccable/` (SKILL.md declares `version: 4.1.1`, `license: Apache 2.0`) | Repository-vendored skill | Structured frontend design/critique workflow: shape, audit, critique, polish, harden, etc. | Any hands-on UI redesign, hierarchy/UX critique, or polish pass on an existing surface. Load `PRODUCT.md`-equivalent + `apps/web/DESIGN.md` + persona brief first (the skill's own `scripts/context.mjs` does this). | Replace the `.claude/skills/impeccable/` directory wholesale from upstream when updating; do not hand-edit vendor files. Re-run `git diff --stat` after update to confirm scope. | Do **not** run `impeccable init` — it can overwrite `apps/web/DESIGN.md` / `apps/web/.impeccable/design.json`, which are already intentional, hand-maintained project context. |
-| **ui-ux-pro-max** | Vendored at `.claude/skills/ui-ux-pro-max/` | Repository-vendored skill | Searchable design-intelligence reference: styles, palettes, font pairings, UX guidelines, icons, animation presets, chart types, stack guidance. | Consult as a heuristic/reference when choosing patterns, accessibility practices, typography, or responsive approaches. | No version pinned in `SKILL.md` (no `version:` or `license:` field present). `LICENSE_STATUS=REVIEW_REQUIRED` — do not assume a license; confirm upstream terms before redistribution. Update by replacing the directory from upstream. | **Advisory only.** It may suggest patterns but must never override EduPay's existing design system, tenant branding, or product requirements — see authority order above. |
+| **ui-ux-pro-max** | Vendored at `.claude/skills/ui-ux-pro-max/`. Upstream: [`nextlevelbuilder/ui-ux-pro-max-skill`](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) (GitHub) — the authoritative source for updates. | Repository-vendored skill | Searchable design-intelligence reference: styles, palettes, font pairings, UX guidelines, icons, animation presets, chart types, stack guidance. | Consult as a heuristic/reference when choosing patterns, accessibility practices, typography, or responsive approaches. | Update by pulling the latest content from `nextlevelbuilder/ui-ux-pro-max-skill` and replacing the vendored directory (including `LICENSE`) wholesale; do not hand-edit vendor files. Re-run `git diff --stat` to confirm scope after updating. | **Advisory only.** It may suggest patterns but must never override EduPay's existing design system, tenant branding, or product requirements — see authority order above. |
 | **frontend-design** | Official Anthropic plugin, marketplace `claude-plugins-official` (`anthropics/claude-plugins-official`) | Claude official plugin dependency (NOT vendored) | High-level aesthetic direction / distinctive visual design guidance for new or reshaped UI. | Early in a design pass, for overall frontend direction, before detailed `impeccable` critique work. | Managed by Claude Code's plugin manager, not this repo. See install/verify commands below. | Installed **user-scope** on this machine (`~/.claude/plugins/...`), not project-scope. Its plugin cache lives outside the repository and is owned by the plugin manager — do not copy those internals into git. |
 
 ## `frontend-design`: plugin identifier and verification
@@ -60,6 +60,25 @@ immediately consider stale on the next update — so `frontend-design` is
 documented here as a **plugin dependency**, not copied into `.claude/skills/`.
 If Claude Code later ships supported project-scoped plugin installs, revisit
 this decision.
+
+## `ui-ux-pro-max`: license and provenance
+
+- **Source:** `nextlevelbuilder/ui-ux-pro-max-skill` (GitHub) — authoritative
+  update source.
+- **License:** MIT.
+- **Copyright:** Copyright (c) 2024 Next Level Builder.
+- Verified directly against the upstream repository's `LICENSE` file (GitHub
+  API `license` metadata reports `spdx_id: MIT`), not inferred from package
+  metadata. The exact MIT text and copyright notice are preserved unmodified
+  at `.claude/skills/ui-ux-pro-max/LICENSE`.
+- **Provenance:** `skills-lock.json` at the repo root records
+  `source: "nextlevelbuilder/ui-ux-pro-max-skill"` and a `computedHash` of the
+  vendored `SKILL.md`. That hash is the reliable pin for what was actually
+  installed. The installation tooling did not retain an exact upstream git
+  SHA for the vendored copy, so none is claimed here — a source URL plus MIT
+  license and the recorded content hash are sufficient provenance. (For
+  reference only, not a claim of correspondence: upstream `main` was at
+  `8a1a6d857332da32252d77365da90c3f6293b47b` at verification time.)
 
 ## Repository hygiene
 
