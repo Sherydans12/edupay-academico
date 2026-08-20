@@ -60,6 +60,28 @@ enum LearningItemPublicationStatus {
   ARCHIVED
 }
 
+enum ContentEntityType {
+  LEARNING_UNIT
+  LEARNING_ITEM
+}
+
+enum ContentRevisionOperation {
+  CREATED
+  UPDATED
+  SENSITIVE_CHANGE_CONFIRMED
+  SCHEDULED
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+  REORDERED
+  MOVED
+  DUPLICATED
+  DRAFT_SAVED
+  DRAFT_DISCARDED
+  DRAFT_PUBLISHED
+  RESTORED
+}
+
 enum StorageScopeType {
   GLOBAL
   TENANT
@@ -223,6 +245,8 @@ model Tenant {
   syncItemResults            SyncItemResult[]
   syncFullPresences          SyncFullPresence[]
   syncLeases                 SyncLease[]
+  contentRevisions           ContentRevision[]
+  learningItemDrafts         LearningItemDraft[]
 
   @@map("tenants")
 }
@@ -573,6 +597,7 @@ model LearningUnit {
   startAt         DateTime?         @map("start_at") @db.Timestamptz(3)
   endAt           DateTime?         @map("end_at") @db.Timestamptz(3)
   status          LearningUnitStatus @default(DRAFT)
+  version         Int               @default(1)
   createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -605,6 +630,7 @@ model LearningItem {
   dueAt                     DateTime?                    @map("due_at") @db.Timestamptz(3)
   createdByIdentityUserId   String                       @map("created_by_identity_user_id") @db.VarChar(128)
   updatedByIdentityUserId   String?                      @map("updated_by_identity_user_id") @db.VarChar(128)
+  version                   Int                          @default(1)
   createdAt                 DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                 DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -613,11 +639,66 @@ model LearningItem {
   learningUnit LearningUnit @relation(fields: [tenantId, learningUnitId, courseSubjectId], references: [tenantId, id, courseSubjectId], onDelete: Restrict)
   fileReferences FileReference[]
   submissions    Submission[]
+  draft          LearningItemDraft?
 
   @@id([tenantId, id])
   @@index([tenantId, courseSubjectId, publicationStatus, sortOrder, id])
   @@index([tenantId, learningUnitId, sortOrder, id])
   @@map("learning_items")
+}
+
+/**
+ * A durable, append-only snapshot of a LearningUnit/LearningItem at the
+ * moment of a mutation. Revisions are never edited or deleted; restoring an
+ * old revision creates a new one (see ContentRevisionOperation.RESTORED)
+ * rather than rewriting history.
+ */
+model ContentRevision {
+  id                   String                   @default(uuid()) @db.Uuid
+  tenantId             String                   @map("tenant_id") @db.VarChar(128)
+  entityType           ContentEntityType        @map("entity_type")
+  entityId             String                   @map("entity_id") @db.Uuid
+  revisionNumber       Int                      @map("revision_number")
+  operation            ContentRevisionOperation
+  snapshot             Json
+  actorIdentityUserId  String                   @map("actor_identity_user_id") @db.VarChar(128)
+  requestId            String?                  @map("request_id") @db.VarChar(128)
+  restoredFromRevision Int?                     @map("restored_from_revision")
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, entityType, entityId, revisionNumber], map: "content_revisions_entity_revision_key")
+  @@index([tenantId, entityType, entityId, revisionNumber])
+  @@map("content_revisions")
+}
+
+/**
+ * A safe working copy of a PUBLISHED LearningItem's content fields. Students
+ * always keep seeing the LearningItem row itself; a draft only replaces it
+ * when the teacher explicitly publishes the draft (DRAFT_PUBLISHED), which
+ * updates LearningItem in the same transaction that deletes this row.
+ */
+model LearningItemDraft {
+  tenantId                String    @map("tenant_id") @db.VarChar(128)
+  learningItemId          String    @map("learning_item_id") @db.Uuid
+  title                   String?   @db.VarChar(160)
+  description             String?   @db.Text
+  content                 String?   @db.Text
+  instructions            String?   @db.Text
+  body                    String?   @db.Text
+  dueAt                   DateTime? @map("due_at") @db.Timestamptz(3)
+  basedOnVersion          Int       @map("based_on_version")
+  updatedByIdentityUserId String    @map("updated_by_identity_user_id") @db.VarChar(128)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  learningItem LearningItem @relation(fields: [tenantId, learningItemId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, learningItemId])
+  @@map("learning_item_drafts")
 }
 
 model StorageQuotaPolicy {

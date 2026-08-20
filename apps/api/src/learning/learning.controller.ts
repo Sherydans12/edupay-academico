@@ -1,26 +1,44 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { z } from 'zod';
 import {
+  contentRevisionSchema,
   courseSubjectLearningRouteSchema,
   createLearningItemSchema,
   createLearningUnitSchema,
+  duplicateLearningItemSchema,
+  duplicateLearningUnitSchema,
+  learningItemDraftSchema,
   learningItemSchema,
   learningUnitSchema,
+  moveLearningItemSchema,
+  publishLearningItemDraftSchema,
   reorderLearningSchema,
+  restoreRevisionSchema,
+  saveLearningItemDraftSchema,
   scheduleLearningItemSchema,
   updateLearningItemSchema,
   updateLearningUnitSchema,
   type CreateLearningItem,
   type CreateLearningUnit,
+  type DuplicateLearningItem,
+  type DuplicateLearningUnit,
+  type MoveLearningItem,
+  type PublishLearningItemDraft,
   type ReorderLearning,
+  type RestoreRevision,
+  type SaveLearningItemDraft,
   type ScheduleLearningItem,
   type UpdateLearningItem,
   type UpdateLearningUnit,
@@ -75,6 +93,17 @@ export class LearningManagementController {
     return this.learning.archiveUnit(this.context(), id);
   }
 
+  @Post('learning-units/:id/duplicate')
+  @ContractBody(duplicateLearningUnitSchema)
+  @ContractResponse(learningUnitSchema)
+  duplicateUnit(
+    @Param('id', uuid) id: string,
+    @Body(new ZodValidationPipe(duplicateLearningUnitSchema))
+    input?: DuplicateLearningUnit,
+  ): Promise<object> {
+    return this.learning.duplicateUnit(this.context(), id, input);
+  }
+
   @Post('course-subjects/:courseSubjectId/learning-units/reorder')
   @ContractBody(reorderLearningSchema)
   @ContractResponse(learningUnitSchema.array())
@@ -124,10 +153,37 @@ export class LearningManagementController {
     return this.learning.publishItem(this.context(), id);
   }
 
+  @Post('learning-items/:id/unpublish')
+  @ContractResponse(learningItemSchema)
+  unpublishItem(@Param('id', uuid) id: string): Promise<object> {
+    return this.learning.unpublishItem(this.context(), id);
+  }
+
   @Post('learning-items/:id/archive')
   @ContractResponse(learningItemSchema)
   archiveItem(@Param('id', uuid) id: string): Promise<object> {
     return this.learning.archiveItem(this.context(), id);
+  }
+
+  @Post('learning-items/:id/move')
+  @ContractBody(moveLearningItemSchema)
+  @ContractResponse(learningItemSchema)
+  moveItem(
+    @Param('id', uuid) id: string,
+    @Body(new ZodValidationPipe(moveLearningItemSchema)) input: MoveLearningItem,
+  ): Promise<object> {
+    return this.learning.moveItem(this.context(), id, input);
+  }
+
+  @Post('learning-items/:id/duplicate')
+  @ContractBody(duplicateLearningItemSchema)
+  @ContractResponse(learningItemSchema)
+  duplicateItem(
+    @Param('id', uuid) id: string,
+    @Body(new ZodValidationPipe(duplicateLearningItemSchema))
+    input?: DuplicateLearningItem,
+  ): Promise<object> {
+    return this.learning.duplicateItem(this.context(), id, input);
   }
 
   @Post('learning-units/:learningUnitId/items/reorder')
@@ -138,6 +194,72 @@ export class LearningManagementController {
     @Body(new ZodValidationPipe(reorderLearningSchema)) input: ReorderLearning,
   ): Promise<object[]> {
     return this.learning.reorderItems(this.context(), learningUnitId, input);
+  }
+
+  @Post('learning-items/:id/draft')
+  @ContractBody(saveLearningItemDraftSchema)
+  @ContractResponse(learningItemDraftSchema)
+  saveDraft(
+    @Param('id', uuid) id: string,
+    @Body(new ZodValidationPipe(saveLearningItemDraftSchema)) input: SaveLearningItemDraft,
+  ): Promise<object> {
+    return this.learning.saveDraft(this.context(), id, input);
+  }
+
+  @Get('learning-items/:id/draft')
+  @ContractResponse(z.object({ draft: learningItemDraftSchema.nullable() }).strict())
+  getDraft(@Param('id', uuid) id: string): Promise<object> {
+    return this.learning.getDraft(this.context(), id);
+  }
+
+  @Delete('learning-items/:id/draft')
+  @HttpCode(204)
+  async discardDraft(@Param('id', uuid) id: string): Promise<void> {
+    await this.learning.discardDraft(this.context(), id);
+  }
+
+  @Post('learning-items/:id/draft/publish')
+  @ContractBody(publishLearningItemDraftSchema)
+  @ContractResponse(learningItemSchema)
+  publishDraft(
+    @Param('id', uuid) id: string,
+    @Body(new ZodValidationPipe(publishLearningItemDraftSchema)) input: PublishLearningItemDraft,
+  ): Promise<object> {
+    return this.learning.publishDraft(this.context(), id, input);
+  }
+
+  @Get('learning-units/:id/history')
+  @ContractResponse(contentRevisionSchema.array())
+  unitHistory(@Param('id', uuid) id: string): Promise<object[]> {
+    return this.learning.listUnitHistory(this.context(), id);
+  }
+
+  @Get('learning-items/:id/history')
+  @ContractResponse(contentRevisionSchema.array())
+  itemHistory(@Param('id', uuid) id: string): Promise<object[]> {
+    return this.learning.listItemHistory(this.context(), id);
+  }
+
+  @Post('learning-units/:id/history/:revisionNumber/restore')
+  @ContractBody(restoreRevisionSchema)
+  @ContractResponse(learningUnitSchema)
+  restoreUnit(
+    @Param('id', uuid) id: string,
+    @Param('revisionNumber', new ParseIntPipe()) revisionNumber: number,
+    @Body(new ZodValidationPipe(restoreRevisionSchema)) input: RestoreRevision,
+  ): Promise<object> {
+    return this.learning.restoreUnitRevision(this.context(), id, revisionNumber, input);
+  }
+
+  @Post('learning-items/:id/history/:revisionNumber/restore')
+  @ContractBody(restoreRevisionSchema)
+  @ContractResponse(z.union([learningItemSchema, learningItemDraftSchema]))
+  restoreItem(
+    @Param('id', uuid) id: string,
+    @Param('revisionNumber', new ParseIntPipe()) revisionNumber: number,
+    @Body(new ZodValidationPipe(restoreRevisionSchema)) input: RestoreRevision,
+  ): Promise<object> {
+    return this.learning.restoreItemRevision(this.context(), id, revisionNumber, input);
   }
 
   private context(): AcademicRequestContext {

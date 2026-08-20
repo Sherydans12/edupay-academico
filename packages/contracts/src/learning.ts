@@ -42,6 +42,8 @@ const validateDateRange = <
   }
 };
 
+const expectedRevisionSchema = z.number().int().min(1);
+
 export const learningUnitSchema = z
   .object({
     id: opaqueIdSchema,
@@ -52,6 +54,7 @@ export const learningUnitSchema = z
     startAt: timestampSchema.nullable(),
     endAt: timestampSchema.nullable(),
     status: learningUnitStatusSchema,
+    version: expectedRevisionSchema,
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
@@ -77,11 +80,18 @@ export const updateLearningUnitSchema = z
     startAt: timestampSchema.nullable().optional(),
     endAt: timestampSchema.nullable().optional(),
     status: learningUnitStatusSchema.optional(),
+    expectedRevision: expectedRevisionSchema.optional(),
   })
   .strict()
-  .refine((value) => Object.keys(value).length > 0, {
-    message: 'At least one field is required',
-  });
+  .refine(
+    (value) =>
+      Object.keys(value).some((key) => key !== 'expectedRevision'),
+    { message: 'At least one field is required' },
+  );
+
+export const expectedRevisionBodySchema = z
+  .object({ expectedRevision: expectedRevisionSchema.optional() })
+  .strict();
 
 const itemTextField = textSchema.nullable().optional();
 
@@ -104,6 +114,7 @@ export const learningItemSchema = z
     dueAt: timestampSchema.nullable(),
     createdByIdentityUserId: z.string().min(1).max(128),
     updatedByIdentityUserId: z.string().min(1).max(128).nullable(),
+    version: expectedRevisionSchema,
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
@@ -172,17 +183,91 @@ export const updateLearningItemSchema = z
     sortOrder: z.number().int().min(0).max(10_000).optional(),
     dueAt: timestampSchema.nullable().optional(),
     confirmSensitiveChange: z.boolean().default(false),
+    expectedRevision: expectedRevisionSchema.optional(),
   })
   .strict()
   .refine(
-    (value) => Object.keys(value).some((key) => key !== 'confirmSensitiveChange'),
+    (value) =>
+      Object.keys(value).some(
+        (key) => key !== 'confirmSensitiveChange' && key !== 'expectedRevision',
+      ),
     { message: 'At least one field is required' },
   );
+
+const learningItemContentFieldsSchema = z.object({
+  title: labelSchema.optional(),
+  description: itemTextField,
+  content: itemTextField,
+  instructions: itemTextField,
+  body: itemTextField,
+  dueAt: timestampSchema.nullable().optional(),
+});
+
+export const saveLearningItemDraftSchema = learningItemContentFieldsSchema
+  .extend({ expectedRevision: expectedRevisionSchema.optional() })
+  .strict()
+  .refine(
+    (value) =>
+      Object.keys(value).some((key) => key !== 'expectedRevision'),
+    { message: 'At least one field is required' },
+  );
+
+export const learningItemDraftSchema = learningItemContentFieldsSchema
+  .extend({
+    learningItemId: opaqueIdSchema,
+    basedOnVersion: expectedRevisionSchema,
+    updatedByIdentityUserId: z.string().min(1).max(128),
+    updatedAt: timestampSchema,
+  })
+  .strict();
+
+export const contentEntityTypeSchema = z.enum(['LEARNING_UNIT', 'LEARNING_ITEM']);
+
+export const contentRevisionOperationSchema = z.enum([
+  'CREATED',
+  'UPDATED',
+  'SENSITIVE_CHANGE_CONFIRMED',
+  'SCHEDULED',
+  'PUBLISHED',
+  'UNPUBLISHED',
+  'ARCHIVED',
+  'REORDERED',
+  'MOVED',
+  'DUPLICATED',
+  'DRAFT_SAVED',
+  'DRAFT_DISCARDED',
+  'DRAFT_PUBLISHED',
+  'RESTORED',
+]);
+
+export const contentRevisionSchema = z
+  .object({
+    id: opaqueIdSchema,
+    entityType: contentEntityTypeSchema,
+    entityId: opaqueIdSchema,
+    revisionNumber: expectedRevisionSchema,
+    operation: contentRevisionOperationSchema,
+    snapshot: z.record(z.string(), z.unknown()),
+    actorIdentityUserId: z.string().min(1).max(128),
+    requestId: z.string().min(1).max(128).nullable(),
+    restoredFromRevision: expectedRevisionSchema.nullable(),
+    createdAt: timestampSchema,
+  })
+  .strict();
+
+export const restoreRevisionSchema = z
+  .object({ expectedRevision: expectedRevisionSchema.optional() })
+  .strict();
+
+export const publishLearningItemDraftSchema = z
+  .object({ confirmSensitiveChange: z.boolean().default(false) })
+  .strict();
 
 export const scheduleLearningItemSchema = z
   .object({
     publishAt: timestampSchema,
     confirmSensitiveChange: z.boolean().default(false),
+    expectedRevision: expectedRevisionSchema.optional(),
   })
   .strict();
 
@@ -205,6 +290,27 @@ export const courseSubjectLearningRouteSchema = z
   })
   .strict();
 
+export const moveLearningItemSchema = z
+  .object({
+    targetLearningUnitId: opaqueIdSchema,
+    expectedRevision: expectedRevisionSchema.optional(),
+  })
+  .strict();
+
+export const duplicateLearningItemSchema = z
+  .object({
+    targetLearningUnitId: opaqueIdSchema.optional(),
+    title: labelSchema.optional(),
+  })
+  .strict();
+
+export const duplicateLearningUnitSchema = z
+  .object({
+    title: labelSchema.optional(),
+    duplicateItems: z.boolean().default(true),
+  })
+  .strict();
+
 export type CreateLearningUnit = z.infer<typeof createLearningUnitSchema>;
 export type UpdateLearningUnit = z.infer<typeof updateLearningUnitSchema>;
 export type CreateLearningItem = z.infer<typeof createLearningItemSchema>;
@@ -217,3 +323,11 @@ export type LearningUnitWithItems = z.infer<typeof learningUnitWithItemsSchema>;
 export type CourseSubjectLearningRoute = z.infer<
   typeof courseSubjectLearningRouteSchema
 >;
+export type SaveLearningItemDraft = z.infer<typeof saveLearningItemDraftSchema>;
+export type LearningItemDraft = z.infer<typeof learningItemDraftSchema>;
+export type ContentRevision = z.infer<typeof contentRevisionSchema>;
+export type RestoreRevision = z.infer<typeof restoreRevisionSchema>;
+export type PublishLearningItemDraft = z.infer<typeof publishLearningItemDraftSchema>;
+export type MoveLearningItem = z.infer<typeof moveLearningItemSchema>;
+export type DuplicateLearningItem = z.infer<typeof duplicateLearningItemSchema>;
+export type DuplicateLearningUnit = z.infer<typeof duplicateLearningUnitSchema>;
