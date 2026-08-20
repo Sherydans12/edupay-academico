@@ -68,7 +68,12 @@ export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
     const sourceStats = await stat(input.sourcePath);
     if (!sourceStats.isFile()) throw new Error('The staged upload is not a file.');
     await this.assertPhysicalCapacity(sourceStats.size);
-    const storageKey = `tenants/${keyPart(input.tenantId)}/pending/${keyPart(input.intentId)}`;
+    // Must match UploadIntent.stagingKey exactly (see reserveUpload in
+    // storage.service.ts) - the intent's stagingKey is never rewritten after
+    // staging, so any mismatch here orphans the physical bytes on disk when
+    // a staged intent later fails or expires and cleanup removes by
+    // intent.stagingKey.
+    const storageKey = `tenants/${keyPart(input.tenantId)}/pending/${input.intentId}`;
     const target = this.absolute(storageKey);
     await mkdir(join(target, '..'), { recursive: true });
     await copyFile(input.sourcePath, target, 1);
@@ -90,6 +95,27 @@ export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
 
   async read(storageKey: string): Promise<Readable> {
     return createReadStream(this.absolute(storageKey));
+  }
+
+  async exists(storageKey: string): Promise<boolean> {
+    try {
+      const stats = await stat(this.absolute(storageKey));
+      return stats.isFile();
+    } catch {
+      return false;
+    }
+  }
+
+  async getVolumeStats(): Promise<{ totalBytes: number; freeBytes: number } | null> {
+    try {
+      const filesystem = await statfs(this.root);
+      return {
+        totalBytes: Number(filesystem.blocks) * Number(filesystem.bsize),
+        freeBytes: Number(filesystem.bavail) * Number(filesystem.bsize),
+      };
+    } catch {
+      return null;
+    }
   }
 
   private absolute(storageKey: string): string {

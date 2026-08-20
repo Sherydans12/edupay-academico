@@ -3,8 +3,10 @@ import {
   Body,
   CallHandler,
   Controller,
+  Delete,
   ExecutionContext,
   Get,
+  HttpCode,
   Injectable,
   Logger,
   Param,
@@ -22,10 +24,13 @@ import {
   createUploadIntentSchema,
   storageFileSchema,
   storagePolicySchema,
+  storageReconciliationOptionsSchema,
+  storageReconciliationReportSchema,
   storageUsageSchema,
   uploadIntentSchema,
+  type CreateUploadIntent,
+  type StorageReconciliationOptions,
 } from '@edupay/contracts';
-import type { CreateUploadIntent } from '@edupay/contracts';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Environment } from '../config/environment';
@@ -138,6 +143,22 @@ export class StorageController {
     return this.storage.getPolicy(this.context());
   }
 
+  @Get('storage/reconciliation-report')
+  @ContractResponse(storageReconciliationReportSchema)
+  reconciliationReport(): Promise<object> {
+    return this.storage.reconcileStorage(this.context(), { dryRun: true });
+  }
+
+  @Post('storage/reconcile')
+  @ContractBody(storageReconciliationOptionsSchema)
+  @ContractResponse(storageReconciliationReportSchema)
+  reconcile(
+    @Body(new ZodValidationPipe(storageReconciliationOptionsSchema))
+    options?: StorageReconciliationOptions,
+  ): Promise<object> {
+    return this.storage.reconcileStorage(this.context(), options);
+  }
+
   @Post('file-upload-intents')
   @ContractBody(createUploadIntentSchema)
   @ContractResponse(uploadIntentSchema)
@@ -182,6 +203,15 @@ export class StorageController {
     @Param('learningItemId', uuid) learningItemId: string,
   ): Promise<object[]> {
     return this.storage.listLearningAttachments(this.context(), learningItemId);
+  }
+
+  @Delete('learning-items/:learningItemId/attachments/:fileReferenceId')
+  @HttpCode(204)
+  async detachAttachment(
+    @Param('learningItemId', uuid) learningItemId: string,
+    @Param('fileReferenceId', uuid) fileReferenceId: string,
+  ): Promise<void> {
+    await this.storage.detachLearningAttachment(this.context(), learningItemId, fileReferenceId);
   }
 
   @Get('files/:fileObjectId/download')

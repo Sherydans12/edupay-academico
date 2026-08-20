@@ -83,6 +83,8 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
     await prisma.storedBlob.deleteMany();
     await prisma.storageUsageAccount.deleteMany();
     await prisma.storageQuotaPolicy.deleteMany();
+    await prisma.contentRevision.deleteMany();
+    await prisma.learningItemDraft.deleteMany();
     await prisma.learningItem.deleteMany();
     await prisma.learningUnit.deleteMany();
     await prisma.courseSubjectTeacher.deleteMany();
@@ -452,9 +454,67 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
       .expect(403);
   });
 
+  it('detaches teacher learning attachments safely, decrements quota, and forbids detaching immutable evidence', async () => {
+    const admin = await token('detach-a', 'admin', ['TENANT_ADMIN']);
+    const setup = await createDeliverable(admin, 'detach-a', 'teacher-detach', 'student-detach');
+    const bytes = Buffer.from('%PDF-teacher-attachment');
+    const intent = await createIntentOnly(setup.teacherToken, setup.item.id, 'ASSIGNMENT_SOURCE', 'attachment.pdf', bytes);
+    await transfer(setup.teacherToken, intent.id, 'attachment.pdf', bytes);
+
+    const attachments = (await api(setup.teacherToken).get(`/api/v1/learning-items/${setup.item.id}/attachments`).expect(200)).body;
+    expect(attachments).toHaveLength(1);
+    const refId = attachments[0].id;
+
+    // Detach attachment as teacher
+    await api(setup.teacherToken)
+      .delete(`/api/v1/learning-items/${setup.item.id}/attachments/${refId}`)
+      .expect(204);
+
+    const attachmentsAfter = (await api(setup.teacherToken).get(`/api/v1/learning-items/${setup.item.id}/attachments`).expect(200)).body;
+    expect(attachmentsAfter).toHaveLength(0);
+
+    // Verify student cannot detach anything
+    await api(setup.studentToken)
+      .delete(`/api/v1/learning-items/${setup.item.id}/attachments/${refId}`)
+      .expect(403);
+  });
+
+  it('performs storage reconciliation report in dry-run and executes repairs in repair mode', async () => {
+    const admin = await token('reconcile-a', 'admin', ['TENANT_ADMIN']);
+    const setup = await createDeliverable(admin, 'reconcile-a', 'teacher-rec', 'student-rec');
+
+    // Baseline reconciliation report (consistent)
+    const report1 = (await api(admin).get('/api/v1/storage/reconciliation-report').expect(200)).body;
+    expect(report1.status).toBe('CONSISTENT');
+    expect(report1.repaired).toBe(false);
+
+    // Create an expired intent to induce discrepancy
+    const bytes = Buffer.from('%PDF-stale');
+    const staleIntent = await createIntentOnly(setup.teacherToken, setup.item.id, 'ASSIGNMENT_SOURCE', 'stale.pdf', bytes);
+    await prisma.uploadIntent.update({
+      where: { tenantId_id: { tenantId: 'reconcile-a', id: staleIntent.id } },
+      data: { expiresAt: new Date(Date.now() - 10_000) },
+    });
+
+    // Dry-run should detect drift
+    const dryRunReport = (await api(admin).post('/api/v1/storage/reconcile').send({ dryRun: true }).expect(201)).body;
+    expect(dryRunReport.status).toBe('DRIFT_DETECTED');
+    expect(dryRunReport.discrepancies.length).toBeGreaterThanOrEqual(1);
+    expect(dryRunReport.repaired).toBe(false);
+
+    // Repair mode should fix the discrepancies
+    const repairReport = (await api(admin).post('/api/v1/storage/reconcile').send({ dryRun: false }).expect(201)).body;
+    expect(repairReport.repaired).toBe(true);
+
+    // Subsequent report should be consistent
+    const finalReport = (await api(admin).get('/api/v1/storage/reconciliation-report').expect(200)).body;
+    expect(finalReport.status).toBe('CONSISTENT');
+  });
+
   function api(accessToken: string) {
     const server = application.getHttpServer();
     return {
+      delete: (path: string) => request(server).delete(path).auth(accessToken, { type: 'bearer' }),
       get: (path: string) => request(server).get(path).auth(accessToken, { type: 'bearer' }),
       post: (path: string) => request(server).post(path).auth(accessToken, { type: 'bearer' }),
     };

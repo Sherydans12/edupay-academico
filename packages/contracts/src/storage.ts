@@ -27,6 +27,19 @@ export const storageQuotaStateSchema = z.enum([
   'FULL',
 ]);
 
+/**
+ * CONSISTENT: the incrementally-maintained usage counter agrees with a fresh
+ * database recomputation. DRIFT_DETECTED: they disagree by more than a small
+ * rounding tolerance (a reconciliation pass should be run to find why).
+ * REPAIR_REQUIRED: a reconciliation pass already found and recorded specific
+ * DB-vs-filesystem discrepancies that need an explicit, audited repair.
+ */
+export const storageReconciliationStatusSchema = z.enum([
+  'CONSISTENT',
+  'DRIFT_DETECTED',
+  'REPAIR_REQUIRED',
+]);
+
 export const uploadIntentStatusSchema = z.enum([
   'RESERVED',
   'STAGED',
@@ -107,6 +120,14 @@ export const storageUsageSchema = z
     fileCount: z.number().int().nonnegative(),
     blobCount: z.number().int().nonnegative(),
     byCategory: z.array(storageCategoryUsageSchema),
+    // Distinct accounting metrics: dedup means these can legitimately differ
+    // from usedBytes/from each other. See ADR/file-storage.md.
+    logicalUsedBytes: z.number().int().nonnegative(),
+    physicalBlobBytes: z.number().int().nonnegative(),
+    temporaryOrStagedBytes: z.number().int().nonnegative(),
+    physicalStorageTotalBytes: z.number().int().nonnegative().nullable(),
+    physicalStorageFreeBytes: z.number().int().nonnegative().nullable(),
+    reconciliationStatus: storageReconciliationStatusSchema,
   })
   .strict();
 
@@ -120,8 +141,54 @@ export const storagePolicySchema = z
   })
   .strict();
 
+export const storageReconciliationDiscrepancyTypeSchema = z.enum([
+  'MISSING_PHYSICAL_BLOB',
+  'ORPHAN_PHYSICAL_BLOB',
+  'FILE_OBJECT_INCONSISTENCY',
+  'QUOTA_COUNTER_DRIFT',
+  'STALE_RESERVED_INTENT',
+  'STALE_STAGED_INTENT',
+  'STAGING_RESIDUE',
+]);
+
+export const storageReconciliationDiscrepancySchema = z
+  .object({
+    type: storageReconciliationDiscrepancyTypeSchema,
+    description: z.string(),
+    details: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+export const storageReconciliationReportSchema = z
+  .object({
+    tenantId: z.string().min(1).max(128),
+    reconciledAt: timestampSchema,
+    status: storageReconciliationStatusSchema,
+    discrepancies: z.array(storageReconciliationDiscrepancySchema),
+    accountedUsedBytes: z.number().int().nonnegative(),
+    computedBlobBytes: z.number().int().nonnegative(),
+    driftBytes: z.number().int(),
+    staleIntentsCount: z.number().int().nonnegative(),
+    totalBlobsChecked: z.number().int().nonnegative(),
+    repaired: z.boolean(),
+  })
+  .strict();
+
+export const storageReconciliationOptionsSchema = z
+  .object({
+    dryRun: z.boolean().default(true),
+  })
+  .strict();
+
 export type CreateUploadIntent = z.infer<typeof createUploadIntentSchema>;
 export type UploadIntent = z.infer<typeof uploadIntentSchema>;
 export type StorageFile = z.infer<typeof storageFileSchema>;
 export type StorageUsage = z.infer<typeof storageUsageSchema>;
 export type StoragePolicy = z.infer<typeof storagePolicySchema>;
+export type StorageReconciliationReport = z.infer<
+  typeof storageReconciliationReportSchema
+>;
+export type StorageReconciliationOptions = z.infer<
+  typeof storageReconciliationOptionsSchema
+>;
+

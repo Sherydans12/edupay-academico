@@ -12,4 +12,12 @@ export interface PrivateStorageProvider {
   promote(input: { stagingKey: string; finalKey: string }): Promise<void>;
   remove(storageKey: string): Promise<void>;
   read(storageKey: string): Promise<Buffer | Readable>;
+  exists(storageKey: string): Promise<boolean>;
+  /**
+   * Aggregate, non-sensitive filesystem capacity for the final storage
+   * volume. Returns null when the adapter cannot safely report this (e.g. a
+   * future non-filesystem-backed adapter). Never exposes host paths.
+   */
+  getVolumeStats(): Promise<{ totalBytes: number; freeBytes: number } | null>;
 }
+

@@ -101,18 +101,28 @@ export class StorageService implements LearningAttachmentPort {
     this.requireStorageVisibilityRole(context);
     const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
     await this.ensureScopeRows(tenantId);
-    const [policy, account, files] = await Promise.all([
-      this.prisma.storageQuotaPolicy.findUniqueOrThrow({
-        where: { scopeKey: this.tenantScopeKey(tenantId) },
-      }),
-      this.prisma.storageUsageAccount.findUniqueOrThrow({
-        where: { scopeKey: this.tenantScopeKey(tenantId) },
-      }),
-      this.prisma.fileObject.findMany({
-        where: { tenantId, lifecycle: 'AVAILABLE' },
-        select: { category: true, authoritativeSizeBytes: true },
-      }),
-    ]);
+    const [policy, account, files, physicalBlobAggregate, stagedAggregate, volumeStats] =
+      await Promise.all([
+        this.prisma.storageQuotaPolicy.findUniqueOrThrow({
+          where: { scopeKey: this.tenantScopeKey(tenantId) },
+        }),
+        this.prisma.storageUsageAccount.findUniqueOrThrow({
+          where: { scopeKey: this.tenantScopeKey(tenantId) },
+        }),
+        this.prisma.fileObject.findMany({
+          where: { tenantId, lifecycle: 'AVAILABLE' },
+          select: { category: true, authoritativeSizeBytes: true },
+        }),
+        this.prisma.storedBlob.aggregate({
+          where: { tenantId, lifecycle: 'AVAILABLE' },
+          _sum: { storedSizeBytes: true },
+        }),
+        this.prisma.uploadIntent.aggregate({
+          where: { tenantId, status: 'STAGED' },
+          _sum: { expectedSizeBytes: true },
+        }),
+        this.provider.getVolumeStats(),
+      ]);
     const quotaBytes = this.toSafeNumber(policy.quotaBytes);
     const usedBytes = this.toSafeNumber(account.usedBytes);
     const reservedBytes = this.toSafeNumber(account.reservedBytes);
@@ -128,6 +138,15 @@ export class StorageService implements LearningAttachmentPort {
       current.count += 1;
       byCategory.set(file.category, current);
     }
+    // usedBytes is maintained incrementally (it only grows for genuinely new
+    // physical blobs, so dedup does not cost quota twice). physicalBlobBytes
+    // is a fresh, independent recomputation from stored_blobs; comparing the
+    // two is a cheap DB-only drift check. A full filesystem-vs-DB comparison
+    // is the dedicated reconciliation report (Phase 5), not this hot path.
+    const physicalBlobBytes = this.toSafeNumber(physicalBlobAggregate._sum.storedSizeBytes ?? 0n);
+    const temporaryOrStagedBytes = this.toSafeNumber(stagedAggregate._sum.expectedSizeBytes ?? 0n);
+    const driftBytes = Math.abs(usedBytes - physicalBlobBytes);
+    const reconciliationStatus = driftBytes > 0 ? 'DRIFT_DETECTED' : 'CONSISTENT';
     return {
       tenantId,
       quotaBytes,
@@ -145,6 +164,181 @@ export class StorageService implements LearningAttachmentPort {
         logicalBytes: value.bytes,
         fileCount: value.count,
       })),
+      logicalUsedBytes: usedBytes,
+      physicalBlobBytes,
+      temporaryOrStagedBytes,
+      physicalStorageTotalBytes: volumeStats?.totalBytes ?? null,
+      physicalStorageFreeBytes: volumeStats?.freeBytes ?? null,
+      reconciliationStatus,
+    };
+  }
+
+  async reconcileStorage(
+    context: AcademicRequestContext,
+    options?: { dryRun?: boolean },
+  ): Promise<object> {
+    this.authorization.requireCapability(
+      context.principal,
+      context.tenant,
+      TenantCapability.AccessTenant,
+    );
+    if (!context.principal.roles.includes('TENANT_ADMIN')) {
+      this.deny();
+    }
+    const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
+    await this.ensureScopeRows(tenantId);
+    const dryRun = options?.dryRun ?? true;
+
+    const [account, blobs, files, staleIntents] = await Promise.all([
+      this.prisma.storageUsageAccount.findUniqueOrThrow({
+        where: { scopeKey: this.tenantScopeKey(tenantId) },
+      }),
+      this.prisma.storedBlob.findMany({
+        where: { tenantId, lifecycle: 'AVAILABLE' },
+      }),
+      this.prisma.fileObject.findMany({
+        where: { tenantId, lifecycle: 'AVAILABLE' },
+        include: { storedBlob: true },
+      }),
+      this.prisma.uploadIntent.findMany({
+        where: {
+          tenantId,
+          status: { in: ['RESERVED', 'STAGED'] },
+          expiresAt: { lt: new Date() },
+        },
+      }),
+    ]);
+
+    const discrepancies: Array<{
+      type: string;
+      description: string;
+      details?: Record<string, unknown>;
+    }> = [];
+
+    for (const blob of blobs) {
+      const exists = await this.provider.exists(blob.storageKey);
+      if (!exists) {
+        discrepancies.push({
+          type: 'MISSING_PHYSICAL_BLOB',
+          description: `Physical blob missing on storage for stored_blob ${blob.id}`,
+          details: { blobId: blob.id, storageKey: blob.storageKey },
+        });
+      }
+    }
+
+    for (const file of files) {
+      if (!file.storedBlob || file.storedBlob.lifecycle !== 'AVAILABLE') {
+        discrepancies.push({
+          type: 'FILE_OBJECT_INCONSISTENCY',
+          description: `FileObject ${file.id} references missing or unavailable StoredBlob ${file.storedBlobId}`,
+          details: { fileObjectId: file.id, storedBlobId: file.storedBlobId },
+        });
+      }
+    }
+
+    const accountedUsedBytes = this.toSafeNumber(account.usedBytes);
+    const computedBlobBytes = blobs.reduce(
+      (sum, b) => sum + this.toSafeNumber(b.storedSizeBytes),
+      0,
+    );
+    const computedBlobCount = blobs.length;
+    const computedFileCount = files.length;
+    const driftBytes = accountedUsedBytes - computedBlobBytes;
+
+    if (
+      driftBytes !== 0 ||
+      account.blobCount !== computedBlobCount ||
+      account.fileCount !== computedFileCount
+    ) {
+      discrepancies.push({
+        type: 'QUOTA_COUNTER_DRIFT',
+        description: `Storage account counters drift: usedBytes (accounted ${accountedUsedBytes} vs computed ${computedBlobBytes}), blobCount (accounted ${account.blobCount} vs computed ${computedBlobCount}), fileCount (accounted ${account.fileCount} vs computed ${computedFileCount})`,
+        details: {
+          accountedUsedBytes,
+          computedBlobBytes,
+          accountedBlobCount: account.blobCount,
+          computedBlobCount,
+          accountedFileCount: account.fileCount,
+          computedFileCount,
+        },
+      });
+    }
+
+    for (const intent of staleIntents) {
+      discrepancies.push({
+        type:
+          intent.status === 'RESERVED'
+            ? 'STALE_RESERVED_INTENT'
+            : 'STALE_STAGED_INTENT',
+        description: `Stale ${intent.status} upload intent ${intent.id} expired at ${intent.expiresAt.toISOString()}`,
+        details: {
+          intentId: intent.id,
+          status: intent.status,
+          expiresAt: intent.expiresAt.toISOString(),
+        },
+      });
+    }
+
+    if (!dryRun) {
+      await this.prisma.$transaction(async (tx) => {
+        for (const intent of staleIntents) {
+          await tx.uploadIntent.update({
+            where: { tenantId_id: { tenantId, id: intent.id } },
+            data: { status: 'EXPIRED', reservedBytes: 0n },
+          });
+          await this.adjustAccount(
+            tx,
+            tenantId,
+            0,
+            0,
+            0,
+            -this.toSafeNumber(intent.reservedBytes),
+          );
+        }
+
+        await tx.storageUsageAccount.update({
+          where: { scopeKey: this.tenantScopeKey(tenantId) },
+          data: {
+            usedBytes: BigInt(computedBlobBytes),
+            blobCount: computedBlobCount,
+            fileCount: computedFileCount,
+          },
+        });
+      });
+
+      for (const intent of staleIntents) {
+        await this.provider.remove(intent.stagingKey).catch(() => undefined);
+      }
+
+      await this.audit.record({
+        action: 'STORAGE_RECONCILIATION_REPAIRED',
+        context,
+        resourceId: tenantId,
+        resourceType: 'TenantStorage',
+        summary: {
+          discrepanciesResolved: discrepancies.length,
+          computedBlobBytes,
+          accountedUsedBytes,
+        },
+      });
+    }
+
+    return {
+      tenantId,
+      reconciledAt: new Date().toISOString(),
+      status:
+        discrepancies.length > 0
+          ? dryRun
+            ? 'DRIFT_DETECTED'
+            : 'CONSISTENT'
+          : 'CONSISTENT',
+      discrepancies,
+      accountedUsedBytes,
+      computedBlobBytes,
+      driftBytes,
+      staleIntentsCount: staleIntents.length,
+      totalBlobsChecked: blobs.length,
+      repaired: !dryRun,
     };
   }
 
@@ -473,6 +667,99 @@ export class StorageService implements LearningAttachmentPort {
       orderBy: { createdAt: 'asc' },
     });
     return records.map(this.mapFile);
+  }
+
+  /**
+   * Detaches a teacher attachment from a LearningItem. Never physically
+   * destroys a blob merely because one reference is removed: a FileObject
+   * only moves to DELETION_PENDING once it has zero remaining AVAILABLE
+   * FileReferences, and its StoredBlob only moves to DELETION_PENDING (and is
+   * only physically removed) once zero remaining AVAILABLE FileObjects
+   * reference it. Quota (fileCount/usedBytes/blobCount) is released exactly
+   * once, at the same points. Student-submission evidence is never eligible
+   * (category is fixed at upload time and STUDENT_SUBMISSION never creates a
+   * LEARNING_ITEM-scoped FileReference in the first place).
+   */
+  async detachLearningAttachment(
+    context: AcademicRequestContext,
+    learningItemId: string,
+    fileReferenceId: string,
+  ): Promise<void> {
+    const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
+    const item = await this.prisma.learningItem.findUnique({
+      where: { tenantId_id: { tenantId, id: learningItemId } },
+    });
+    if (!item) this.notFound();
+    await this.requireTeacherOrTenantAdminForCourseSubject(context, item.courseSubjectId);
+
+    const reference = await this.prisma.fileReference.findFirst({
+      where: {
+        tenantId,
+        learningItemId,
+        referenceType: 'LEARNING_ITEM',
+        OR: [{ id: fileReferenceId }, { fileObjectId: fileReferenceId }],
+      },
+      include: { fileObject: { include: { storedBlob: true } } },
+    });
+    if (!reference) {
+      this.notFound();
+    }
+
+    let blobToRemove: string | undefined;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.fileReference.delete({
+        where: { tenantId_id: { tenantId, id: reference.id } },
+      });
+      const remainingReferences = await tx.fileReference.count({
+        where: { tenantId, fileObjectId: reference.fileObjectId },
+      });
+      if (remainingReferences > 0) return;
+
+      await tx.fileObject.update({
+        where: { tenantId_id: { tenantId, id: reference.fileObjectId } },
+        data: { lifecycle: 'DELETION_PENDING' },
+      });
+      await this.adjustAccount(tx, tenantId, -1, 0, 0, 0);
+
+      const remainingFileObjects = await tx.fileObject.count({
+        where: {
+          tenantId,
+          storedBlobId: reference.fileObject.storedBlobId,
+          lifecycle: 'AVAILABLE',
+        },
+      });
+      if (remainingFileObjects > 0) return;
+
+      await tx.storedBlob.update({
+        where: { tenantId_id: { tenantId, id: reference.fileObject.storedBlobId } },
+        data: { lifecycle: 'DELETION_PENDING' },
+      });
+      await this.adjustAccount(
+        tx,
+        tenantId,
+        0,
+        -1,
+        -this.toSafeNumber(reference.fileObject.storedBlob.storedSizeBytes),
+        0,
+      );
+      blobToRemove = reference.fileObject.storedBlob.storageKey;
+    });
+
+    if (blobToRemove) {
+      // Best-effort physical reclaim after the DB commit. If this throws, the
+      // blob stays DELETION_PENDING with no DB row pointing at it as
+      // AVAILABLE - a future reconciliation sweep can safely finish removing
+      // it without any risk of double-releasing quota.
+      await this.provider.remove(blobToRemove).catch(() => undefined);
+    }
+
+    await this.audit.record({
+      action: 'LEARNING_ATTACHMENT_DETACHED',
+      context,
+      courseSubjectId: item.courseSubjectId,
+      resourceId: fileReferenceId,
+      resourceType: 'FileReference',
+    });
   }
 
   async attachSubmissionFiles(
@@ -879,6 +1166,7 @@ export class StorageService implements LearningAttachmentPort {
           extension: input.validated.extension,
           category: input.intent.category,
           uploadedByIdentityUserId: input.context.principal.identityUserId,
+          isImmutableEvidence: input.intent.category === 'STUDENT_SUBMISSION',
           lifecycle: 'AVAILABLE',
           validatedAt: now,
         },
