@@ -68,6 +68,26 @@ import {
   type UploadIntent,
   updateLearningItemSchema,
   updateLearningUnitSchema,
+  contentRevisionSchema,
+  duplicateLearningItemSchema,
+  duplicateLearningUnitSchema,
+  learningItemDraftSchema,
+  moveLearningItemSchema,
+  publishLearningItemDraftSchema,
+  restoreRevisionSchema,
+  saveLearningItemDraftSchema,
+  storageReconciliationOptionsSchema,
+  storageReconciliationReportSchema,
+  type ContentRevision,
+  type DuplicateLearningItem,
+  type DuplicateLearningUnit,
+  type LearningItemDraft,
+  type MoveLearningItem,
+  type PublishLearningItemDraft,
+  type RestoreRevision,
+  type SaveLearningItemDraft,
+  type StorageReconciliationOptions,
+  type StorageReconciliationReport,
   type CreateAcademicYear,
   type CreateCourse,
   type CreateCourseEnrollment,
@@ -92,7 +112,7 @@ import {
   type VerifiedIdentityLink,
 } from '@edupay/contracts';
 import { apiErrorEnvelopeSchema, type ApiErrorDetail } from '@edupay/contracts';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import type { IdentitySessionAdapter } from '@/auth/current-session';
 
@@ -305,6 +325,10 @@ export class AcademicApiClient {
     const response = await this.requestRaw(path, init);
     const payload: unknown = await response.json().catch(() => undefined);
     return schema.parse(payload);
+  }
+
+  private async requestVoid(path: string, init: RequestInit = {}): Promise<void> {
+    await this.requestRaw(path, init);
   }
 
   private async multipartError(status: number, body: unknown, requestId: string): Promise<never> {
@@ -551,8 +575,92 @@ export class AcademicApiClient {
     return this.request(`learning-items/${id}/publish`, learningItemSchema, { method: 'POST' });
   }
 
+  unpublishLearningItem(id: string) {
+    return this.request(`learning-items/${id}/unpublish`, learningItemSchema, { method: 'POST' });
+  }
+
   archiveLearningItem(id: string) {
     return this.request(`learning-items/${id}/archive`, learningItemSchema, { method: 'POST' });
+  }
+
+  moveLearningItem(id: string, input: MoveLearningItem) {
+    return this.request(`learning-items/${id}/move`, learningItemSchema, {
+      method: 'POST',
+      body: JSON.stringify(moveLearningItemSchema.parse(input)),
+    });
+  }
+
+  duplicateLearningItem(id: string, input?: DuplicateLearningItem) {
+    return this.request(`learning-items/${id}/duplicate`, learningItemSchema, {
+      method: 'POST',
+      body: JSON.stringify(duplicateLearningItemSchema.parse(input ?? {})),
+    });
+  }
+
+  duplicateLearningUnit(id: string, input?: DuplicateLearningUnit) {
+    return this.request(`learning-units/${id}/duplicate`, learningUnitSchema, {
+      method: 'POST',
+      body: JSON.stringify(duplicateLearningUnitSchema.parse(input ?? {})),
+    });
+  }
+
+  saveLearningItemDraft(id: string, input: SaveLearningItemDraft) {
+    return this.request(`learning-items/${id}/draft`, learningItemDraftSchema, {
+      method: 'POST',
+      body: JSON.stringify(saveLearningItemDraftSchema.parse(input)),
+    });
+  }
+
+  getLearningItemDraft(id: string): Promise<{ draft: LearningItemDraft | null }> {
+    return this.request(`learning-items/${id}/draft`, z.object({ draft: learningItemDraftSchema.nullable() }).strict());
+  }
+
+  discardLearningItemDraft(id: string) {
+    return this.requestVoid(`learning-items/${id}/draft`, { method: 'DELETE' });
+  }
+
+  publishLearningItemDraft(id: string, input: PublishLearningItemDraft) {
+    return this.request(`learning-items/${id}/draft/publish`, learningItemSchema, {
+      method: 'POST',
+      body: JSON.stringify(publishLearningItemDraftSchema.parse(input)),
+    });
+  }
+
+  getLearningUnitHistory(id: string): Promise<ContentRevision[]> {
+    return this.request(`learning-units/${id}/history`, contentRevisionSchema.array());
+  }
+
+  getLearningItemHistory(id: string): Promise<ContentRevision[]> {
+    return this.request(`learning-items/${id}/history`, contentRevisionSchema.array());
+  }
+
+  restoreLearningUnitRevision(id: string, revisionNumber: number, input?: RestoreRevision) {
+    return this.request(`learning-units/${id}/history/${revisionNumber}/restore`, learningUnitSchema, {
+      method: 'POST',
+      body: JSON.stringify(restoreRevisionSchema.parse(input ?? {})),
+    });
+  }
+
+  restoreLearningItemRevision(id: string, revisionNumber: number, input?: RestoreRevision) {
+    return this.request(`learning-items/${id}/history/${revisionNumber}/restore`, z.union([learningItemSchema, learningItemDraftSchema]), {
+      method: 'POST',
+      body: JSON.stringify(restoreRevisionSchema.parse(input ?? {})),
+    });
+  }
+
+  detachLearningAttachment(learningItemId: string, fileReferenceId: string) {
+    return this.requestVoid(`learning-items/${learningItemId}/attachments/${fileReferenceId}`, { method: 'DELETE' });
+  }
+
+  getStorageReconciliationReport(): Promise<StorageReconciliationReport> {
+    return this.request('storage/reconciliation-report', storageReconciliationReportSchema);
+  }
+
+  runStorageReconciliation(options?: StorageReconciliationOptions): Promise<StorageReconciliationReport> {
+    return this.request('storage/reconcile', storageReconciliationReportSchema, {
+      method: 'POST',
+      body: JSON.stringify(storageReconciliationOptionsSchema.parse(options ?? {})),
+    });
   }
 
   listNotifications(cursor?: string, limit = 20): Promise<NotificationPage> {
@@ -589,18 +697,33 @@ export type LearningApiClient = Pick<
   | 'createLearningUnit'
   | 'updateLearningUnit'
   | 'archiveLearningUnit'
+  | 'duplicateLearningUnit'
   | 'reorderLearningUnits'
   | 'createLearningItem'
   | 'updateLearningItem'
   | 'scheduleLearningItem'
   | 'publishLearningItem'
+  | 'unpublishLearningItem'
   | 'archiveLearningItem'
+  | 'moveLearningItem'
+  | 'duplicateLearningItem'
+  | 'saveLearningItemDraft'
+  | 'getLearningItemDraft'
+  | 'discardLearningItemDraft'
+  | 'publishLearningItemDraft'
+  | 'getLearningUnitHistory'
+  | 'getLearningItemHistory'
+  | 'restoreLearningUnitRevision'
+  | 'restoreLearningItemRevision'
   | 'reorderLearningItems'
   | 'getStorageUsage'
   | 'getStoragePolicy'
   | 'createUploadIntent'
   | 'completeUploadIntent'
   | 'listLearningAttachments'
+  | 'detachLearningAttachment'
+  | 'getStorageReconciliationReport'
+  | 'runStorageReconciliation'
   | 'downloadFile'
   | 'getOwnSubmission'
   | 'getSubmission'
@@ -609,3 +732,4 @@ export type LearningApiClient = Pick<
   | 'submitSubmissionRevision'
   | 'reviewSubmissionRevision'
 >;
+

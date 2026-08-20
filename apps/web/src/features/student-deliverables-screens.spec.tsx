@@ -44,6 +44,7 @@ function learningItem(overrides: Record<string, unknown>) {
     dueAt: null,
     createdByIdentityUserId: 'teacher-user',
     updatedByIdentityUserId: null,
+    version: 1,
     createdAt: timestamp,
     updatedAt: timestamp,
     ...overrides,
@@ -51,7 +52,7 @@ function learningItem(overrides: Record<string, unknown>) {
 }
 
 function route(items: ReturnType<typeof learningItem>[]) {
-  return { courseSubjectId: subjectId, units: [{ id: unitId, courseSubjectId: subjectId, title: 'Unidad', description: null, sortOrder: 0, startAt: null, endAt: null, status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp, items }] };
+  return { courseSubjectId: subjectId, units: [{ id: unitId, courseSubjectId: subjectId, title: 'Unidad', description: null, sortOrder: 0, startAt: null, endAt: null, status: 'ACTIVE' as const, version: 1, createdAt: timestamp, updatedAt: timestamp, items }] };
 }
 
 function submission(id: string, learningItemId: string, status: 'SUBMITTED' | 'REVIEWED' | 'CHANGES_REQUESTED', overrides: Record<string, unknown> = {}) {
