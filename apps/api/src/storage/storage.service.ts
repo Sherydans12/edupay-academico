@@ -224,6 +224,7 @@ export class StorageService implements LearningAttachmentPort {
         sizeBytes: input.sizeBytes,
       });
     } catch (error) {
+      this.logValidationRejection(context, undefined, category, error);
       this.throwValidation(error);
     }
 
@@ -305,7 +306,7 @@ export class StorageService implements LearningAttachmentPort {
       });
       if (
         validated.normalizedFilename !== intent.expectedFilename ||
-        validated.declaredMime !== intent.expectedMime ||
+        validated.detectedMime !== intent.expectedMime ||
         validated.declaredSizeBytes !== this.toSafeNumber(intent.expectedSizeBytes)
       ) {
         throw new FileValidationError(
@@ -315,6 +316,7 @@ export class StorageService implements LearningAttachmentPort {
       }
     } catch (error) {
       await this.failIntent(tenantId, intent.id);
+      this.logValidationRejection(context, intent.id, intent.category, error);
       this.throwValidation(error);
     }
 
@@ -677,6 +679,28 @@ export class StorageService implements LearningAttachmentPort {
     throw error;
   }
 
+  /**
+   * Structured, privacy-safe rejection log so upload validation failures are
+   * observable (they otherwise return a plain 400 with no server-side trace).
+   * Never includes filenames, byte contents, or other user-identifying data.
+   */
+  private logValidationRejection(
+    context: AcademicRequestContext,
+    uploadIntentId: string | undefined,
+    category: string,
+    error: unknown,
+  ): void {
+    const code = error instanceof FileValidationError ? error.code : 'UNEXPECTED_ERROR';
+    this.logger.warn({
+      action: 'STORAGE_UPLOAD_VALIDATION_REJECTED',
+      requestId: context.requestId,
+      tenantId: context.tenant.tenantId,
+      uploadIntentId,
+      category,
+      code,
+    });
+  }
+
   private async scanStagedUpload(
     context: AcademicRequestContext,
     uploadIntentId: string,
@@ -785,7 +809,7 @@ export class StorageService implements LearningAttachmentPort {
           category: reference.category,
           expectedFilename: metadata.normalizedFilename,
           expectedSizeBytes: size,
-          expectedMime: metadata.declaredMime,
+          expectedMime: metadata.detectedMime,
           reservedBytes: size,
           stagingKey: `tenants/${createHash('sha256').update(tenantId).digest('hex')}/pending/${intentId}`,
           expiresAt,

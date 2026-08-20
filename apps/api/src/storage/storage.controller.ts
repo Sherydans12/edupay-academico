@@ -6,6 +6,7 @@ import {
   ExecutionContext,
   Get,
   Injectable,
+  Logger,
   Param,
   ParseUUIDPipe,
   Post,
@@ -49,6 +50,7 @@ type MultipartFile = {
 
 @Injectable()
 export class BoundedMultipartUploadInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(BoundedMultipartUploadInterceptor.name);
   private readonly multerInterceptor: NestInterceptor;
 
   constructor(
@@ -76,7 +78,7 @@ export class BoundedMultipartUploadInterceptor implements NestInterceptor {
         catchError((error: unknown) =>
           defer(async () => {
             try {
-              await this.releaseFailedIntent(context);
+              await this.releaseFailedIntent(context, error);
             } finally {
               throw error;
             }
@@ -84,17 +86,24 @@ export class BoundedMultipartUploadInterceptor implements NestInterceptor {
         ),
       );
     } catch (error) {
-      await this.releaseFailedIntent(context);
+      await this.releaseFailedIntent(context, error);
       throw error;
     }
   }
 
-  private async releaseFailedIntent(context: ExecutionContext): Promise<void> {
+  private async releaseFailedIntent(context: ExecutionContext, error: unknown): Promise<void> {
     const request = context.switchToHttp().getRequest<{
       params?: { intentId?: string };
       file?: { path?: string };
     }>();
     const intentId = request.params?.intentId;
+    this.logger.warn({
+      action: 'STORAGE_UPLOAD_TRANSPORT_REJECTED',
+      requestId: this.current.requestId(),
+      tenantId: this.current.tenant().tenantId,
+      uploadIntentId: intentId,
+      code: error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'UNEXPECTED_ERROR',
+    });
     if (intentId) await this.storage.releaseFailedUploadIntent(this.context(), intentId);
     if (request.file?.path) await rm(request.file.path, { force: true });
   }

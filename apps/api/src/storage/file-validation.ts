@@ -26,6 +26,32 @@ const allowedTypes = {
   '.zip': 'application/zip',
 } as const;
 
+/**
+ * Declared MIME values that mean "the client/browser/OS could not determine a
+ * specific type" rather than an actual claim about content. These are only
+ * accepted because independent content/signature validation (validateContent)
+ * always runs afterward and is authoritative regardless of the declared MIME.
+ */
+const GENERIC_DECLARED_MIME_ALIASES = new Set(['', 'application/octet-stream']);
+
+/**
+ * Legitimate alternate MIME strings some browsers/OSes report for a given
+ * extension (e.g. OOXML formats are ZIP containers and some platforms report
+ * the ZIP MIME instead of the specific Office MIME). Tolerated only because
+ * validateContent still authoritatively checks the actual bytes.
+ */
+const EXTENSION_MIME_ALIASES: Partial<Record<keyof typeof allowedTypes, readonly string[]>> = {
+  '.doc': ['application/x-msword', 'application/vnd.ms-word'],
+  '.docx': ['application/zip', 'application/x-zip-compressed'],
+  '.xls': ['application/x-excel', 'application/x-msexcel'],
+  '.xlsx': ['application/zip', 'application/x-zip-compressed'],
+  '.ppt': ['application/x-mspowerpoint'],
+  '.pptx': ['application/zip', 'application/x-zip-compressed'],
+  '.zip': ['application/x-zip-compressed', 'application/x-compressed'],
+  '.jpg': ['image/pjpeg'],
+  '.jpeg': ['image/pjpeg'],
+};
+
 export type UploadMetadata = {
   readonly originalFilename: string;
   readonly normalizedFilename: string;
@@ -64,12 +90,22 @@ export function validateUploadMetadata(input: {
     throw new FileValidationError('FILE_TYPE_NOT_ALLOWED', 'Invalid file size.');
   }
 
-  const originalFilename = input.filename.trim();
+  const originalFilename = decodeMultipartFilename(input.filename.trim());
   const normalizedFilename = normalizeFilename(originalFilename);
-  const extension = extname(normalizedFilename).toLowerCase();
+  const extension = extname(normalizedFilename).toLowerCase() as keyof typeof allowedTypes;
   const declaredMime = input.mimeType.trim().toLowerCase();
-  const expectedMime = allowedTypes[extension as keyof typeof allowedTypes];
-  if (!expectedMime || expectedMime !== declaredMime) {
+  const expectedMime = allowedTypes[extension];
+  if (!expectedMime) {
+    throw new FileValidationError(
+      'FILE_TYPE_NOT_ALLOWED',
+      'The filename extension and declared MIME type are not allowed together.',
+    );
+  }
+  const isAcceptedDeclaredMime =
+    declaredMime === expectedMime ||
+    GENERIC_DECLARED_MIME_ALIASES.has(declaredMime) ||
+    (EXTENSION_MIME_ALIASES[extension] ?? []).includes(declaredMime);
+  if (!isAcceptedDeclaredMime) {
     throw new FileValidationError(
       'FILE_TYPE_NOT_ALLOWED',
       'The filename extension and declared MIME type are not allowed together.',
@@ -84,6 +120,25 @@ export function validateUploadMetadata(input: {
     declaredSizeBytes: input.sizeBytes,
     detectedMime: expectedMime,
   };
+}
+
+/**
+ * Multer/busboy decode multipart header parameters (the `filename=` part of
+ * Content-Disposition) as latin1, but browsers send the raw UTF-8 bytes of
+ * the filename directly (WHATWG FormData/multipart form-data serialization),
+ * not percent-encoded and not RFC 5987 `filename*=`. Any non-ASCII filename
+ * (accented Spanish characters, ene with tilde, etc.) therefore arrives
+ * mojibake unless it is re-decoded here. A filename that already arrived as
+ * correct UTF-8 (e.g. from a JSON body) is only kept re-decoded when the
+ * round-trip stays valid; otherwise the original is kept unchanged, and
+ * ASCII-only filenames are never touched since latin1/utf8 agree below 0x80.
+ */
+function decodeMultipartFilename(filename: string): string {
+  const hasNonAscii = filename.split('').some((char) => char.charCodeAt(0) > 0x7f);
+  if (!hasNonAscii) return filename;
+  const reDecoded = Buffer.from(filename, 'latin1').toString('utf8');
+  const hasReplacementChar = reDecoded.split('').some((char) => char.charCodeAt(0) === 0xfffd);
+  return hasReplacementChar ? filename : reDecoded;
 }
 
 /**
@@ -237,7 +292,7 @@ export function allowedExtensions(): string[] {
 function normalizeFilename(filename: string): string {
   const safe = basename(filename.replaceAll('\\', '/'))
     .normalize('NFKC')
-    .replace(/[\u0000-\u001f\u007f]/g, '_')
+    .replace(/[ -]/g, '_')
     .replace(/[<>:"/|?*]/g, '_')
     .trim();
   if (!safe || safe === '.' || safe === '..' || !extname(safe)) {

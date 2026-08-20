@@ -79,4 +79,147 @@ describe('private upload validation', () => {
       }),
     ).toThrowError(/content does not match/);
   });
+
+  describe('multipart filename charset recovery', () => {
+    // Browsers send the raw UTF-8 bytes of a filename in the multipart
+    // Content-Disposition `filename=` parameter. Multer/busboy decode HTTP
+    // headers as latin1, so those bytes arrive mojibake unless re-decoded.
+    // This simulates exactly that corruption for the filenames Multer would
+    // hand to the application.
+    const asMultipartMojibake = (utf8Filename: string): string =>
+      Buffer.from(utf8Filename, 'utf8').toString('latin1');
+
+    const spanishFilenames = [
+      'Guía de estudio (Unidad 3).docx',
+      'Evaluación_Química_ñoño.pdf',
+      'Composición número 5 (borrador).txt',
+      'Año Escolar - Educación Física.png',
+    ];
+
+    it.each(spanishFilenames)(
+      'recovers the correct filename from a mojibake multipart upload: %s',
+      (originalFilename) => {
+        const mojibake = asMultipartMojibake(originalFilename);
+        // Sanity check the fixture actually corrupts the name, otherwise the
+        // test would pass without exercising the recovery path at all.
+        expect(mojibake).not.toBe(originalFilename);
+
+        const result = validateUploadMetadata({
+          filename: mojibake,
+          mimeType: 'application/octet-stream',
+          sizeBytes: 10,
+        });
+
+        expect(result.normalizedFilename).toBe(originalFilename);
+      },
+    );
+
+    it('leaves already-correct UTF-8 filenames (e.g. from a JSON body) unchanged', () => {
+      const filename = 'Reporte_Matemática_2°_Medio.pdf';
+      const result = validateUploadMetadata({
+        filename,
+        mimeType: 'application/pdf',
+        sizeBytes: 10,
+      });
+      expect(result.normalizedFilename).toBe(filename);
+    });
+
+    it('leaves plain ASCII filenames byte-for-byte unchanged', () => {
+      const filename = 'quarterly_report_2026 (final).pdf';
+      const result = validateUploadMetadata({
+        filename,
+        mimeType: 'application/pdf',
+        sizeBytes: 10,
+      });
+      expect(result.normalizedFilename).toBe(filename);
+    });
+
+    it('accepts a long but valid accented filename up to the 255-character limit', () => {
+      const longName = `${'Informe de evaluación diagnóstica - Segundo Semestre '.repeat(4).slice(0, 245)}.pdf`;
+      const mojibake = asMultipartMojibake(longName);
+      const result = validateUploadMetadata({
+        filename: mojibake,
+        mimeType: 'application/pdf',
+        sizeBytes: 10,
+      });
+      expect(result.normalizedFilename).toBe(longName.slice(0, 255));
+    });
+  });
+
+  describe('browser MIME variance', () => {
+    const docxBytes = Buffer.concat([
+      Buffer.from([80, 75, 3, 4]),
+      Buffer.from('[Content_Types].xml word/document.xml'),
+      Buffer.from([80, 75, 5, 6]),
+    ]);
+    const oleBytes = Buffer.from([208, 207, 17, 224, 161, 177, 26, 225, 0, 0]);
+
+    it('tolerates a generic application/octet-stream declaration when content proves the OOXML type', () => {
+      const result = validateUploadBytes({
+        filename: 'plan.docx',
+        mimeType: 'application/octet-stream',
+        sizeBytes: docxBytes.length,
+        bytes: docxBytes,
+      });
+      expect(result.detectedMime).toBe(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      );
+    });
+
+    it('tolerates an empty declared MIME when content proves the format', () => {
+      const result = validateUploadBytes({
+        filename: 'plan.docx',
+        mimeType: '',
+        sizeBytes: docxBytes.length,
+        bytes: docxBytes,
+      });
+      expect(result.detectedMime).toBe(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      );
+    });
+
+    it('tolerates the generic application/zip alias some platforms report for OOXML files', () => {
+      const result = validateUploadBytes({
+        filename: 'plan.docx',
+        mimeType: 'application/zip',
+        sizeBytes: docxBytes.length,
+        bytes: docxBytes,
+      });
+      expect(result.detectedMime).toBe(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      );
+    });
+
+    it('tolerates the legacy application/x-msword alias for .doc files', () => {
+      const result = validateUploadBytes({
+        filename: 'plan.doc',
+        mimeType: 'application/x-msword',
+        sizeBytes: oleBytes.length,
+        bytes: oleBytes,
+      });
+      expect(result.detectedMime).toBe('application/msword');
+    });
+
+    it('still rejects a declared MIME that is neither the canonical type nor a known alias', () => {
+      expect(() =>
+        validateUploadBytes({
+          filename: 'plan.docx',
+          mimeType: 'text/plain',
+          sizeBytes: docxBytes.length,
+          bytes: docxBytes,
+        }),
+      ).toThrowError(/extension and declared MIME/);
+    });
+
+    it('never bypasses content/signature validation even with a tolerated generic MIME', () => {
+      expect(() =>
+        validateUploadBytes({
+          filename: 'plan.docx',
+          mimeType: 'application/octet-stream',
+          sizeBytes: 9,
+          bytes: Buffer.from('not a zip'),
+        }),
+      ).toThrowError(/content does not match/);
+    });
+  });
 });
