@@ -167,7 +167,7 @@ export function LearningRoute({
   );
 }
 
-export function CompactStat({ icon, label, value }: { icon: 'book' | 'people' | 'review' | 'calendar'; label: string; value: string }) {
+export function CompactStat({ icon, label, value }: { icon: import('@/components/icons').IconName; label: string; value: string }) {
   return (
     <Card className="compact-stat">
       <span><Icon name={icon} /></span>

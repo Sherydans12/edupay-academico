@@ -12,6 +12,7 @@ import { Icon } from '@/components/icons';
 import { LearningAttachmentList } from '@/components/learning-attachment-list';
 import { StudentSubmissionWorkflow } from '@/components/student-submission-workflow';
 import { LearningRoute, PageHeading, SubjectCard } from '@/components/page-primitives';
+import { MarkdownRenderer } from '@/components/markdown-renderer';
 import { useTrustedCurrentSession, type TrustedCurrentSession } from '@/auth/current-session';
 import { demoSessions } from '@/demo/demo-data';
 import {
@@ -214,9 +215,9 @@ export function StudentAssignmentScreen({ api, courseSubjectId, learningItemId, 
   return <StudentShell session={currentSession}><DataState error={data.error} loading={data.loading} onRetry={() => void data.load()}>{data.item && data.subject ? <>
     <nav aria-label="Ruta de navegación" className="breadcrumbs"><Link href="/estudiante/asignaturas">Asignaturas</Link><Icon name="chevron-right" /><Link href={`/estudiante/asignaturas/${data.subject.id}`}>{subjectName(data.subject)}</Link><Icon name="chevron-right" /><span>{data.item.title}</span></nav>
     <div className="assignment-layout"><article className="assignment-content"><div className="assignment-title"><Badge tone={data.item.publicationStatus === 'SCHEDULED' ? 'info' : 'success'}><Icon name="check" />{data.item.publicationStatus === 'SCHEDULED' ? 'Disponible por publicación efectiva' : 'Publicado'}</Badge><h1>{data.item.title}</h1><p>{data.item.description ?? 'Contenido de aprendizaje publicado para tu CourseSubject.'}</p><div className="item-context"><span>{subjectName(data.subject)}</span><span>{courseName(data.subject)}</span><span>{data.item.type === 'ASSESSMENT' ? 'Evaluación en documento' : data.item.type === 'ASSIGNMENT' ? 'Actividad' : data.item.type === 'MATERIAL' ? 'Material' : 'Anuncio'}</span>{data.item.dueAt ? <span>Vence {formatInstant(data.item.dueAt)}</span> : null}</div></div>
-      {data.item.instructions ? <section><h2>Instrucciones</h2><div className="learning-rich-text">{data.item.instructions}</div></section> : null}
-      {data.item.content ? <section><h2>Contenido</h2><div className="learning-rich-text">{data.item.content}</div></section> : null}
-      {data.item.body ? <section><h2>Mensaje</h2><div className="learning-rich-text">{data.item.body}</div></section> : null}
+      {data.item.instructions ? <section><h2>Instrucciones</h2><div className="learning-rich-text"><MarkdownRenderer content={data.item.instructions} /></div></section> : null}
+      {data.item.content ? <section><h2>Contenido</h2><div className="learning-rich-text"><MarkdownRenderer content={data.item.content} /></div></section> : null}
+      {data.item.body ? <section><h2>Mensaje</h2><div className="learning-rich-text"><MarkdownRenderer content={data.item.body} /></div></section> : null}
       {data.item.type !== 'ANNOUNCEMENT' ? <LearningAttachmentList api={client} learningItemId={data.item.id} /> : null}
       {data.item.dueAt ? <Alert title="Fecha de entrega" tone="warning">{formatInstant(data.item.dueAt)}. La hora y la condición de atraso serán determinadas por el servidor.</Alert> : null}
       </article><aside>{data.item.type === 'ASSIGNMENT' || data.item.type === 'ASSESSMENT' ? <StudentSubmissionWorkflow api={client} item={data.item} /> : <Card className="item-side-note"><Icon name="layers" /><h2>Contenido publicado</h2><p>Este tipo de contenido no solicita una entrega.</p></Card>}</aside></div>
