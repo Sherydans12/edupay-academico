@@ -60,11 +60,11 @@ describe('real Learning screens', () => {
 
     expect(await screen.findByRole('heading', { name: 'Ruta de aprendizaje' })).toBeTruthy();
     expect(screen.getAllByText('Publicado').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /bajar material visible/i }));
+    fireEvent.click(screen.getByRole('button', { name: /mover material visible hacia abajo/i }));
     expect(reorderLearningItems).toHaveBeenCalledWith(unitId, { orderedIds: [second.id, visibleMaterial.id] });
     await waitFor(() => expect(client.getLearningRoute).toHaveBeenCalledTimes(2));
 
-    fireEvent.click(screen.getByRole('button', { name: /nuevo contenido en unidad real/i }));
+    fireEvent.click(screen.getByRole('button', { name: /agregar contenido a unidad real/i }));
     fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'ASSIGNMENT' } });
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Nueva actividad' } });
     fireEvent.change(screen.getByLabelText('Instrucciones'), { target: { value: 'Entrega el documento.' } });

@@ -543,6 +543,10 @@ export class AcademicApiClient {
     return this.request(`learning-units/${id}/archive`, learningUnitSchema, { method: 'POST' });
   }
 
+  restoreLearningUnit(id: string) {
+    return this.request(`learning-units/${id}/restore`, learningUnitSchema, { method: 'POST' });
+  }
+
   reorderLearningUnits(courseSubjectId: string, input: ReorderLearning) {
     return this.request(`course-subjects/${courseSubjectId}/learning-units/reorder`, learningUnitSchema.array(), {
       method: 'POST',
@@ -581,6 +585,10 @@ export class AcademicApiClient {
 
   archiveLearningItem(id: string) {
     return this.request(`learning-items/${id}/archive`, learningItemSchema, { method: 'POST' });
+  }
+
+  restoreLearningItem(id: string) {
+    return this.request(`learning-items/${id}/restore`, learningItemSchema, { method: 'POST' });
   }
 
   moveLearningItem(id: string, input: MoveLearningItem) {
@@ -697,6 +705,7 @@ export type LearningApiClient = Pick<
   | 'createLearningUnit'
   | 'updateLearningUnit'
   | 'archiveLearningUnit'
+  | 'restoreLearningUnit'
   | 'duplicateLearningUnit'
   | 'reorderLearningUnits'
   | 'createLearningItem'
@@ -705,6 +714,7 @@ export type LearningApiClient = Pick<
   | 'publishLearningItem'
   | 'unpublishLearningItem'
   | 'archiveLearningItem'
+  | 'restoreLearningItem'
   | 'moveLearningItem'
   | 'duplicateLearningItem'
   | 'saveLearningItemDraft'
@@ -732,4 +742,3 @@ export type LearningApiClient = Pick<
   | 'submitSubmissionRevision'
   | 'reviewSubmissionRevision'
 >;
-

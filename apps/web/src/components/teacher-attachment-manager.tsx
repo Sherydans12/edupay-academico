@@ -32,7 +32,15 @@ function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function TeacherAttachmentManager({ api, item }: { api: AcademicApiClient; item: LearningItem }) {
+export function TeacherAttachmentManager({
+  api,
+  item,
+  onChanged,
+}: {
+  api: AcademicApiClient;
+  item: LearningItem;
+  onChanged?: (() => void) | undefined;
+}) {
   const category = categoryFor(item);
   const [attachments, setAttachments] = useState<StorageFile[]>([]);
   const [policy, setPolicy] = useState<StoragePolicy | null>(null);
@@ -84,6 +92,7 @@ export function TeacherAttachmentManager({ api, item }: { api: AcademicApiClient
       }
       await load();
       queue.clear();
+      onChanged?.();
     } catch (nextError) {
       setUploadError(uploadErrorMessage(nextError));
     } finally {
@@ -107,6 +116,7 @@ export function TeacherAttachmentManager({ api, item }: { api: AcademicApiClient
       await api.detachLearningAttachment(item.id, file.id);
       setFileToDetach(null);
       await load();
+      onChanged?.();
     } catch (nextError) {
       setError(nextError instanceof AcademicApiError ? nextError.message : 'No pudimos quitar el archivo del contenido.');
     } finally {
@@ -122,7 +132,7 @@ export function TeacherAttachmentManager({ api, item }: { api: AcademicApiClient
       <div className="section-heading">
         <div>
           <h3 id={`attachments-title-${item.id}`}>Archivos adjuntos</h3>
-          <p>Los archivos se guardan como recursos vinculados a este contenido.</p>
+          <p>Agrega materiales de apoyo para este contenido.</p>
         </div>
         <Badge tone={uploadsBlocked ? 'warning' : 'info'}>
           {attachments.length} archivo{attachments.length === 1 ? '' : 's'}
@@ -243,5 +253,32 @@ export function TeacherAttachmentManager({ api, item }: { api: AcademicApiClient
         </Dialog>
       ) : null}
     </Card>
+  );
+}
+
+export function TeacherAttachmentDialog({
+  api,
+  item,
+  onChanged,
+  onClose,
+}: {
+  api: AcademicApiClient;
+  item: LearningItem;
+  onChanged?: (() => void) | undefined;
+  onClose: () => void;
+}) {
+  const itemType = item.type === 'ASSIGNMENT' ? 'Actividad' : item.type === 'ASSESSMENT' ? 'Evaluación' : 'Material';
+
+  return (
+    <Dialog
+      description={`${itemType}: ${item.title}`}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      open
+      title="Archivos adjuntos"
+    >
+      <TeacherAttachmentManager api={api} item={item} onChanged={onChanged} />
+    </Dialog>
   );
 }

@@ -19,7 +19,8 @@ describe('Academic context screens', () => {
     render(<TeacherAcademicSubjectsScreen api={client({ getTeacherContextSubjects: vi.fn(async () => [contextSubject]), getTeacherCourseSubjectRoster: vi.fn(async () => [{ access: ['COURSE_DEFAULT' as const], student: { id, identityUserId: null, source: 'MANUAL', externalReference: null, firstName: 'Emilia', lastName: 'Vargas', email: null, status: 'ACTIVE' as const, createdAt: timestamp, updatedAt: timestamp } }]) })} />);
     expect(await screen.findByRole('heading', { name: 'Lenguaje y Comunicación' })).toBeTruthy();
     expect(await screen.findByText(/asignado por académico/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /ver roster/i }));
+    expect(screen.queryByText(/learning api|coursesubjects/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /ver estudiantes/i }));
     expect(await screen.findByText('Emilia Vargas')).toBeTruthy();
   });
 });

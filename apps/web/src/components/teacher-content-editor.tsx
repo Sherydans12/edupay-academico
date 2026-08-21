@@ -493,12 +493,13 @@ export function TeacherContentEditor({
                   disabled={isEditing}
                   id="editor-type"
                   label="Tipo de contenido"
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setForm({
                       ...form,
                       type: event.target.value as LearningItem['type'],
-                    })
-                  }
+                    });
+                    window.requestAnimationFrame(() => document.getElementById('editor-title')?.focus());
+                  }}
                   value={form.type}
                 >
                   <option value="MATERIAL">Material (lecturas, guías y recursos)</option>

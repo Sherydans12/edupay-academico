@@ -122,3 +122,16 @@ This document complements `apps/web/DESIGN.md` and `docs/design/STUDENT-EXPERIEN
   - Seamlessly scales from 375px mobile screens to 1440px desktop displays.
   - Bottom sticky navigation bar on mobile devices with safe-area insets.
   - Stacked form fields and adaptive two-column layouts.
+
+---
+
+## 5. Teacher UX V2 — continuity and reversible authoring
+
+- **Natural language:** Teacher-facing copy describes the academic task and never exposes implementation terms such as APIs, internal entity names, endpoints, or backend integration.
+- **Context-preserving mutations:** Reorder, move, duplicate, publish, archive, restore, and unit edits refresh only the active subject route. The subject workspace stays mounted, the viewport is not reset, and concise live status copy confirms the result.
+- **Unit structure:** The `Agregar contenido` action lives inside its own unit after that unit’s item list. Empty units state “No hay contenido en esta unidad” immediately above the same local action. This keeps consecutive empty units, long titles, and dense routes unambiguous.
+- **Order controls:** Up and down use distinct arrow icons, explicit Spanish accessible names, and tooltips: “Mover hacia arriba” and “Mover hacia abajo”.
+- **Attachments:** From the workspace, attachments open in a modal labeled with both “Archivos adjuntos” and the selected content’s type and title. The native modal provides protected focus, Escape and explicit close actions, and restores focus to the invoking control. Attachment changes refresh only the current route.
+- **Archive and restore:** Archiving never deletes the learning item, its submissions, reviews, publication record, or revision history. `Restaurar contenido` changes an archived item to `DRAFT` (never directly to published), increments its version, creates an append-only `RESTORED` revision, and records an audit event. Archived units receive the equivalent restore-to-draft behavior.
+- **Editor action bar:** The fixed editor footer always has reserved content space, including mobile safe-area space. At narrow widths its controls stack rather than covering the final field, so focus and keyboard use keep the active field visible.
+- **Reversibility:** Teacher content changes remain recoverable through working drafts, immutable history, restore-to-draft, subsequent reorder/move, and safe attachment detachment. There is no permanent-delete action for learning content.

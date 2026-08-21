@@ -11,6 +11,9 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Screen tests share browser globals and identity adapter seams. Running
+    // files serially prevents one workspace fixture from leaking into another.
+    fileParallelism: false,
     include: ['src/**/*.spec.{ts,tsx}'],
   },
 });

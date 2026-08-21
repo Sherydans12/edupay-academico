@@ -23,22 +23,30 @@ export function Dialog({
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = controlledOpen ?? uncontrolledOpen;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   const setOpen = (next: boolean) => {
+    if (!next && openerRef.current) {
+      const opener = openerRef.current;
+      openerRef.current = null;
+      window.setTimeout(() => opener.focus(), 0);
+    }
     if (!isControlled) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
-  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       try {
         if (typeof dialog.showModal === 'function') dialog.showModal();
         else dialog.open = true;
       } catch {
         dialog.setAttribute('open', '');
       }
+      dialog.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus();
     }
     if (!open && dialog.open) {
       try {
@@ -54,6 +62,7 @@ export function Dialog({
       {openLabel ? <Button onClick={() => setOpen(true)}>{openLabel}</Button> : null}
       <dialog
         className="ui-dialog"
+        aria-modal="true"
         onCancel={() => setOpen(false)}
         onClose={() => setOpen(false)}
         ref={dialogRef}

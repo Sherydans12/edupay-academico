@@ -5,9 +5,9 @@ import { AcademicApiError, type AcademicApiClient } from '@/api/academic-client'
 import { ContentHistoryDrawer } from '@/components/content-history-drawer';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
 import { RichTextEditor } from '@/components/rich-text-editor';
-import { TeacherAttachmentManager } from '@/components/teacher-attachment-manager';
+import { TeacherAttachmentDialog, TeacherAttachmentManager } from '@/components/teacher-attachment-manager';
 import { TeacherContentEditor } from '@/components/teacher-content-editor';
-import { TeacherCalendarScreen, TeacherReviewsScreen } from '@/features/teacher-screens';
+import { TeacherCalendarScreen, TeacherReviewsScreen, TeacherSubjectScreen } from '@/features/teacher-screens';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/docente/asignaturas',
@@ -389,6 +389,41 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       await waitFor(() => {
         expect(detachLearningAttachment).toHaveBeenCalledWith(item.id, file.id);
       });
+    });
+
+    it('opens contextual attachments above the workspace and closes on Escape', async () => {
+      const onClose = vi.fn();
+      const api = {
+        getStoragePolicy: vi.fn().mockResolvedValue(null),
+        getStorageUsage: vi.fn().mockResolvedValue(null),
+        listLearningAttachments: vi.fn().mockResolvedValue([]),
+      } as unknown as AcademicApiClient;
+
+      render(<TeacherAttachmentDialog api={api} item={item} onClose={onClose} />);
+
+      expect((await screen.findAllByRole('heading', { name: 'Archivos adjuntos' })).length).toBeGreaterThan(0);
+      expect(screen.getByText(`Actividad: ${item.title}`)).toBeTruthy();
+      fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  describe('Teacher workspace continuity', () => {
+    it('uses distinct accessible order controls and keeps content actions inside each unit', async () => {
+      const emptyUnit = { ...unit, id: 'unit-empty', items: [], title: 'Unidad vacía con un título especialmente largo' };
+      const getTeacherContextSubjects = vi.fn().mockResolvedValue([subject]);
+      const getLearningRoute = vi.fn().mockResolvedValue({ courseSubjectId: subject.id, units: [unit, emptyUnit] });
+      const api = { getLearningRoute, getTeacherContextSubjects } as unknown as AcademicApiClient;
+
+      render(<TeacherSubjectScreen api={api} courseSubjectId={subject.id} />);
+
+      expect(await screen.findByRole('heading', { name: 'Lenguaje y Comunicación' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: `Mover ${item.title} hacia arriba` })).toBeTruthy();
+      expect(screen.getByRole('button', { name: `Mover ${item.title} hacia abajo` })).toBeTruthy();
+      expect(screen.getByRole('button', { name: `Editar ${item.title}` })).toBeTruthy();
+      expect(screen.getByText('No hay contenido en esta unidad.')).toBeTruthy();
+      expect(screen.getByRole('button', { name: `Agregar contenido a ${emptyUnit.title}` })).toBeTruthy();
+      expect(screen.queryByText(/API autorizado|Learning API/i)).toBeNull();
     });
   });
 

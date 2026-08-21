@@ -100,13 +100,13 @@ export function TeacherSubmissionQueue({
     const timer = window.setTimeout(() => {
       setError('');
       setLoading(true);
-      void getTeacherRoster(api, courseSubjectId).then((nextRoster) => { if (mounted) setRoster(nextRoster); }).catch((nextError) => { if (mounted) { setRoster([]); setError(nextError instanceof AcademicApiError ? nextError.message : 'No pudimos cargar el roster.'); } }).finally(() => { if (mounted) setLoading(false); });
+      void getTeacherRoster(api, courseSubjectId).then((nextRoster) => { if (mounted) setRoster(nextRoster); }).catch((nextError) => { if (mounted) { setRoster([]); setError(nextError instanceof AcademicApiError ? nextError.message : 'No pudimos cargar la lista de estudiantes.'); } }).finally(() => { if (mounted) setLoading(false); });
     }, 0);
     return () => { mounted = false; window.clearTimeout(timer); };
   }, [api, courseSubjectId]);
   if (!items.length) return <EmptyState icon={<Icon name="review" />} title="No hay actividades para revisar" description="Publica una actividad o evaluación para recibir entregas." />;
   if (loading) return <div aria-label="Cargando estudiantes autorizados" className="academic-loading"><Skeleton /><Skeleton /></div>;
-  if (error) return <Alert title="No pudimos cargar el roster" tone="error">{error}</Alert>;
+  if (error) return <Alert title="No pudimos cargar la lista de estudiantes" tone="error">{error}</Alert>;
   return <div className="teacher-submissions-stack">{items.map((item) => <TeacherSubmissionList api={api} item={item} key={item.id} roster={roster} />)}</div>;
 }
 
@@ -184,7 +184,7 @@ export function TeacherSubmissionDetail({ api, submissionId }: { api: AcademicAp
           {revision.reviews.length ? <div className="revision-reviews"><strong>Historial de revisión</strong>{revision.reviews.map((reviewEntry) => <div className="review-entry" key={reviewEntry.id}><Badge tone={reviewEntry.action === 'CHANGES_REQUESTED' ? 'warning' : reviewEntry.action === 'REVIEWED' ? 'success' : 'info'}>{reviewLabel(reviewEntry.action)}</Badge><span>{reviewEntry.comment ?? 'Sin comentario adicional.'}</span><small>{formatDate(reviewEntry.createdAt)}</small></div>)}</div> : null}
         </article>)}</div>
       </section>
-      <aside className="review-panel"><div className="review-student"><span className="subject-hero__mark"><Icon name="people" /></span><div><h1>{studentName(submission.studentId, roster)}</h1><p>Revisión {selectedRevision?.revisionNumber ?? '—'} · {status?.label}</p></div></div><Textarea id="teacher-review-comment" label="Comentario para el estudiante" onChange={(event) => setComment(event.target.value)} placeholder="Escribe una orientación concreta…" value={comment} /><div className="review-actions"><Button disabled={!comment.trim() || saving} loading={saving} onClick={() => void review('COMMENTED')} variant="secondary"><Icon name="message" />Comentar</Button><Button disabled={submission.status !== 'SUBMITTED' || saving} loading={saving} onClick={() => void review('REVIEWED')}><Icon name="check" />Marcar revisada</Button><Button className="review-action--changes" disabled={submission.status !== 'SUBMITTED' || saving} loading={saving} onClick={() => void review('CHANGES_REQUESTED')} variant="accent"><Icon name="review" />Solicitar cambios</Button></div><p className="integration-note"><Icon name="layers" />“Marcar revisada” y “Solicitar cambios” cambian el estado del Submission. “Comentar” solo agrega una entrada al historial.</p></aside>
+      <aside className="review-panel"><div className="review-student"><span className="subject-hero__mark"><Icon name="people" /></span><div><h1>{studentName(submission.studentId, roster)}</h1><p>Revisión {selectedRevision?.revisionNumber ?? '—'} · {status?.label}</p></div></div><Textarea id="teacher-review-comment" label="Comentario para el estudiante" onChange={(event) => setComment(event.target.value)} placeholder="Escribe una orientación concreta…" value={comment} /><div className="review-actions"><Button disabled={!comment.trim() || saving} loading={saving} onClick={() => void review('COMMENTED')} variant="secondary"><Icon name="message" />Comentar</Button><Button disabled={submission.status !== 'SUBMITTED' || saving} loading={saving} onClick={() => void review('REVIEWED')}><Icon name="check" />Marcar revisada</Button><Button className="review-action--changes" disabled={submission.status !== 'SUBMITTED' || saving} loading={saving} onClick={() => void review('CHANGES_REQUESTED')} variant="accent"><Icon name="review" />Solicitar cambios</Button></div><p className="integration-note"><Icon name="layers" />“Marcar revisada” y “Solicitar cambios” actualizan el estado de la entrega. “Comentar” solo agrega una entrada al historial.</p></aside>
     </div>
   </>;
 }

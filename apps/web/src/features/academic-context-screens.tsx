@@ -73,15 +73,15 @@ export function TeacherAcademicSubjectsScreen({ api, session = demoSessions.teac
   }
 
   return <AppShell dataMode="real" session={currentSession}>
-    <PageHeading description="Solo aparecen los CourseSubjects donde el servidor reconoce una asignación docente activa." title="Mis espacios de enseñanza" />
+    <PageHeading description="Aquí aparecen las asignaturas en las que tienes una asignación docente activa." title="Mis espacios de enseñanza" />
     <ContextState error={error} loading={loading} onRetry={() => void load()}>
       {items.length ? <div className="academic-context-grid">{items.map((item) => <Card className="academic-context-card" key={item.id}>
         <div className="academic-context-card__mark">{subjectName(item).slice(0, 3).toUpperCase()}</div>
         <div><h2>{subjectName(item)}</h2><p>{courseName(item)}</p><Badge tone="success">Asignado por Académico</Badge></div>
-        <div className="context-card__actions"><Button onClick={() => void showRoster(item.id)} variant="secondary"><Icon name="people" />Ver roster</Button><Link className="button-link button-link--primary" href={`/docente/asignaturas/${item.id}`}>Gestionar ruta <Icon name="chevron-right" /></Link></div>
-        <div className="academic-context-card__boundary"><Icon name="layers" /><span>Contenido conectado al Learning API</span></div>
-        {selectedId === item.id ? <div aria-live="polite" className="academic-roster">{rosterLoading ? <Skeleton /> : roster.length ? <ul>{roster.map((entry) => <li key={entry.student.id}><span>{entry.student.firstName} {entry.student.lastName}</span><small>{entry.access.includes('DIRECT') ? 'Acceso directo' : 'Curso por defecto'}</small></li>)}</ul> : <p>Roster vacío o no disponible.</p>}</div> : null}
-      </Card>)}</div> : <EmptyState icon={<Icon name="book" />} title="No tienes CourseSubjects asignados" description="Un administrador debe asignarte a un CourseSubject activo para que puedas ver estudiantes autorizados." />}
+        <div className="context-card__actions"><Button onClick={() => void showRoster(item.id)} variant="secondary"><Icon name="people" />Ver estudiantes</Button><Link className="button-link button-link--primary" href={`/docente/asignaturas/${item.id}`}>Abrir espacio <Icon name="chevron-right" /></Link></div>
+        <div className="academic-context-card__boundary"><Icon name="layers" /><span>Organiza el contenido y las actividades de esta asignatura.</span></div>
+        {selectedId === item.id ? <div aria-live="polite" className="academic-roster">{rosterLoading ? <Skeleton /> : roster.length ? <ul>{roster.map((entry) => <li key={entry.student.id}><span>{entry.student.firstName} {entry.student.lastName}</span><small>{entry.access.includes('DIRECT') ? 'Acceso directo' : 'Curso por defecto'}</small></li>)}</ul> : <p>No hay estudiantes disponibles para mostrar.</p>}</div> : null}
+      </Card>)}</div> : <EmptyState icon={<Icon name="book" />} title="No tienes asignaturas asignadas" description="Cuando tengas una asignación docente activa, aparecerá aquí." />}
     </ContextState>
   </AppShell>;
 }

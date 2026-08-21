@@ -12,7 +12,7 @@ import { AppShell } from '@/components/app-shell';
 import { ContentHistoryDrawer } from '@/components/content-history-drawer';
 import { Icon } from '@/components/icons';
 import { CompactStat, PageHeading, SubjectCard } from '@/components/page-primitives';
-import { TeacherAttachmentManager } from '@/components/teacher-attachment-manager';
+import { TeacherAttachmentDialog } from '@/components/teacher-attachment-manager';
 import { TeacherContentEditor } from '@/components/teacher-content-editor';
 import { TeacherSubmissionDetail, TeacherSubmissionQueue } from '@/components/teacher-submission-workflow';
 import { useTrustedCurrentSession, type TrustedCurrentSession } from '@/auth/current-session';
@@ -267,7 +267,7 @@ export function TeacherDashboardScreen({
               {/* Right Column: Reviews & Next Deadlines */}
               <aside className="week-plan">
                 <h2>Entregas y revisiones</h2>
-                <p>La información de archivos, entregas, historial y revisión está conectada al API autorizado.</p>
+                <p>Reúne las entregas pendientes, el historial y las revisiones de tus asignaturas.</p>
                 <Link className="button-link button-link--accent" href="/docente/revisiones">
                   <Icon name="review" />
                   Abrir revisiones
@@ -428,7 +428,18 @@ function useTeacherRoute(api: AcademicApiClient, requestedCourseSubjectId?: stri
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  return { error, load, loading, route, selected, subjects };
+  const refreshRoute = useCallback(async () => {
+    const subject = selected;
+    if (!subject) return;
+    try {
+      setError(null);
+      setRoute(await api.getLearningRoute(subject.id));
+    } catch (nextError) {
+      setError(nextError);
+    }
+  }, [api, selected]);
+
+  return { error, load, loading, refreshRoute, route, selected, subjects };
 }
 
 export function TeacherSubjectScreen({
@@ -460,17 +471,22 @@ export function TeacherSubjectScreen({
   const [confirming, setConfirming] = useState(false);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [actionStatus, setActionStatus] = useState('');
 
   async function refresh() {
-    await data.load();
+    // Keep the route mounted and the current viewport intact after normal
+    // authoring mutations. The initial load remains responsible for subjects.
+    await data.refreshRoute();
   }
 
-  async function runAction(action: () => Promise<void>, confirmedAction = action) {
+  async function runAction(action: () => Promise<void>, success = 'Cambios guardados.', confirmedAction = action) {
     setSaving(true);
     setFormError('');
+    setActionStatus('');
     try {
       await action();
       await refresh();
+      setActionStatus(success);
     } catch (err) {
       if (isSensitiveConfirmationError(err)) {
         setConfirmation({
@@ -518,19 +534,25 @@ export function TeacherSubjectScreen({
         duplicateItems: true,
         title: `${unit.title} (Copia)`,
       });
-    });
+    }, 'Unidad duplicada.');
   }
 
   async function archiveUnit(unit: LearningUnitWithItems) {
     await runAction(async () => {
       await client.archiveLearningUnit(unit.id);
-    });
+    }, 'Unidad archivada.');
+  }
+
+  async function restoreUnit(unit: LearningUnitWithItems) {
+    await runAction(async () => {
+      await client.restoreLearningUnit(unit.id);
+    }, 'Unidad restaurada como borrador.');
   }
 
   async function activateUnit(unit: LearningUnitWithItems) {
     await runAction(async () => {
       await client.updateLearningUnit(unit.id, { status: 'ACTIVE' });
-    });
+    }, 'Unidad activada.');
   }
 
   async function moveUnit(index: number, direction: -1 | 1) {
@@ -547,7 +569,7 @@ export function TeacherSubjectScreen({
 
     await runAction(async () => {
       await client.reorderLearningUnits(subject.id, { orderedIds });
-    });
+    }, direction === -1 ? 'Unidad movida hacia arriba.' : 'Unidad movida hacia abajo.');
   }
 
   // Item inline save operations
@@ -583,13 +605,13 @@ export function TeacherSubjectScreen({
       }
       setItemFormDraft(null);
     };
-    await runAction(() => execute(false), () => execute(true));
+    await runAction(() => execute(false), 'Cambios guardados.', () => execute(true));
   }
 
   async function publish(item: LearningItem) {
     await runAction(async () => {
       await client.publishLearningItem(item.id);
-    });
+    }, 'Contenido publicado.');
   }
 
   async function schedule(item: LearningItem) {
@@ -601,6 +623,7 @@ export function TeacherSubjectScreen({
     }
     await runAction(
       () => client.scheduleLearningItem(item.id, { confirmSensitiveChange: false, publishAt: value }).then(() => { setScheduleDraft(null); }),
+      'Publicación programada.',
       () => client.scheduleLearningItem(item.id, { confirmSensitiveChange: true, publishAt: value }).then(() => { setScheduleDraft(null); })
     );
   }
@@ -616,7 +639,7 @@ export function TeacherSubjectScreen({
 
     await runAction(async () => {
       await client.reorderLearningItems(unit.id, { orderedIds });
-    });
+    }, direction === -1 ? 'Contenido movido hacia arriba.' : 'Contenido movido hacia abajo.');
   }
 
   async function executeMoveItemToUnit() {
@@ -626,6 +649,7 @@ export function TeacherSubjectScreen({
       await client.moveLearningItem(moveItemData.item.id, { targetLearningUnitId: targetUnitId });
       setMoveItemData(null);
       await refresh();
+      setActionStatus('Contenido movido a la unidad seleccionada.');
     } catch (err) {
       setFormError(apiFormError(err));
     } finally {
@@ -638,13 +662,19 @@ export function TeacherSubjectScreen({
       await client.duplicateLearningItem(item.id, {
         title: `${item.title} (Copia)`,
       });
-    });
+    }, 'Contenido duplicado.');
   }
 
   async function archiveItem(item: LearningItem) {
     await runAction(async () => {
       await client.archiveLearningItem(item.id);
-    });
+    }, 'Contenido archivado.');
+  }
+
+  async function restoreItem(item: LearningItem) {
+    await runAction(async () => {
+      await client.restoreLearningItem(item.id);
+    }, 'Contenido restaurado como borrador.');
   }
 
   async function confirmSensitive() {
@@ -654,6 +684,7 @@ export function TeacherSubjectScreen({
       await confirmation.run();
       setConfirmation(null);
       await refresh();
+      setActionStatus('Cambios guardados.');
     } catch (err) {
       setFormError(apiFormError(err));
     } finally {
@@ -733,6 +764,7 @@ export function TeacherSubjectScreen({
             </section>
 
             {formError ? <Alert title="No se pudo completar la acción" tone="error">{formError}</Alert> : null}
+            {actionStatus ? <p aria-live="polite" className="teacher-action-status" role="status">{actionStatus}</p> : null}
 
             {/* Inline Unit Form */}
             {unitFormDraft ? (
@@ -802,14 +834,14 @@ export function TeacherSubjectScreen({
                 <div className="section-heading">
                   <div>
                     <h3>{itemFormDraft.values.id ? 'Editar contenido' : 'Nuevo contenido'}</h3>
-                    <p>Elige el tipo primero para mostrar los campos que el API requiere.</p>
+                    <p>Elige el tipo y completa sólo la información necesaria.</p>
                   </div>
                 </div>
                 <div className="learning-editor-grid">
                   <Select
                     id="item-type"
                     label="Tipo"
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setItemFormDraft({
                         ...itemFormDraft,
                         values: {
@@ -817,8 +849,9 @@ export function TeacherSubjectScreen({
                           dueAt: event.target.value === 'MATERIAL' || event.target.value === 'ANNOUNCEMENT' ? '' : itemFormDraft.values.dueAt,
                           type: event.target.value as LearningItem['type'],
                         },
-                      })
-                    }
+                      });
+                      window.requestAnimationFrame(() => document.getElementById('item-title')?.focus());
+                    }}
                     value={itemFormDraft.values.type}
                   >
                     <option value="MATERIAL">Material</option>
@@ -933,7 +966,7 @@ export function TeacherSubjectScreen({
                       <div className="authoring-toolbar">
                         <div>
                           <h2>Ruta de aprendizaje</h2>
-                          <p>Organiza unidades e ítems con acciones de teclado y botones de orden accesibles.</p>
+                          <p>Organiza unidades, materiales, actividades, evaluaciones y anuncios de esta asignatura.</p>
                         </div>
                         <Badge tone="info">Vista docente</Badge>
                       </div>
@@ -968,24 +1001,24 @@ export function TeacherSubjectScreen({
 
                                 <div className="teacher-unit-actions">
                                   <Button
-                                    aria-label={`Subir unidad ${unit.title}`}
+                                    aria-label={`Mover ${unit.title} hacia arriba`}
                                     disabled={unitIndex === 0 || saving}
                                     onClick={() => void moveUnit(unitIndex, -1)}
                                     size="icon"
-                                    title="Subir"
+                                    title="Mover hacia arriba"
                                     variant="ghost"
                                   >
-                                    <Icon name="chevron-down" className="rotate-180" />
+                                    <Icon name="arrow-up" />
                                   </Button>
                                   <Button
-                                    aria-label={`Bajar unidad ${unit.title}`}
+                                    aria-label={`Mover ${unit.title} hacia abajo`}
                                     disabled={unitIndex === data.route!.units.length - 1 || saving}
                                     onClick={() => void moveUnit(unitIndex, 1)}
                                     size="icon"
-                                    title="Bajar"
+                                    title="Mover hacia abajo"
                                     variant="ghost"
                                   >
-                                    <Icon name="chevron-down" />
+                                    <Icon name="arrow-down" />
                                   </Button>
 
                                   <Button
@@ -997,6 +1030,12 @@ export function TeacherSubjectScreen({
                                     Editar unidad
                                   </Button>
 
+                                  {unit.status === 'ARCHIVED' ? (
+                                    <Button onClick={() => void restoreUnit(unit)} size="sm" variant="secondary">
+                                      <Icon name="history" />
+                                      Restaurar unidad
+                                    </Button>
+                                  ) : null}
                                   {unit.status === 'DRAFT' ? (
                                     <Button onClick={() => void activateUnit(unit)} size="sm">
                                       Activar
@@ -1089,6 +1128,8 @@ export function TeacherSubjectScreen({
                                               ? 'Publicado'
                                               : item.publicationStatus === 'SCHEDULED'
                                               ? 'Programado'
+                                              : item.publicationStatus === 'ARCHIVED'
+                                              ? 'Archivado'
                                               : 'Borrador'}
                                           </Badge>
 
@@ -1103,24 +1144,24 @@ export function TeacherSubjectScreen({
 
                                         <div className="learning-item__actions">
                                           <Button
-                                            aria-label={`Subir ${item.title}`}
+                                            aria-label={`Mover ${item.title} hacia arriba`}
                                             disabled={itemIndex === 0 || saving}
                                             onClick={() => void moveItem(unit, itemIndex, -1)}
                                             size="icon"
-                                            title="Subir"
+                                            title="Mover hacia arriba"
                                             variant="ghost"
                                           >
-                                            <Icon name="chevron-down" className="rotate-180" />
+                                            <Icon name="arrow-up" />
                                           </Button>
                                           <Button
-                                            aria-label={`Bajar ${item.title}`}
+                                            aria-label={`Mover ${item.title} hacia abajo`}
                                             disabled={itemIndex === unit.items.length - 1 || saving}
                                             onClick={() => void moveItem(unit, itemIndex, 1)}
                                             size="icon"
-                                            title="Bajar"
+                                            title="Mover hacia abajo"
                                             variant="ghost"
                                           >
-                                            <Icon name="chevron-down" />
+                                            <Icon name="arrow-down" />
                                           </Button>
 
                                           <Button
@@ -1131,7 +1172,7 @@ export function TeacherSubjectScreen({
                                             size="sm"
                                             variant="secondary"
                                           >
-                                            <Icon name="settings" />
+                                            <Icon name="edit" />
                                             Editar
                                           </Button>
 
@@ -1174,7 +1215,17 @@ export function TeacherSubjectScreen({
                                             </Button>
                                           ) : null}
 
-                                          {item.publicationStatus !== 'ARCHIVED' ? (
+                                          {item.publicationStatus === 'ARCHIVED' ? (
+                                            <Button
+                                              aria-label={`Restaurar ${item.title} como borrador`}
+                                              onClick={() => void restoreItem(item)}
+                                              size="sm"
+                                              variant="secondary"
+                                            >
+                                              <Icon name="history" />
+                                              Restaurar
+                                            </Button>
+                                          ) : (
                                             <Button
                                               aria-label={`Archivar ${item.title}`}
                                               onClick={() => void archiveItem(item)}
@@ -1184,7 +1235,7 @@ export function TeacherSubjectScreen({
                                             >
                                               <Icon name="archive" />
                                             </Button>
-                                          ) : null}
+                                          )}
 
                                           <DropdownMenu
                                             label="Más opciones"
@@ -1237,15 +1288,15 @@ export function TeacherSubjectScreen({
                                   })}
                                 </div>
                               ) : (
-                                <p className="learning-route__empty">
-                                  Aún no hay contenido visible en esta unidad.
-                                </p>
+                                  <div className="teacher-unit-empty">
+                                    <p>No hay contenido en esta unidad.</p>
+                                  </div>
                               )}
 
                               {/* Unit Secondary Add / Schedule actions */}
                               <div className="learning-unit-secondary-actions">
                                 <Button
-                                  aria-label={`Nuevo contenido en ${unit.title}`}
+                                  aria-label={`Agregar contenido a ${unit.title}`}
                                   disabled={unit.status === 'ARCHIVED'}
                                   onClick={() =>
                                     setItemFormDraft({ unitId: unit.id, values: initialItemDraft(null) })
@@ -1254,7 +1305,7 @@ export function TeacherSubjectScreen({
                                   variant="secondary"
                                 >
                                   <Icon name="plus" />
-                                  Nuevo contenido en {unit.title}
+                                  Agregar contenido
                                 </Button>
 
                                 {scheduleDraft?.itemId && unit.items.some((it) => it.id === scheduleDraft.itemId) ? (
@@ -1290,9 +1341,13 @@ export function TeacherSubjectScreen({
                         <p className="learning-route__empty">Aún no hay contenido visible en esta ruta.</p>
                       )}
 
-                      {/* Modal Attachment Manager when active */}
                       {attachmentItem ? (
-                        <TeacherAttachmentManager api={client} item={attachmentItem} />
+                        <TeacherAttachmentDialog
+                          api={client}
+                          item={attachmentItem}
+                          onClose={() => setAttachmentItem(null)}
+                          onChanged={() => void refresh()}
+                        />
                       ) : null}
                     </div>
                   ),
@@ -1317,8 +1372,8 @@ export function TeacherSubjectScreen({
                     <Card className="team-panel">
                       <Icon name="people" />
                       <div>
-                        <strong>Equipo del CourseSubject</strong>
-                        <small>Todos los docentes asignados comparten este espacio según la autorización del servidor.</small>
+                        <strong>Equipo docente</strong>
+                        <small>Los docentes asignados comparten este espacio de trabajo.</small>
                       </div>
                     </Card>
                   ),
@@ -1492,7 +1547,7 @@ export function TeacherReviewsScreen({
   return (
     <AppShell dataMode="real" session={currentSession}>
       <PageHeading
-        description="Solo aparecen entregas de CourseSubjects donde el servidor reconoce tu asignación docente."
+        description="Aquí encontrarás las entregas de las asignaturas que tienes asignadas."
         title="Revisiones"
       />
 
@@ -1506,7 +1561,7 @@ export function TeacherReviewsScreen({
                   <div className="section-heading">
                     <div>
                       <h2>{subjectName(context.subject)} · {courseName(context.subject)}</h2>
-                      <p>Entregas y evaluaciones autorizadas para este CourseSubject.</p>
+                      <p>Entregas y evaluaciones de esta asignatura.</p>
                     </div>
                     <Badge tone="info">{context.items.length} contenido{context.items.length === 1 ? '' : 's'}</Badge>
                   </div>
