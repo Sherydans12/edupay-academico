@@ -562,6 +562,48 @@ describe.runIf(testDatabaseUrl)(
       expect(restoredItem.description).toBe('V1 descripción');
     });
 
+    it('restores archived content to draft without deleting history or student evidence', async () => {
+      const admin = await token('restore-a', 'admin', ['TENANT_ADMIN']);
+      const structure = await createStructure(admin, '2° Medio C', 'Biología');
+      const teacher = await createTeacher(admin, 'Rosa', 'Restauradora');
+      const student = await createStudent(admin, 'Mateo', 'Evidencia');
+      await linkTeacher(teacher.id, 'teacher-restore', admin);
+      await linkStudent(student.id, 'student-restore', admin);
+      await post(admin, '/api/v1/course-enrollments', { courseId: structure.course.id, studentId: student.id });
+      await post(admin, '/api/v1/course-subject-teachers', {
+        courseSubjectId: structure.courseSubject.id,
+        teacherIds: [teacher.id],
+      });
+
+      const teacherToken = await token('restore-a', 'teacher-restore', ['TEACHER']);
+      const unit = await post(teacherToken, '/api/v1/learning-units', {
+        courseSubjectId: structure.courseSubject.id,
+        title: 'Ecosistemas',
+      });
+      await patch(teacherToken, `/api/v1/learning-units/${unit.id}`, { status: 'ACTIVE' });
+      const item = await post(teacherToken, `/api/v1/learning-units/${unit.id}/items`, {
+        content: 'Material original',
+        title: 'Guía de ecosistemas',
+        type: 'MATERIAL',
+      });
+      await post(teacherToken, `/api/v1/learning-items/${item.id}/publish`, {});
+      await post(teacherToken, `/api/v1/learning-items/${item.id}/archive`, {});
+
+      const restored = await post(teacherToken, `/api/v1/learning-items/${item.id}/restore`, {});
+      expect(restored.publicationStatus).toBe('DRAFT');
+      expect(restored.version).toBe(4);
+      const history = (await api(teacherToken).get(`/api/v1/learning-items/${item.id}/history`).expect(200)).body;
+      expect(history[0]).toMatchObject({ operation: 'RESTORED', revisionNumber: 4 });
+      expect(history.some((revision: { operation: string }) => revision.operation === 'ARCHIVED')).toBe(true);
+      expect(audit.events.some((event) => event.action === 'LEARNING_ITEM_RESTORED')).toBe(true);
+
+      await post(teacherToken, `/api/v1/learning-units/${unit.id}/archive`, {});
+      const restoredUnit = await post(teacherToken, `/api/v1/learning-units/${unit.id}/restore`, {});
+      expect(restoredUnit.status).toBe('DRAFT');
+      const unitHistory = (await api(teacherToken).get(`/api/v1/learning-units/${unit.id}/history`).expect(200)).body;
+      expect(unitHistory[0].operation).toBe('RESTORED');
+    });
+
     it('supports moving, unpublishing, and duplicating learning items and units', async () => {
       const admin = await token('move-dup-a', 'admin', ['TENANT_ADMIN']);
       const structure = await createStructure(admin, '3° Medio A', 'Matemáticas');

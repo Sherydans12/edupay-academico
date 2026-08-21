@@ -93,6 +93,12 @@ export class LearningManagementController {
     return this.learning.archiveUnit(this.context(), id);
   }
 
+  @Post('learning-units/:id/restore')
+  @ContractResponse(learningUnitSchema)
+  restoreArchivedUnit(@Param('id', uuid) id: string): Promise<object> {
+    return this.learning.restoreArchivedUnit(this.context(), id);
+  }
+
   @Post('learning-units/:id/duplicate')
   @ContractBody(duplicateLearningUnitSchema)
   @ContractResponse(learningUnitSchema)
@@ -163,6 +169,12 @@ export class LearningManagementController {
   @ContractResponse(learningItemSchema)
   archiveItem(@Param('id', uuid) id: string): Promise<object> {
     return this.learning.archiveItem(this.context(), id);
+  }
+
+  @Post('learning-items/:id/restore')
+  @ContractResponse(learningItemSchema)
+  restoreArchivedItem(@Param('id', uuid) id: string): Promise<object> {
+    return this.learning.restoreArchivedItem(this.context(), id);
   }
 
   @Post('learning-items/:id/move')

@@ -311,6 +311,34 @@ export class LearningService {
     return mapLearningUnit(record);
   }
 
+  async restoreArchivedUnit(
+    context: AcademicRequestContext,
+    id: string,
+  ): Promise<object> {
+    const scope = this.managerScope(context);
+    const current = await this.learningUnit(scope, id);
+    await this.requireCourseSubjectForMutation(context, scope, current.courseSubjectId);
+    if (current.status !== 'ARCHIVED') return mapLearningUnit(current);
+    const record = await this.prisma.$transaction(async (tx) => {
+      const restored = await tx.learningUnit.update({
+        where: { tenantId_id: { tenantId: scope.tenantId, id } },
+        data: { status: 'DRAFT', version: { increment: 1 } },
+      });
+      await this.recordRevision(tx, {
+        tenantId: scope.tenantId,
+        entityType: 'LEARNING_UNIT',
+        entityId: id,
+        revisionNumber: restored.version,
+        operation: 'RESTORED',
+        snapshot: mapLearningUnit(restored),
+        context,
+      });
+      return restored;
+    });
+    await this.recordAudit(context, 'LEARNING_UNIT_RESTORED', 'LearningUnit', id, record.courseSubjectId);
+    return mapLearningUnit(record);
+  }
+
   async duplicateUnit(
     context: AcademicRequestContext,
     id: string,
@@ -1002,6 +1030,39 @@ export class LearningService {
       id,
       record.courseSubjectId,
     );
+    return mapLearningItem(record);
+  }
+
+  async restoreArchivedItem(
+    context: AcademicRequestContext,
+    id: string,
+  ): Promise<object> {
+    const scope = this.managerScope(context);
+    const current = await this.learningItem(scope, id);
+    await this.requireCourseSubjectForMutation(context, scope, current.courseSubjectId);
+    if (current.publicationStatus !== 'ARCHIVED') return mapLearningItem(current);
+    const record = await this.prisma.$transaction(async (tx) => {
+      const restored = await tx.learningItem.update({
+        where: { tenantId_id: { tenantId: scope.tenantId, id } },
+        data: {
+          publicationStatus: 'DRAFT',
+          publishAt: null,
+          updatedByIdentityUserId: context.principal.identityUserId,
+          version: { increment: 1 },
+        },
+      });
+      await this.recordRevision(tx, {
+        tenantId: scope.tenantId,
+        entityType: 'LEARNING_ITEM',
+        entityId: id,
+        revisionNumber: restored.version,
+        operation: 'RESTORED',
+        snapshot: mapLearningItem(restored),
+        context,
+      });
+      return restored;
+    });
+    await this.recordAudit(context, 'LEARNING_ITEM_RESTORED', 'LearningItem', id, record.courseSubjectId);
     return mapLearningItem(record);
   }
 
