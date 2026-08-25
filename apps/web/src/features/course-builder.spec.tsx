@@ -178,12 +178,14 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
       });
 
       // After save, isDirty resets, so beforeunload does not preventDefault
-      const cleanEvent = new Event('beforeunload', {
-        cancelable: true,
-      }) as BeforeUnloadEvent;
-      const cleanPreventSpy = vi.spyOn(cleanEvent, 'preventDefault');
-      window.dispatchEvent(cleanEvent);
-      expect(cleanPreventSpy).not.toHaveBeenCalled();
+      await waitFor(() => {
+        const cleanEvent = new Event('beforeunload', {
+          cancelable: true,
+        }) as BeforeUnloadEvent;
+        const cleanPreventSpy = vi.spyOn(cleanEvent, 'preventDefault');
+        window.dispatchEvent(cleanEvent);
+        expect(cleanPreventSpy).not.toHaveBeenCalled();
+      });
     });
 
     it('intercepts cancel action and asks confirmation if form is dirty', async () => {
