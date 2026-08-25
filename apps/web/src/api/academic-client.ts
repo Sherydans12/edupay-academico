@@ -68,6 +68,26 @@ import {
   type UploadIntent,
   updateLearningItemSchema,
   updateLearningUnitSchema,
+  contentRevisionSchema,
+  duplicateLearningItemSchema,
+  duplicateLearningUnitSchema,
+  learningItemDraftSchema,
+  moveLearningItemSchema,
+  publishLearningItemDraftSchema,
+  restoreRevisionSchema,
+  saveLearningItemDraftSchema,
+  storageReconciliationOptionsSchema,
+  storageReconciliationReportSchema,
+  type ContentRevision,
+  type DuplicateLearningItem,
+  type DuplicateLearningUnit,
+  type LearningItemDraft,
+  type MoveLearningItem,
+  type PublishLearningItemDraft,
+  type RestoreRevision,
+  type SaveLearningItemDraft,
+  type StorageReconciliationOptions,
+  type StorageReconciliationReport,
   type CreateAcademicYear,
   type CreateCourse,
   type CreateCourseEnrollment,
@@ -92,7 +112,7 @@ import {
   type VerifiedIdentityLink,
 } from '@edupay/contracts';
 import { apiErrorEnvelopeSchema, type ApiErrorDetail } from '@edupay/contracts';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import type { IdentitySessionAdapter } from '@/auth/current-session';
 
@@ -122,54 +142,63 @@ export type MultipartUploadImpl = (
  * The only browser transport for file bytes. It intentionally owns the
  * XMLHttpRequest details so components only deal with progress and state.
  */
-export const uploadMultipartWithXhr: MultipartUploadImpl = (options) => new Promise((resolve, reject) => {
-  const xhr = new XMLHttpRequest();
-  const formData = new FormData();
-  formData.append(options.fieldName, options.file, options.file.name);
-  let settled = false;
+export const uploadMultipartWithXhr: MultipartUploadImpl = (options) =>
+  new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append(options.fieldName, options.file, options.file.name);
+    let settled = false;
 
-  const cleanup = () => {
-    options.signal?.removeEventListener('abort', abort);
-  };
-  const settle = (callback: () => void) => {
-    if (settled) return;
-    settled = true;
-    cleanup();
-    callback();
-  };
-  const abort = () => {
-    xhr.abort();
-    settle(() => {
-      const error = new Error('UPLOAD_ABORTED');
-      (error as Error & { code?: string }).code = 'UPLOAD_ABORTED';
-      reject(error);
+    const cleanup = () => {
+      options.signal?.removeEventListener('abort', abort);
+    };
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback();
+    };
+    const abort = () => {
+      xhr.abort();
+      settle(() => {
+        const error = new Error('UPLOAD_ABORTED');
+        (error as Error & { code?: string }).code = 'UPLOAD_ABORTED';
+        reject(error);
+      });
+    };
+
+    xhr.open('POST', options.url);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.setRequestHeader('Authorization', `Bearer ${options.token}`);
+    xhr.setRequestHeader('X-Request-Id', options.requestId);
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable)
+        options.onProgress?.(
+          Math.min(100, Math.round((event.loaded / event.total) * 100)),
+        );
     });
-  };
-
-  xhr.open('POST', options.url);
-  xhr.setRequestHeader('Accept', 'application/json');
-  xhr.setRequestHeader('Authorization', `Bearer ${options.token}`);
-  xhr.setRequestHeader('X-Request-Id', options.requestId);
-  xhr.upload.addEventListener('progress', (event) => {
-    if (event.lengthComputable) options.onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    xhr.onload = () =>
+      settle(() => {
+        const text = xhr.responseText;
+        let body: unknown;
+        try {
+          body = text ? JSON.parse(text) : undefined;
+        } catch {
+          body = undefined;
+        }
+        resolve({ status: xhr.status, body });
+      });
+    xhr.onerror = () => settle(() => reject(new Error('NETWORK_ERROR')));
+    xhr.onabort = () => {
+      if (!settled) abort();
+    };
+    if (options.signal?.aborted) {
+      abort();
+      return;
+    }
+    options.signal?.addEventListener('abort', abort, { once: true });
+    xhr.send(formData);
   });
-  xhr.onload = () => settle(() => {
-    const text = xhr.responseText;
-    let body: unknown;
-    try { body = text ? JSON.parse(text) : undefined; } catch { body = undefined; }
-    resolve({ status: xhr.status, body });
-  });
-  xhr.onerror = () => settle(() => reject(new Error('NETWORK_ERROR')));
-  xhr.onabort = () => {
-    if (!settled) abort();
-  };
-  if (options.signal?.aborted) {
-    abort();
-    return;
-  }
-  options.signal?.addEventListener('abort', abort, { once: true });
-  xhr.send(formData);
-});
 
 export interface AcademicApiClientOptions {
   baseUrl: string;
@@ -184,7 +213,13 @@ export class AcademicApiError extends Error {
   readonly requestId: string;
   readonly status: number;
 
-  constructor({ code, details, message, requestId, status }: {
+  constructor({
+    code,
+    details,
+    message,
+    requestId,
+    status,
+  }: {
     code: string;
     details: readonly ApiErrorDetail[];
     message: string;
@@ -201,8 +236,16 @@ export class AcademicApiError extends Error {
 }
 
 export class UnauthenticatedError extends AcademicApiError {
-  constructor(message = 'Tu sesión no está disponible. Vuelve a iniciar sesión en EduPay Identity.') {
-    super({ code: 'UNAUTHENTICATED', details: [], message, requestId: 'unavailable', status: 401 });
+  constructor(
+    message = 'Tu sesión no está disponible. Vuelve a iniciar sesión en EduPay Identity.',
+  ) {
+    super({
+      code: 'UNAUTHENTICATED',
+      details: [],
+      message,
+      requestId: 'unavailable',
+      status: 401,
+    });
     this.name = 'UnauthenticatedError';
   }
 }
@@ -213,7 +256,10 @@ function newRequestId(): string {
     : `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function addQuery(path: string, query: Record<string, string | number | undefined>): string {
+function addQuery(
+  path: string,
+  query: Record<string, string | number | undefined>,
+): string {
   const params = new URLSearchParams();
   Object.entries(query).forEach(([key, value]) => {
     if (value !== undefined && value !== '') params.set(key, String(value));
@@ -230,9 +276,10 @@ export class AcademicApiClient {
 
   constructor(options: AcademicApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
     this.sessionAdapter = options.sessionAdapter ?? null;
-    this.multipartUploadImpl = options.multipartUploadImpl ?? uploadMultipartWithXhr;
+    this.multipartUploadImpl =
+      options.multipartUploadImpl ?? uploadMultipartWithXhr;
   }
 
   private buildUrl(path: string): string {
@@ -245,7 +292,11 @@ export class AcademicApiClient {
     return `${this.baseUrl}/${path.replace(/^\//, '')}`;
   }
 
-  private async requestRaw(path: string, init: RequestInit = {}, retried = false): Promise<Response> {
+  private async requestRaw(
+    path: string,
+    init: RequestInit = {},
+    retried = false,
+  ): Promise<Response> {
     const requestId = newRequestId();
     const token = await this.sessionAdapter?.getAccessToken();
     if (!token) throw new UnauthenticatedError();
@@ -254,14 +305,23 @@ export class AcademicApiClient {
     headers.set('Accept', 'application/json');
     headers.set('Authorization', `Bearer ${token}`);
     headers.set('X-Request-Id', requestId);
-    if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
+    if (init.body && !(init.body instanceof FormData))
+      headers.set('Content-Type', 'application/json');
 
     let response: Response;
     try {
-      response = await this.fetchImpl(this.buildUrl(path), { ...init, headers });
+      response = await this.fetchImpl(this.buildUrl(path), {
+        ...init,
+        headers,
+      });
     } catch {
       throw new AcademicApiError({
-        code: 'NETWORK_ERROR', details: [], message: 'No pudimos conectar con Académico. Revisa tu conexión e inténtalo nuevamente.', requestId, status: 0,
+        code: 'NETWORK_ERROR',
+        details: [],
+        message:
+          'No pudimos conectar con Académico. Revisa tu conexión e inténtalo nuevamente.',
+        requestId,
+        status: 0,
       });
     }
 
@@ -274,22 +334,31 @@ export class AcademicApiClient {
         throw new AcademicApiError({
           code: 'AUTH_REFRESHED_RETRY_REQUIRED',
           details: [],
-          message: 'Renovamos tu sesión, pero no repetimos esta acción para evitar duplicarla. Inténtalo nuevamente.',
+          message:
+            'Renovamos tu sesión, pero no repetimos esta acción para evitar duplicarla. Inténtalo nuevamente.',
           requestId,
           status: 401,
         });
       }
       await this.sessionAdapter.clearSession?.();
-      throw new UnauthenticatedError('Tu sesión expiró. Vuelve a iniciar sesión en EduPay Identity.');
+      throw new UnauthenticatedError(
+        'Tu sesión expiró. Vuelve a iniciar sesión en EduPay Identity.',
+      );
     }
 
     if (!response.ok) {
       const payload: unknown = await response.json().catch(() => undefined);
       const parsed = apiErrorEnvelopeSchema.safeParse(payload);
       throw new AcademicApiError({
-        code: parsed.success ? parsed.data.error.code : response.status === 403 ? 'FORBIDDEN' : 'REQUEST_FAILED',
+        code: parsed.success
+          ? parsed.data.error.code
+          : response.status === 403
+            ? 'FORBIDDEN'
+            : 'REQUEST_FAILED',
         details: parsed.success ? parsed.data.error.details : [],
-        message: parsed.success ? parsed.data.error.message : 'No pudimos completar la solicitud.',
+        message: parsed.success
+          ? parsed.data.error.message
+          : 'No pudimos completar la solicitud.',
         requestId: parsed.success ? parsed.data.error.requestId : requestId,
         status: response.status,
       });
@@ -301,27 +370,56 @@ export class AcademicApiClient {
     return ['GET', 'HEAD', 'OPTIONS', 'PUT'].includes(method.toUpperCase());
   }
 
-  private async request<T>(path: string, schema: Schema<T>, init: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    path: string,
+    schema: Schema<T>,
+    init: RequestInit = {},
+  ): Promise<T> {
     const response = await this.requestRaw(path, init);
     const payload: unknown = await response.json().catch(() => undefined);
     return schema.parse(payload);
   }
 
-  private async multipartError(status: number, body: unknown, requestId: string): Promise<never> {
+  private async requestVoid(
+    path: string,
+    init: RequestInit = {},
+  ): Promise<void> {
+    await this.requestRaw(path, init);
+  }
+
+  private async multipartError(
+    status: number,
+    body: unknown,
+    requestId: string,
+  ): Promise<never> {
     const parsed = apiErrorEnvelopeSchema.safeParse(body);
     throw new AcademicApiError({
-      code: parsed.success ? parsed.data.error.code : status === 403 ? 'FORBIDDEN' : 'REQUEST_FAILED',
+      code: parsed.success
+        ? parsed.data.error.code
+        : status === 403
+          ? 'FORBIDDEN'
+          : 'REQUEST_FAILED',
       details: parsed.success ? parsed.data.error.details : [],
-      message: parsed.success ? parsed.data.error.message : 'No pudimos completar la carga del archivo.',
+      message: parsed.success
+        ? parsed.data.error.message
+        : 'No pudimos completar la carga del archivo.',
       requestId: parsed.success ? parsed.data.error.requestId : requestId,
       status,
     });
   }
 
-  getTenant() { return this.request('tenant', tenantSchema); }
-  getSyncStatus(): Promise<SyncStatus> { return this.request('sync/status', syncStatusSchema); }
-  getStorageUsage(): Promise<StorageUsage> { return this.request('storage/usage', storageUsageSchema); }
-  getStoragePolicy(): Promise<StoragePolicy> { return this.request('storage/policy', storagePolicySchema); }
+  getTenant() {
+    return this.request('tenant', tenantSchema);
+  }
+  getSyncStatus(): Promise<SyncStatus> {
+    return this.request('sync/status', syncStatusSchema);
+  }
+  getStorageUsage(): Promise<StorageUsage> {
+    return this.request('storage/usage', storageUsageSchema);
+  }
+  getStoragePolicy(): Promise<StoragePolicy> {
+    return this.request('storage/policy', storagePolicySchema);
+  }
 
   createUploadIntent(input: CreateUploadIntent): Promise<UploadIntent> {
     return this.request('file-upload-intents', uploadIntentSchema, {
@@ -354,11 +452,27 @@ export class AcademicApiClient {
       result = await this.multipartUploadImpl(multipartOptions);
     } catch (error) {
       if (error instanceof AcademicApiError) throw error;
-      const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : '';
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String((error as { code?: unknown }).code)
+          : '';
       if (code === 'UPLOAD_ABORTED') {
-        throw new AcademicApiError({ code, details: [], message: 'La carga se canceló.', requestId, status: 0 });
+        throw new AcademicApiError({
+          code,
+          details: [],
+          message: 'La carga se canceló.',
+          requestId,
+          status: 0,
+        });
       }
-      throw new AcademicApiError({ code: 'NETWORK_ERROR', details: [], message: 'No pudimos conectar con Académico. Revisa tu conexión e inténtalo nuevamente.', requestId, status: 0 });
+      throw new AcademicApiError({
+        code: 'NETWORK_ERROR',
+        details: [],
+        message:
+          'No pudimos conectar con Académico. Revisa tu conexión e inténtalo nuevamente.',
+        requestId,
+        status: 0,
+      });
     }
     if (result.status === 401 && !retried && this.sessionAdapter) {
       const refreshed = await this.sessionAdapter.refreshAccessToken();
@@ -366,88 +480,303 @@ export class AcademicApiClient {
         throw new AcademicApiError({
           code: 'AUTH_REFRESHED_RETRY_REQUIRED',
           details: [],
-          message: 'Renovamos tu sesión, pero no repetimos la carga para evitar duplicarla. Iníciala nuevamente.',
+          message:
+            'Renovamos tu sesión, pero no repetimos la carga para evitar duplicarla. Iníciala nuevamente.',
           requestId,
           status: 401,
         });
       }
       await this.sessionAdapter.clearSession?.();
-      throw new UnauthenticatedError('Tu sesión expiró. Vuelve a iniciar sesión en EduPay Identity.');
+      throw new UnauthenticatedError(
+        'Tu sesión expiró. Vuelve a iniciar sesión en EduPay Identity.',
+      );
     }
-    if (result.status < 200 || result.status >= 300) await this.multipartError(result.status, result.body, requestId);
+    if (result.status < 200 || result.status >= 300)
+      await this.multipartError(result.status, result.body, requestId);
     return storageFileSchema.parse(result.body);
   }
 
   listLearningAttachments(learningItemId: string): Promise<StorageFile[]> {
-    return this.request(`learning-items/${learningItemId}/attachments`, storageFileSchema.array());
+    return this.request(
+      `learning-items/${learningItemId}/attachments`,
+      storageFileSchema.array(),
+    );
   }
 
-  async downloadFile(fileObjectId: string): Promise<{ blob: Blob; filename: string | null }> {
+  async downloadFile(fileObjectId: string): Promise<{
+    blob: Blob;
+    filename: string | null;
+  }> {
     const response = await this.requestRaw(`files/${fileObjectId}/download`, {
       headers: { Accept: 'application/octet-stream' },
     });
     const contentDisposition = response.headers.get('Content-Disposition');
     let filename: string | null = null;
-    const encoded = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const encoded = contentDisposition?.match(
+      /filename\*=UTF-8''([^;]+)/i,
+    )?.[1];
     const fallback = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1];
     if (encoded) {
-      try { filename = decodeURIComponent(encoded); } catch { filename = encoded; }
+      try {
+        filename = decodeURIComponent(encoded);
+      } catch {
+        filename = encoded;
+      }
     } else if (fallback) filename = fallback;
     return { blob: await response.blob(), filename };
   }
-  listAcademicYears(cursor?: string) { return this.request(addQuery('academic-years', { cursor, limit: 50 }), academicYearPageSchema); }
-  createAcademicYear(input: CreateAcademicYear) { return this.request('academic-years', academicYearSchema, { method: 'POST', body: JSON.stringify(createAcademicYearSchema.parse(input)) }); }
-  updateAcademicYear(id: string, input: UpdateAcademicYear) { return this.request(`academic-years/${id}`, academicYearSchema, { method: 'PATCH', body: JSON.stringify(updateAcademicYearSchema.parse(input)) }); }
+  listAcademicYears(cursor?: string) {
+    return this.request(
+      addQuery('academic-years', { cursor, limit: 50 }),
+      academicYearPageSchema,
+    );
+  }
+  createAcademicYear(input: CreateAcademicYear) {
+    return this.request('academic-years', academicYearSchema, {
+      method: 'POST',
+      body: JSON.stringify(createAcademicYearSchema.parse(input)),
+    });
+  }
+  updateAcademicYear(id: string, input: UpdateAcademicYear) {
+    return this.request(`academic-years/${id}`, academicYearSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateAcademicYearSchema.parse(input)),
+    });
+  }
 
-  listCourses(academicYearId?: string, cursor?: string) { return this.request(addQuery('courses', { academicYearId, cursor, limit: 50 }), coursePageSchema); }
-  createCourse(input: CreateCourse) { return this.request('courses', courseSchema, { method: 'POST', body: JSON.stringify(createCourseSchema.parse(input)) }); }
-  updateCourse(id: string, input: UpdateCourse) { return this.request(`courses/${id}`, courseSchema, { method: 'PATCH', body: JSON.stringify(updateCourseSchema.parse(input)) }); }
-  getCourseRoster(id: string) { return this.request(`courses/${id}/roster`, courseRosterItemSchema.array()); }
+  listCourses(academicYearId?: string, cursor?: string) {
+    return this.request(
+      addQuery('courses', { academicYearId, cursor, limit: 50 }),
+      coursePageSchema,
+    );
+  }
+  createCourse(input: CreateCourse) {
+    return this.request('courses', courseSchema, {
+      method: 'POST',
+      body: JSON.stringify(createCourseSchema.parse(input)),
+    });
+  }
+  updateCourse(id: string, input: UpdateCourse) {
+    return this.request(`courses/${id}`, courseSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateCourseSchema.parse(input)),
+    });
+  }
+  getCourseRoster(id: string) {
+    return this.request(`courses/${id}/roster`, courseRosterItemSchema.array());
+  }
 
-  listStudents(search?: string, cursor?: string) { return this.request(addQuery('students', { search, cursor, limit: 50 }), studentPageSchema); }
-  createStudent(input: CreateStudent) { return this.request('students', studentSchema, { method: 'POST', body: JSON.stringify(createStudentSchema.parse(input)) }); }
-  updateStudent(id: string, input: UpdateStudent) { return this.request(`students/${id}`, studentSchema, { method: 'PATCH', body: JSON.stringify(updateStudentSchema.parse(input)) }); }
-  activateStudent(id: string) { return this.request(`students/${id}/activate`, studentSchema, { method: 'POST' }); }
+  listStudents(search?: string, cursor?: string) {
+    return this.request(
+      addQuery('students', { search, cursor, limit: 50 }),
+      studentPageSchema,
+    );
+  }
+  createStudent(input: CreateStudent) {
+    return this.request('students', studentSchema, {
+      method: 'POST',
+      body: JSON.stringify(createStudentSchema.parse(input)),
+    });
+  }
+  updateStudent(id: string, input: UpdateStudent) {
+    return this.request(`students/${id}`, studentSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateStudentSchema.parse(input)),
+    });
+  }
+  activateStudent(id: string) {
+    return this.request(`students/${id}/activate`, studentSchema, {
+      method: 'POST',
+    });
+  }
+  inactivateStudent(id: string) {
+    return this.request(`students/${id}/inactivate`, studentSchema, {
+      method: 'POST',
+    });
+  }
   linkStudentIdentity(id: string, input: VerifiedIdentityLink) {
     return this.request(`students/${id}/identity-link`, studentSchema, {
-      method: 'PUT', body: JSON.stringify(verifiedIdentityLinkSchema.parse(input)),
+      method: 'PUT',
+      body: JSON.stringify(verifiedIdentityLinkSchema.parse(input)),
     });
   }
+  getStudentEffectiveSubjects(studentId: string) {
+    return this.request(
+      `students/${studentId}/effective-course-subjects`,
+      courseSubjectSchema.array(),
+    );
+  }
 
-  listTeachers(search?: string, cursor?: string) { return this.request(addQuery('teachers', { search, cursor, limit: 50 }), teacherPageSchema); }
-  createTeacher(input: CreateTeacher) { return this.request('teachers', teacherSchema, { method: 'POST', body: JSON.stringify(createTeacherSchema.parse(input)) }); }
-  updateTeacher(id: string, input: UpdateTeacher) { return this.request(`teachers/${id}`, teacherSchema, { method: 'PATCH', body: JSON.stringify(updateTeacherSchema.parse(input)) }); }
-  activateTeacher(id: string) { return this.request(`teachers/${id}/activate`, teacherSchema, { method: 'POST' }); }
+  listTeachers(search?: string, cursor?: string) {
+    return this.request(
+      addQuery('teachers', { search, cursor, limit: 50 }),
+      teacherPageSchema,
+    );
+  }
+  createTeacher(input: CreateTeacher) {
+    return this.request('teachers', teacherSchema, {
+      method: 'POST',
+      body: JSON.stringify(createTeacherSchema.parse(input)),
+    });
+  }
+  updateTeacher(id: string, input: UpdateTeacher) {
+    return this.request(`teachers/${id}`, teacherSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateTeacherSchema.parse(input)),
+    });
+  }
+  activateTeacher(id: string) {
+    return this.request(`teachers/${id}/activate`, teacherSchema, {
+      method: 'POST',
+    });
+  }
+  inactivateTeacher(id: string) {
+    return this.request(`teachers/${id}/inactivate`, teacherSchema, {
+      method: 'POST',
+    });
+  }
   linkTeacherIdentity(id: string, input: VerifiedIdentityLink) {
     return this.request(`teachers/${id}/identity-link`, teacherSchema, {
-      method: 'PUT', body: JSON.stringify(verifiedIdentityLinkSchema.parse(input)),
+      method: 'PUT',
+      body: JSON.stringify(verifiedIdentityLinkSchema.parse(input)),
     });
   }
 
-  listSubjects(cursor?: string) { return this.request(addQuery('subjects', { cursor, limit: 50 }), subjectPageSchema); }
-  createSubject(input: CreateSubject) { return this.request('subjects', subjectSchema, { method: 'POST', body: JSON.stringify(createSubjectSchema.parse(input)) }); }
-  updateSubject(id: string, input: UpdateSubject) { return this.request(`subjects/${id}`, subjectSchema, { method: 'PATCH', body: JSON.stringify(updateSubjectSchema.parse(input)) }); }
+  listSubjects(cursor?: string) {
+    return this.request(
+      addQuery('subjects', { cursor, limit: 50 }),
+      subjectPageSchema,
+    );
+  }
+  createSubject(input: CreateSubject) {
+    return this.request('subjects', subjectSchema, {
+      method: 'POST',
+      body: JSON.stringify(createSubjectSchema.parse(input)),
+    });
+  }
+  updateSubject(id: string, input: UpdateSubject) {
+    return this.request(`subjects/${id}`, subjectSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateSubjectSchema.parse(input)),
+    });
+  }
 
-  listCourseSubjects(courseId?: string, cursor?: string) { return this.request(addQuery('course-subjects', { courseId, cursor, limit: 50 }), courseSubjectPageSchema); }
-  createCourseSubject(input: CreateCourseSubject) { return this.request('course-subjects', courseSubjectSchema, { method: 'POST', body: JSON.stringify(createCourseSubjectSchema.parse(input)) }); }
-  updateCourseSubject(id: string, input: UpdateCourseSubject) { return this.request(`course-subjects/${id}`, courseSubjectSchema, { method: 'PATCH', body: JSON.stringify(updateCourseSubjectSchema.parse(input)) }); }
-  getCourseSubjectRoster(id: string) { return this.request(`course-subjects/${id}/roster`, courseSubjectRosterItemSchema.array()); }
-  getAssignedTeachers(id: string) { return this.request(`course-subjects/${id}/teachers`, courseSubjectTeacherSchema.array()); }
-  assignCourseSubjectTeachers(input: AssignCourseSubjectTeachers) { return this.request('course-subject-teachers', courseSubjectTeacherSchema.array(), { method: 'POST', body: JSON.stringify(assignCourseSubjectTeachersSchema.parse(input)) }); }
+  listCourseSubjects(courseId?: string, cursor?: string) {
+    return this.request(
+      addQuery('course-subjects', { courseId, cursor, limit: 50 }),
+      courseSubjectPageSchema,
+    );
+  }
+  createCourseSubject(input: CreateCourseSubject) {
+    return this.request('course-subjects', courseSubjectSchema, {
+      method: 'POST',
+      body: JSON.stringify(createCourseSubjectSchema.parse(input)),
+    });
+  }
+  updateCourseSubject(id: string, input: UpdateCourseSubject) {
+    return this.request(`course-subjects/${id}`, courseSubjectSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateCourseSubjectSchema.parse(input)),
+    });
+  }
+  getCourseSubjectRoster(id: string) {
+    return this.request(
+      `course-subjects/${id}/roster`,
+      courseSubjectRosterItemSchema.array(),
+    );
+  }
+  getAssignedTeachers(id: string) {
+    return this.request(
+      `course-subjects/${id}/teachers`,
+      courseSubjectTeacherSchema.array(),
+    );
+  }
+  assignCourseSubjectTeachers(input: AssignCourseSubjectTeachers) {
+    return this.request(
+      'course-subject-teachers',
+      courseSubjectTeacherSchema.array(),
+      {
+        method: 'POST',
+        body: JSON.stringify(assignCourseSubjectTeachersSchema.parse(input)),
+      },
+    );
+  }
+  deactivateTeacherAssignment(id: string) {
+    return this.request(
+      `course-subject-teachers/${id}/deactivate`,
+      courseSubjectTeacherSchema,
+      {
+        method: 'POST',
+      },
+    );
+  }
 
-  enrollStudent(input: CreateCourseEnrollment) { return this.request('course-enrollments', courseEnrollmentSchema, { method: 'POST', body: JSON.stringify(createCourseEnrollmentSchema.parse(input)) }); }
-  directlyEnrollStudent(input: CreateStudentSubjectEnrollment) { return this.request('student-subject-enrollments', studentSubjectEnrollmentSchema, { method: 'POST', body: JSON.stringify(createStudentSubjectEnrollmentSchema.parse(input)) }); }
+  enrollStudent(input: CreateCourseEnrollment) {
+    return this.request('course-enrollments', courseEnrollmentSchema, {
+      method: 'POST',
+      body: JSON.stringify(createCourseEnrollmentSchema.parse(input)),
+    });
+  }
+  deactivateEnrollment(id: string) {
+    return this.request(
+      `course-enrollments/${id}/deactivate`,
+      courseEnrollmentSchema,
+      {
+        method: 'POST',
+      },
+    );
+  }
+  directlyEnrollStudent(input: CreateStudentSubjectEnrollment) {
+    return this.request(
+      'student-subject-enrollments',
+      studentSubjectEnrollmentSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(createStudentSubjectEnrollmentSchema.parse(input)),
+      },
+    );
+  }
+  deactivateDirectEnrollment(id: string) {
+    return this.request(
+      `student-subject-enrollments/${id}/deactivate`,
+      studentSubjectEnrollmentSchema,
+      {
+        method: 'POST',
+      },
+    );
+  }
 
-  getStudentContextSubjects() { return this.request('student-context/course-subjects', courseSubjectSchema.array()); }
-  getTeacherContextSubjects() { return this.request('teacher-context/course-subjects', courseSubjectSchema.array()); }
-  getTeacherCourseSubjectRoster(id: string) { return this.request(`course-subjects/${id}/roster`, courseSubjectRosterItemSchema.array()); }
+  getStudentContextSubjects() {
+    return this.request(
+      'student-context/course-subjects',
+      courseSubjectSchema.array(),
+    );
+  }
+  getTeacherContextSubjects() {
+    return this.request(
+      'teacher-context/course-subjects',
+      courseSubjectSchema.array(),
+    );
+  }
+  getTeacherCourseSubjectRoster(id: string) {
+    return this.request(
+      `course-subjects/${id}/roster`,
+      courseSubjectRosterItemSchema.array(),
+    );
+  }
 
   getLearningRoute(courseSubjectId: string) {
-    return this.request(`course-subjects/${courseSubjectId}/learning`, courseSubjectLearningRouteSchema);
+    return this.request(
+      `course-subjects/${courseSubjectId}/learning`,
+      courseSubjectLearningRouteSchema,
+    );
   }
 
   listLearningUnits(courseSubjectId: string) {
-    return this.request(`course-subjects/${courseSubjectId}/learning-units`, learningUnitSchema.array());
+    return this.request(
+      `course-subjects/${courseSubjectId}/learning-units`,
+      learningUnitSchema.array(),
+    );
   }
 
   getLearningUnit(id: string) {
@@ -455,7 +784,10 @@ export class AcademicApiClient {
   }
 
   listLearningItems(learningUnitId: string) {
-    return this.request(`learning-units/${learningUnitId}/items`, learningItemSchema.array());
+    return this.request(
+      `learning-units/${learningUnitId}/items`,
+      learningItemSchema.array(),
+    );
   }
 
   getLearningItem(id: string) {
@@ -463,7 +795,10 @@ export class AcademicApiClient {
   }
 
   getOwnSubmission(learningItemId: string): Promise<Submission> {
-    return this.request(`learning-items/${learningItemId}/submission`, submissionSchema);
+    return this.request(
+      `learning-items/${learningItemId}/submission`,
+      submissionSchema,
+    );
   }
 
   getSubmission(submissionId: string): Promise<Submission> {
@@ -471,105 +806,405 @@ export class AcademicApiClient {
   }
 
   listSubmissions(learningItemId: string): Promise<Submission[]> {
-    return this.request(`learning-items/${learningItemId}/submissions`, submissionSchema.array());
+    return this.request(
+      `learning-items/${learningItemId}/submissions`,
+      submissionSchema.array(),
+    );
   }
 
-  submitLearningItem(learningItemId: string, input: CreateSubmission): Promise<Submission> {
-    return this.request(`learning-items/${learningItemId}/submission`, submissionSchema, {
-      method: 'POST',
-      body: JSON.stringify(createSubmissionSchema.parse(input)),
-    });
+  submitLearningItem(
+    learningItemId: string,
+    input: CreateSubmission,
+  ): Promise<Submission> {
+    return this.request(
+      `learning-items/${learningItemId}/submission`,
+      submissionSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(createSubmissionSchema.parse(input)),
+      },
+    );
   }
 
-  submitSubmissionRevision(submissionId: string, input: CreateSubmissionRevision): Promise<Submission> {
-    return this.request(`submissions/${submissionId}/revisions`, submissionSchema, {
-      method: 'POST',
-      body: JSON.stringify(createSubmissionRevisionSchema.parse(input)),
-    });
+  submitSubmissionRevision(
+    submissionId: string,
+    input: CreateSubmissionRevision,
+  ): Promise<Submission> {
+    return this.request(
+      `submissions/${submissionId}/revisions`,
+      submissionSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(createSubmissionRevisionSchema.parse(input)),
+      },
+    );
   }
 
-  reviewSubmissionRevision(revisionId: string, input: CreateReview): Promise<Submission> {
-    return this.request(`submission-revisions/${revisionId}/reviews`, submissionSchema, {
-      method: 'POST',
-      body: JSON.stringify(createReviewSchema.parse(input)),
-    });
+  reviewSubmissionRevision(
+    revisionId: string,
+    input: CreateReview,
+  ): Promise<Submission> {
+    return this.request(
+      `submission-revisions/${revisionId}/reviews`,
+      submissionSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(createReviewSchema.parse(input)),
+      },
+    );
   }
 
-  createLearningUnit(input: CreateLearningUnit) {
+  createLearningUnit(
+    input: CreateLearningUnit,
+    options?: { idempotencyKey?: string },
+  ) {
     return this.request('learning-units', learningUnitSchema, {
       method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
       body: JSON.stringify(createLearningUnitSchema.parse(input)),
     });
   }
 
-  updateLearningUnit(id: string, input: UpdateLearningUnit) {
+  updateLearningUnit(
+    id: string,
+    input: UpdateLearningUnit,
+    options?: { idempotencyKey?: string },
+  ) {
     return this.request(`learning-units/${id}`, learningUnitSchema, {
       method: 'PATCH',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
       body: JSON.stringify(updateLearningUnitSchema.parse(input)),
     });
   }
 
-  archiveLearningUnit(id: string) {
-    return this.request(`learning-units/${id}/archive`, learningUnitSchema, { method: 'POST' });
-  }
-
-  reorderLearningUnits(courseSubjectId: string, input: ReorderLearning) {
-    return this.request(`course-subjects/${courseSubjectId}/learning-units/reorder`, learningUnitSchema.array(), {
+  archiveLearningUnit(id: string, options?: { idempotencyKey?: string }) {
+    return this.request(`learning-units/${id}/archive`, learningUnitSchema, {
       method: 'POST',
-      body: JSON.stringify(reorderLearningSchema.parse(input)),
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
     });
   }
 
-  createLearningItem(learningUnitId: string, input: CreateLearningItem) {
-    return this.request(`learning-units/${learningUnitId}/items`, learningItemSchema, {
+  restoreLearningUnit(id: string, options?: { idempotencyKey?: string }) {
+    return this.request(`learning-units/${id}/restore`, learningUnitSchema, {
       method: 'POST',
-      body: JSON.stringify(createLearningItemSchema.parse(input)),
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
     });
   }
 
-  updateLearningItem(id: string, input: UpdateLearningItem) {
+  reorderLearningUnits(
+    courseSubjectId: string,
+    input: ReorderLearning,
+    options?: { idempotencyKey?: string },
+  ) {
+    return this.request(
+      `course-subjects/${courseSubjectId}/learning-units/reorder`,
+      learningUnitSchema.array(),
+      {
+        method: 'POST',
+        ...(options?.idempotencyKey
+          ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+          : {}),
+        body: JSON.stringify(reorderLearningSchema.parse(input)),
+      },
+    );
+  }
+
+  createLearningItem(
+    learningUnitId: string,
+    input: CreateLearningItem,
+    options?: { idempotencyKey?: string },
+  ) {
+    return this.request(
+      `learning-units/${learningUnitId}/items`,
+      learningItemSchema,
+      {
+        method: 'POST',
+        ...(options?.idempotencyKey
+          ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+          : {}),
+        body: JSON.stringify(createLearningItemSchema.parse(input)),
+      },
+    );
+  }
+
+  updateLearningItem(
+    id: string,
+    input: UpdateLearningItem,
+    options?: { idempotencyKey?: string },
+  ) {
     return this.request(`learning-items/${id}`, learningItemSchema, {
       method: 'PATCH',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
       body: JSON.stringify(updateLearningItemSchema.parse(input)),
     });
   }
 
-  scheduleLearningItem(id: string, input: ScheduleLearningItem) {
+  scheduleLearningItem(
+    id: string,
+    input: ScheduleLearningItem,
+    options?: { idempotencyKey?: string },
+  ) {
     return this.request(`learning-items/${id}/schedule`, learningItemSchema, {
       method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
       body: JSON.stringify(scheduleLearningItemSchema.parse(input)),
     });
   }
 
-  publishLearningItem(id: string) {
-    return this.request(`learning-items/${id}/publish`, learningItemSchema, { method: 'POST' });
+  publishLearningItem(id: string, options?: { idempotencyKey?: string }) {
+    return this.request(`learning-items/${id}/publish`, learningItemSchema, {
+      method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+    });
   }
 
-  archiveLearningItem(id: string) {
-    return this.request(`learning-items/${id}/archive`, learningItemSchema, { method: 'POST' });
+  unpublishLearningItem(id: string, options?: { idempotencyKey?: string }) {
+    return this.request(`learning-items/${id}/unpublish`, learningItemSchema, {
+      method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+    });
+  }
+
+  archiveLearningItem(id: string, options?: { idempotencyKey?: string }) {
+    return this.request(`learning-items/${id}/archive`, learningItemSchema, {
+      method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+    });
+  }
+
+  restoreLearningItem(id: string, options?: { idempotencyKey?: string }) {
+    return this.request(`learning-items/${id}/restore`, learningItemSchema, {
+      method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+    });
+  }
+
+  moveLearningItem(
+    id: string,
+    input: MoveLearningItem,
+    options?: { idempotencyKey?: string },
+  ) {
+    return this.request(`learning-items/${id}/move`, learningItemSchema, {
+      method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+      body: JSON.stringify(moveLearningItemSchema.parse(input)),
+    });
+  }
+
+  duplicateLearningItem(
+    id: string,
+    input?: DuplicateLearningItem,
+    options?: { idempotencyKey?: string },
+  ) {
+    return this.request(`learning-items/${id}/duplicate`, learningItemSchema, {
+      method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+      body: JSON.stringify(duplicateLearningItemSchema.parse(input ?? {})),
+    });
+  }
+
+  duplicateLearningUnit(
+    id: string,
+    input?: DuplicateLearningUnit,
+    options?: { idempotencyKey?: string },
+  ) {
+    return this.request(`learning-units/${id}/duplicate`, learningUnitSchema, {
+      method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+      body: JSON.stringify(duplicateLearningUnitSchema.parse(input ?? {})),
+    });
+  }
+
+  saveLearningItemDraft(
+    id: string,
+    input: SaveLearningItemDraft,
+    options?: { idempotencyKey?: string },
+  ) {
+    return this.request(`learning-items/${id}/draft`, learningItemDraftSchema, {
+      method: 'POST',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+      body: JSON.stringify(saveLearningItemDraftSchema.parse(input)),
+    });
+  }
+
+  getLearningItemDraft(
+    id: string,
+  ): Promise<{ draft: LearningItemDraft | null }> {
+    return this.request(
+      `learning-items/${id}/draft`,
+      z.object({ draft: learningItemDraftSchema.nullable() }).strict(),
+    );
+  }
+
+  discardLearningItemDraft(id: string) {
+    return this.requestVoid(`learning-items/${id}/draft`, { method: 'DELETE' });
+  }
+
+  publishLearningItemDraft(
+    id: string,
+    input: PublishLearningItemDraft,
+    options?: { idempotencyKey?: string },
+  ) {
+    return this.request(
+      `learning-items/${id}/draft/publish`,
+      learningItemSchema,
+      {
+        method: 'POST',
+        ...(options?.idempotencyKey
+          ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+          : {}),
+        body: JSON.stringify(publishLearningItemDraftSchema.parse(input)),
+      },
+    );
+  }
+
+  getLearningUnitHistory(id: string): Promise<ContentRevision[]> {
+    return this.request(
+      `learning-units/${id}/history`,
+      contentRevisionSchema.array(),
+    );
+  }
+
+  getLearningItemHistory(id: string): Promise<ContentRevision[]> {
+    return this.request(
+      `learning-items/${id}/history`,
+      contentRevisionSchema.array(),
+    );
+  }
+
+  restoreLearningUnitRevision(
+    id: string,
+    revisionNumber: number,
+    input?: RestoreRevision,
+  ) {
+    return this.request(
+      `learning-units/${id}/history/${revisionNumber}/restore`,
+      learningUnitSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(restoreRevisionSchema.parse(input ?? {})),
+      },
+    );
+  }
+
+  restoreLearningItemRevision(
+    id: string,
+    revisionNumber: number,
+    input?: RestoreRevision,
+  ) {
+    return this.request(
+      `learning-items/${id}/history/${revisionNumber}/restore`,
+      z.union([learningItemSchema, learningItemDraftSchema]),
+      {
+        method: 'POST',
+        body: JSON.stringify(restoreRevisionSchema.parse(input ?? {})),
+      },
+    );
+  }
+
+  detachLearningAttachment(learningItemId: string, fileReferenceId: string) {
+    return this.requestVoid(
+      `learning-items/${learningItemId}/attachments/${fileReferenceId}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  getStorageReconciliationReport(): Promise<StorageReconciliationReport> {
+    return this.request(
+      'storage/reconciliation-report',
+      storageReconciliationReportSchema,
+    );
+  }
+
+  runStorageReconciliation(
+    options?: StorageReconciliationOptions,
+  ): Promise<StorageReconciliationReport> {
+    return this.request(
+      'storage/reconcile',
+      storageReconciliationReportSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          storageReconciliationOptionsSchema.parse(options ?? {}),
+        ),
+      },
+    );
   }
 
   listNotifications(cursor?: string, limit = 20): Promise<NotificationPage> {
-    return this.request(addQuery('notifications', { cursor, limit }), notificationPageSchema);
+    return this.request(
+      addQuery('notifications', { cursor, limit }),
+      notificationPageSchema,
+    );
   }
 
   getUnreadNotificationCount(): Promise<{ count: number }> {
-    return this.request('notifications/unread-count', unreadNotificationCountSchema);
+    return this.request(
+      'notifications/unread-count',
+      unreadNotificationCountSchema,
+    );
   }
 
   markNotificationRead(notificationId: string): Promise<InAppNotification> {
-    return this.request(`notifications/${notificationId}/read`, inAppNotificationSchema, { method: 'PATCH' });
+    return this.request(
+      `notifications/${notificationId}/read`,
+      inAppNotificationSchema,
+      {
+        method: 'PATCH',
+      },
+    );
   }
 
   markAllNotificationsRead(): Promise<{ updatedCount: number }> {
-    return this.request('notifications/read-all', markedNotificationsSchema, { method: 'POST' });
+    return this.request('notifications/read-all', markedNotificationsSchema, {
+      method: 'POST',
+    });
   }
 
-  reorderLearningItems(learningUnitId: string, input: ReorderLearning) {
-    return this.request(`learning-units/${learningUnitId}/items/reorder`, learningItemSchema.array(), {
-      method: 'POST',
-      body: JSON.stringify(reorderLearningSchema.parse(input)),
-    });
+  reorderLearningItems(
+    learningUnitId: string,
+    input: ReorderLearning,
+    options?: { idempotencyKey?: string },
+  ) {
+    return this.request(
+      `learning-units/${learningUnitId}/items/reorder`,
+      learningItemSchema.array(),
+      {
+        method: 'POST',
+        ...(options?.idempotencyKey
+          ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+          : {}),
+        body: JSON.stringify(reorderLearningSchema.parse(input)),
+      },
+    );
   }
 }
 
@@ -583,18 +1218,35 @@ export type LearningApiClient = Pick<
   | 'createLearningUnit'
   | 'updateLearningUnit'
   | 'archiveLearningUnit'
+  | 'restoreLearningUnit'
+  | 'duplicateLearningUnit'
   | 'reorderLearningUnits'
   | 'createLearningItem'
   | 'updateLearningItem'
   | 'scheduleLearningItem'
   | 'publishLearningItem'
+  | 'unpublishLearningItem'
   | 'archiveLearningItem'
+  | 'restoreLearningItem'
+  | 'moveLearningItem'
+  | 'duplicateLearningItem'
+  | 'saveLearningItemDraft'
+  | 'getLearningItemDraft'
+  | 'discardLearningItemDraft'
+  | 'publishLearningItemDraft'
+  | 'getLearningUnitHistory'
+  | 'getLearningItemHistory'
+  | 'restoreLearningUnitRevision'
+  | 'restoreLearningItemRevision'
   | 'reorderLearningItems'
   | 'getStorageUsage'
   | 'getStoragePolicy'
   | 'createUploadIntent'
   | 'completeUploadIntent'
   | 'listLearningAttachments'
+  | 'detachLearningAttachment'
+  | 'getStorageReconciliationReport'
+  | 'runStorageReconciliation'
   | 'downloadFile'
   | 'getOwnSubmission'
   | 'getSubmission'

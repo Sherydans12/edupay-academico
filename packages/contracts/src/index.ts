@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './academic.js';
 export * from './learning.js';
+export * from './learning-read.js';
 export * from './notifications.js';
 export * from './storage.js';
 export * from './submissions.js';

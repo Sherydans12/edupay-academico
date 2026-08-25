@@ -5,4 +5,5 @@ export interface AcademicRequestContext {
   readonly principal: TrustedIdentityPrincipal;
   readonly requestId: string;
   readonly tenant: TrustedTenantContext;
+  readonly idempotencyKey?: string | undefined;
 }
