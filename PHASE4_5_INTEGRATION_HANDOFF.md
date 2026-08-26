@@ -38,19 +38,19 @@ Pasada dirigida:
 
 ## Gates
 
-| Gate | Resultado |
-| --- | --- |
-| `pnpm install --frozen-lockfile` | PASS |
-| Prisma generate/validate local | PASS |
-| `pnpm typecheck` | PASS |
-| `pnpm lint` | PASS |
-| `git diff --check` | PASS |
-| `pnpm --filter @edupay/api test` | PASS, con skips DB condicionados documentados |
-| `pnpm --filter @edupay/web test` | PASS |
-| `pnpm release:check` sin URLs públicas | FAIL de precondición de build: faltaron URLs públicas |
-| `pnpm release:check` con URLs sintéticas `.invalid` | PASS |
-| `pnpm release:config:check -- --service academico --env-file deploy/env/academico-api.ci.env.example` | PASS, 35 settings |
-| `pnpm pilot:e2e` con Identity disposable explícito | PASS, `CHECKPOINT PASS full real-service pilot cross-service smoke` |
+| Gate                                                                                                  | Resultado                                                           |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`                                                                      | PASS                                                                |
+| Prisma generate/validate local                                                                        | PASS                                                                |
+| `pnpm typecheck`                                                                                      | PASS                                                                |
+| `pnpm lint`                                                                                           | PASS                                                                |
+| `git diff --check`                                                                                    | PASS                                                                |
+| `pnpm --filter @edupay/api test`                                                                      | PASS, con skips DB condicionados documentados                       |
+| `pnpm --filter @edupay/web test`                                                                      | PASS                                                                |
+| `pnpm release:check` sin URLs públicas                                                                | FAIL de precondición de build: faltaron URLs públicas               |
+| `pnpm release:check` con URLs sintéticas `.invalid`                                                   | PASS                                                                |
+| `pnpm release:config:check -- --service academico --env-file deploy/env/academico-api.ci.env.example` | PASS, 35 settings                                                   |
+| `pnpm pilot:e2e` con Identity disposable explícito                                                    | PASS, `CHECKPOINT PASS full real-service pilot cross-service smoke` |
 
 `pnpm format:check` ejecuta directamente `prettier --check .`, por lo que el gate global exige cero diferencias. En esta ejecución quedan 104 archivos heredados del baseline; todas las rutas propias de esta integración están formateadas. No se modificaron masivamente esos archivos ni existe un waiver válido registrado. Por tanto el gate global sigue FAIL y el release permanece bloqueado.
 
