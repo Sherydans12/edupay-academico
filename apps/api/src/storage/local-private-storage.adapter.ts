@@ -92,6 +92,25 @@ export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
     return createReadStream(this.absolute(storageKey));
   }
 
+  async getVolumeStats(): Promise<{ totalBytes: number; freeBytes: number } | null> {
+    try {
+      const filesystem = await statfs(this.root);
+      const totalBytes = Number(filesystem.blocks) * Number(filesystem.bsize);
+      const freeBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
+      if (
+        !Number.isSafeInteger(totalBytes) ||
+        !Number.isSafeInteger(freeBytes) ||
+        totalBytes < 0 ||
+        freeBytes < 0
+      ) {
+        return null;
+      }
+      return { totalBytes, freeBytes };
+    } catch {
+      return null;
+    }
+  }
+
   private absolute(storageKey: string): string {
     if (
       storageKey.length === 0 ||

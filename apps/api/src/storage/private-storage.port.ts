@@ -12,4 +12,9 @@ export interface PrivateStorageProvider {
   promote(input: { stagingKey: string; finalKey: string }): Promise<void>;
   remove(storageKey: string): Promise<void>;
   read(storageKey: string): Promise<Buffer | Readable>;
+  /**
+   * Returns aggregate capacity for the final storage volume without exposing
+   * provider-specific paths or implementation details.
+   */
+  getVolumeStats(): Promise<{ totalBytes: number; freeBytes: number } | null>;
 }

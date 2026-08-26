@@ -6,6 +6,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { storageUsageSchema } from '@edupay/contracts';
 
 import {
   ACADEMIC_AUDIT_PORT,
@@ -135,6 +136,10 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
       'guide.pdf',
       bytes,
     );
+    const usageWithReservation = (await api(setup.teacherToken).get('/api/v1/storage/usage').expect(200)).body;
+    expect(storageUsageSchema.parse(usageWithReservation)).toEqual(usageWithReservation);
+    expect(usageWithReservation.reservedBytes).toBe(bytes.length);
+    expect(usageWithReservation.temporaryOrStagedBytes).toBe(0);
     const reservedBeforeTransfer = await prisma.storageUsageAccount.findUniqueOrThrow({
       where: { scopeKey: 'TENANT:storage-a' },
     });
@@ -172,6 +177,13 @@ describe.runIf(testDatabaseUrl)('Storage and submissions (PostgreSQL e2e)', () =
     expect(first.id).not.toBe(second.id);
     expect(await prisma.storedBlob.count({ where: { tenantId: 'storage-a' } })).toBe(1);
     expect(await prisma.fileObject.count({ where: { tenantId: 'storage-a' } })).toBe(2);
+    const usageAfterDedup = (await api(setup.teacherToken).get('/api/v1/storage/usage').expect(200)).body;
+    expect(storageUsageSchema.parse(usageAfterDedup)).toEqual(usageAfterDedup);
+    expect(usageAfterDedup.usedBytes).toBe(bytes.length);
+    expect(usageAfterDedup.logicalUsedBytes).toBe(bytes.length * 2);
+    expect(usageAfterDedup.physicalBlobBytes).toBe(bytes.length);
+    expect(usageAfterDedup.temporaryOrStagedBytes).toBe(0);
+    expect(usageAfterDedup.reconciliationStatus).toBe('CONSISTENT');
     await api(setup.studentToken).get(`/api/v1/files/${first.id}/download`).expect(200);
 
     const otherActor = await token('storage-a', 'unassigned-teacher', ['TEACHER']);

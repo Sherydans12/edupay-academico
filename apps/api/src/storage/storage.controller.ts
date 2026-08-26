@@ -24,7 +24,7 @@ import {
   storageUsageSchema,
   uploadIntentSchema,
 } from '@edupay/contracts';
-import type { CreateUploadIntent } from '@edupay/contracts';
+import type { CreateUploadIntent, StorageUsage } from '@edupay/contracts';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Environment } from '../config/environment';
@@ -119,7 +119,7 @@ export class StorageController {
 
   @Get('storage/usage')
   @ContractResponse(storageUsageSchema)
-  usage(): Promise<object> {
+  usage(): Promise<StorageUsage> {
     return this.storage.getUsage(this.context());
   }
 

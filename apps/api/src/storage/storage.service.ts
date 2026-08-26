@@ -14,7 +14,7 @@ import { Prisma } from '../generated/prisma/client';
 import type {
   StorageCategory as PrismaStorageCategory,
 } from '../generated/prisma/client';
-import type { CreateUploadIntent } from '@edupay/contracts';
+import type { CreateUploadIntent, StorageUsage } from '@edupay/contracts';
 
 import { AuthorizationService } from '../authorization/authorization.service';
 import { TenantCapability } from '../authorization/authorization.types';
@@ -92,7 +92,7 @@ export class StorageService implements LearningAttachmentPort {
     private readonly malwareScanner: MalwareScanner,
   ) {}
 
-  async getUsage(context: AcademicRequestContext): Promise<object> {
+  async getUsage(context: AcademicRequestContext): Promise<StorageUsage> {
     this.authorization.requireCapability(
       context.principal,
       context.tenant,
@@ -101,18 +101,28 @@ export class StorageService implements LearningAttachmentPort {
     this.requireStorageVisibilityRole(context);
     const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
     await this.ensureScopeRows(tenantId);
-    const [policy, account, files] = await Promise.all([
-      this.prisma.storageQuotaPolicy.findUniqueOrThrow({
-        where: { scopeKey: this.tenantScopeKey(tenantId) },
-      }),
-      this.prisma.storageUsageAccount.findUniqueOrThrow({
-        where: { scopeKey: this.tenantScopeKey(tenantId) },
-      }),
-      this.prisma.fileObject.findMany({
-        where: { tenantId, lifecycle: 'AVAILABLE' },
-        select: { category: true, authoritativeSizeBytes: true },
-      }),
-    ]);
+    const [policy, account, files, physicalBlobAggregate, stagedAggregate, volumeStats] =
+      await Promise.all([
+        this.prisma.storageQuotaPolicy.findUniqueOrThrow({
+          where: { scopeKey: this.tenantScopeKey(tenantId) },
+        }),
+        this.prisma.storageUsageAccount.findUniqueOrThrow({
+          where: { scopeKey: this.tenantScopeKey(tenantId) },
+        }),
+        this.prisma.fileObject.findMany({
+          where: { tenantId, lifecycle: 'AVAILABLE' },
+          select: { category: true, authoritativeSizeBytes: true },
+        }),
+        this.prisma.storedBlob.aggregate({
+          where: { tenantId, lifecycle: 'AVAILABLE' },
+          _sum: { storedSizeBytes: true },
+        }),
+        this.prisma.uploadIntent.aggregate({
+          where: { tenantId, status: 'STAGED' },
+          _sum: { expectedSizeBytes: true },
+        }),
+        this.provider.getVolumeStats(),
+      ]);
     const quotaBytes = this.toSafeNumber(policy.quotaBytes);
     const usedBytes = this.toSafeNumber(account.usedBytes);
     const reservedBytes = this.toSafeNumber(account.reservedBytes);
@@ -122,12 +132,26 @@ export class StorageService implements LearningAttachmentPort {
       quotaBytes,
     );
     const byCategory = new Map<PrismaStorageCategory, { bytes: number; count: number }>();
+    let logicalUsedBytes = 0;
     for (const file of files) {
+      const bytes = this.toSafeNumber(file.authoritativeSizeBytes);
+      logicalUsedBytes += bytes;
       const current = byCategory.get(file.category) ?? { bytes: 0, count: 0 };
-      current.bytes += this.toSafeNumber(file.authoritativeSizeBytes);
+      current.bytes += bytes;
       current.count += 1;
       byCategory.set(file.category, current);
     }
+    // usedBytes is the quota authority and is maintained transactionally for
+    // unique tenant-local blobs. These independent aggregates expose useful
+    // drift signals without replacing cached accounting on the request path.
+    const physicalBlobBytes = this.toSafeNumber(
+      physicalBlobAggregate._sum.storedSizeBytes ?? 0n,
+    );
+    const temporaryOrStagedBytes = this.toSafeNumber(
+      stagedAggregate._sum.expectedSizeBytes ?? 0n,
+    );
+    const reconciliationStatus =
+      usedBytes === physicalBlobBytes ? 'CONSISTENT' : 'DRIFT_DETECTED';
     return {
       tenantId,
       quotaBytes,
@@ -145,6 +169,12 @@ export class StorageService implements LearningAttachmentPort {
         logicalBytes: value.bytes,
         fileCount: value.count,
       })),
+      logicalUsedBytes,
+      physicalBlobBytes,
+      temporaryOrStagedBytes,
+      physicalStorageTotalBytes: volumeStats?.totalBytes ?? null,
+      physicalStorageFreeBytes: volumeStats?.freeBytes ?? null,
+      reconciliationStatus,
     };
   }
 
@@ -1169,7 +1199,7 @@ export class StorageService implements LearningAttachmentPort {
   private quotaState(
     percentage: number,
     policy: { infoThresholdPercent: number; warningThresholdPercent: number; criticalThresholdPercent: number },
-  ): string {
+  ): StorageUsage['state'] {
     if (percentage >= 100) return 'FULL';
     if (percentage >= policy.criticalThresholdPercent) return 'CRITICAL';
     if (percentage >= policy.warningThresholdPercent) return 'WARNING';
