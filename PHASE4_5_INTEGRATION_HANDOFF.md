@@ -1,6 +1,6 @@
 # Handoff de integración RC — Fases 4 y 5
 
-Estado: `RELEASE_CANDIDATE_BLOCKED_PENDING_OWNER_APPROVAL`.
+Estado: `RELEASE_CANDIDATE_READY_FOR_OWNER_APPROVAL`.
 
 Las decisiones de alcance y las exclusiones cerradas en este handoff están
 formalizadas en `PHASE4_5_RELEASE_DECISIONS.md`.
@@ -70,4 +70,4 @@ Pasada dirigida:
 - El body document y receipts/ordering son migraciones aditivas ya presentes en el candidato; ante rollback operacional se vuelve al código anterior y se deja `ACADEMIC_BODY_DOCUMENT_READ_ENABLED=0` si corresponde.
 - No ejecutar `DROP COLUMN`, borrar tablas ni aplicar migraciones productivas como parte de este handoff.
 
-No emitir `GO` de release mientras la validación API con PostgreSQL mantenga fallos/skips sin decisión técnica, mientras permanezcan exclusiones sin decisión explícita o si el owner no aprueba el alcance final.
+El candidato está listo para aprobación del owner, pero no emitir `GO` de release mientras la validación API con PostgreSQL mantenga fallos/skips sin decisión técnica, mientras permanezcan exclusiones sin decisión explícita o si el owner no aprueba el alcance final.

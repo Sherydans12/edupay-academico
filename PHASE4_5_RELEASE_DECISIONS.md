@@ -1,7 +1,7 @@
 # Decisiones de release — Fases 4 y 5
 
 Fecha de cierre documental: 2026-08-26  
-Estado: `RELEASE_CANDIDATE_BLOCKED_PENDING_OWNER_APPROVAL`
+Estado: `RELEASE_CANDIDATE_READY_FOR_OWNER_APPROVAL`
 
 Este registro cierra el alcance de release sin cambiar código funcional. La
 integración está en `codex/course-builder-release-integration`, creada desde
@@ -117,15 +117,18 @@ formato independiente y no deben confundirse con exclusiones de suites.
 
 ## 5. Decisión de release
 
-No emitir `GO PRODUCCIÓN`. El estado se mantiene en
-`RELEASE_CANDIDATE_BLOCKED_PENDING_OWNER_APPROVAL` hasta que se cumplan ambas
-condiciones:
+El formato global está resuelto y las exclusiones están formalizadas. Por
+tanto, el estado es `RELEASE_CANDIDATE_READY_FOR_OWNER_APPROVAL`. Esto no
+emite `GO PRODUCCIÓN`; la aprobación del owner debe considerar los seis
+fallos y 14 skips de la validación API con PostgreSQL documentados en
+`PHASE4_5_FINAL_VALIDATION.md`.
 
-1. exista una solución aprobada para `format:check` global —limpieza separada
-   del baseline o política CI baseline-aware formalmente aprobada— y el gate
-   correspondiente esté verde;
-2. las exclusiones de alcance, incluida Fase 6 y las suites baseline de esta
-   página, estén aceptadas explícitamente por el owner.
+No emitir `GO PRODUCCIÓN` hasta que:
+
+1. el owner acepte explícitamente las exclusiones de alcance, incluida Fase 6
+   y las suites baseline de esta página;
+2. exista una decisión técnica sobre los seis fallos/14 skips DB o una
+   ejecución posterior completamente verde.
 
 El `pilot:e2e` verde, incluido `/storage/usage`, no sustituye la validación
 DB pendiente ni la aprobación del owner.

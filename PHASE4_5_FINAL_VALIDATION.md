@@ -2,7 +2,7 @@
 
 Fecha: 2026-08-26  
 Base funcional: `8fbae42acd260f7ca9c201d1c8a88d1aba65ac4b`  
-Estado: `RELEASE_CANDIDATE_BLOCKED_PENDING_OWNER_APPROVAL`
+Estado: `RELEASE_CANDIDATE_READY_FOR_OWNER_APPROVAL`
 
 Esta validación se ejecutó en el worktree aislado
 `C:\Users\nicol\Documents\EduPayAcademico-worktrees\course-builder-release-integration-final`,
@@ -84,10 +84,10 @@ setup/contrato impiden declarar la ejecución DB completamente verde.
 
 El formato global está resuelto mediante commits separados y las exclusiones
 Fase 6/baseline están documentadas en
-`PHASE4_5_RELEASE_DECISIONS.md`. Sin embargo, el estado no cambia a
-`RELEASE_CANDIDATE_READY_FOR_OWNER_APPROVAL`: la validación API con PostgreSQL
-no está verde y dejar los seis fallos/14 skips como condición conocida exige
-una decisión técnica posterior. No se emite `GO PRODUCCIÓN`.
+`PHASE4_5_RELEASE_DECISIONS.md`. Por cumplir esas dos condiciones explícitas,
+el estado cambia a `RELEASE_CANDIDATE_READY_FOR_OWNER_APPROVAL`. La
+validación API con PostgreSQL mantiene seis fallos y 14 skips visibles para
+la aprobación del owner; este estado no equivale a `GO PRODUCCIÓN`.
 
 ## Rollback
 
