@@ -1,6 +1,6 @@
 # Release candidate local — Fases 4 y 5
 
-Fecha de corte: 2026-08-25. Estado: **CONDICIONAL / no apto para producción**.
+Fecha de corte: 2026-08-26. Estado: **BLOQUEADO / no apto para producción**.
 
 Este documento registra únicamente la preparación del commit local. No hubo
 merge, push, deploy ni migración productiva. El inventario exacto de rutas,
@@ -23,7 +23,7 @@ La base operativa `main` evita arrastrar la variante incompatible de
 `TrustedTenantContext` presente en el `HEAD` original. No se copiaron cambios
 de Identity del worktree original.
 
-## Gates ejecutados
+## Gates ejecutados — primera pasada histórica
 
 | Gate                                                                                                  | Resultado  | Evidencia concreta                                                                                                                                                                                                                                      |
 | ----------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -41,7 +41,7 @@ de Identity del worktree original.
 No se reporta un PASS global mientras permanecen fallos de formato, API,
 release build y pilot.
 
-## Warnings de lint
+## Warnings de lint — primera pasada histórica
 
 El primer `pnpm lint` tuvo 12 warnings: imports no usados en
 `course-builder.tsx`, `types.ts` y `unit-card.tsx`; props de schedule no usadas;
@@ -69,12 +69,12 @@ crea un bloque `TEXT` determinista desde los scalars legacy y conserva `body`,
 poner `ACADEMIC_BODY_DOCUMENT_READ_ENABLED=0`, manteniendo las columnas nuevas;
 no se debe ejecutar `DROP COLUMN` ni modificar producción desde este candidato.
 
-## Riesgos restantes
+## Riesgos restantes — primera pasada histórica
 
-1. El formato heredado/compartido sigue fallando en 125 archivos y requiere decisión
-   separada del owner del baseline.
+1. El formato heredado/compartido fue medido inicialmente en 125 archivos y requiere
+   decisión separada del owner del baseline.
 2. La suite API tuvo un timeout transitorio en la primera ejecución; la
-   repetición final pasó. `release:check` sí falla posteriormente en el build web.
+   repetición posterior pasó. La revalidación final está documentada abajo.
 3. El pilot smoke requiere un checkout Identity en `main` y variables públicas
    de build; no se deben resolver incorporando cambios de Identity a este
    candidate.
@@ -103,9 +103,10 @@ constancia de la reejecución solicitada sobre el worktree candidato.
 ### Formato: clasificación explícita
 
 La cifra histórica de 125 archivos del inventario no se reproduce con la
-ejecución actual de Prettier 3.9.6 y el lockfile vigente. La medición actual es
-110 archivos globales: 105 son únicamente baseline y 5 son rutas compartidas
-que también fallan en baseline:
+ejecución actual de Prettier 3.9.6 y el lockfile vigente. La medición de cierre
+antes de corregir las rutas compartidas fue de 110 archivos globales: 105 eran
+únicamente baseline y 5 eran rutas compartidas del candidate que también
+fallaban en baseline:
 
 - `apps/web/src/app/globals.css`
 - `apps/web/src/features/learning-screens.spec.tsx`
@@ -113,11 +114,13 @@ que también fallan en baseline:
 - `apps/web/src/features/student-screens.tsx`
 - `packages/ui/src/styles.css`
 
-Las dos notas de release propias y las dos suites nuevas quedan formateadas.
-Se ejecutó Prettier sobre las 59 rutas del candidato y las dos suites añadidas;
-no se reformatearon masivamente los 105 archivos heredados ni las cinco rutas
-compartidas. La diferencia entre 125 y 110 queda abierta y requiere aprobación
-explícita del owner; por eso el release no se declara verde.
+Las cinco rutas compartidas fueron formateadas de forma acotada. La comprobación
+posterior sobre las 61 rutas del candidate (59 originales y 2 suites añadidas)
+queda limpia; el gate global conserva 105 fallos, todos exclusivos del
+baseline. No se reformatearon esos 105 archivos heredados. La diferencia
+histórica entre 125 y 110 queda registrada como discrepancia del baseline y
+requiere aprobación explícita separada; no se mezcla silenciosamente con
+Fases 4/5.
 
 ### Cobertura
 
@@ -142,7 +145,7 @@ skipped`; la suite está verde, pero aún no alcanza el baseline aprobado.
 | `pnpm install --frozen-lockfile`                                                                      | PASS         | Lockfile vigente; ejecutado en candidato y checkout Identity disposable.                                             |
 | `pnpm typecheck`                                                                                      | PASS         | Contracts, UI, API y Web.                                                                                            |
 | `pnpm lint`                                                                                           | PASS         | Sin errores ni warnings.                                                                                             |
-| `pnpm format:check`                                                                                   | FAIL         | 110 globales actuales; clasificación anterior.                                                                       |
+| `pnpm format:check`                                                                                   | FAIL         | 105 fallos globales, todos exclusivos del baseline; las 61 rutas del candidate pasan.                                |
 | `git diff --check`                                                                                    | PASS         | Sin whitespace inválido en el diff candidato.                                                                        |
 | `pnpm --filter @edupay/api test`                                                                      | PASS parcial | 21 archivos, 158 tests pass y 31 skipped; queda por debajo de los 191 tests esperados.                               |
 | `pnpm --filter @edupay/web test`                                                                      | PASS         | 18 archivos, 84 tests.                                                                                               |
