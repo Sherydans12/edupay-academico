@@ -2,6 +2,9 @@
 
 Estado: `RELEASE_CANDIDATE_BLOCKED_PENDING_OWNER_APPROVAL`.
 
+Las decisiones de alcance y las exclusiones cerradas en este handoff están
+formalizadas en `PHASE4_5_RELEASE_DECISIONS.md`.
+
 Este worktree es una integración aislada creada desde `e2b2688640b70f7f89489d3af1ccfb91f551f4a6`:
 
 - Rama: `codex/course-builder-release-integration`.
@@ -54,10 +57,10 @@ Pasada dirigida:
 
 `pnpm format:check` ejecuta directamente `prettier --check .`, por lo que el gate global exige cero diferencias. En esta ejecución quedan 104 archivos heredados del baseline; todas las rutas propias de esta integración están formateadas. No se modificaron masivamente esos archivos ni existe un waiver válido registrado. Por tanto el gate global sigue FAIL y el release permanece bloqueado.
 
-## Exclusiones pendientes de decisión
+## Exclusiones vigentes y pendientes
 
-- `apps/web/src/features/student-deliverables-screens.spec.tsx` no se incorpora: requiere decisión explícita del owner sobre el alcance Student Deliverables.
-- Suites baseline no propietarias de Fases 4/5 no se incorporan sin decisión explícita de alcance.
+- `apps/web/src/features/student-deliverables-screens.spec.tsx` no se incorpora: queda excluida por pertenecer a Fase 6.
+- Las suites baseline fuera del alcance F4/F5 quedan excluidas y enumeradas en `PHASE4_5_RELEASE_DECISIONS.md`; ampliar ese alcance requiere aprobación explícita y commit separado.
 - Los 104 archivos heredados con formato pendiente no se reformatean dentro de F4/F5; requieren aprobación o waiver formal separado.
 - No se copian cambios de `.claude/**`, Identity, Fase 6, notificaciones/sincronización fuera del RFC ni scripts de laboratorio.
 
