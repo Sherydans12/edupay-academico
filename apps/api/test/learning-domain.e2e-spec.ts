@@ -10,6 +10,7 @@ import {
   it,
   vi,
 } from 'vitest';
+import { apiErrorEnvelopeSchema } from '@edupay/contracts';
 
 import {
   ACADEMIC_AUDIT_PORT,
@@ -934,11 +935,13 @@ describe.runIf(testDatabaseUrl)(
       const [res1, res2] = await Promise.all([req1, req2]);
       const statuses = [res1.status, res2.status].sort();
 
-      expect(statuses).toEqual([200, 409]);
+      // POST reorder has no @HttpCode(200) override; the API contract therefore
+      // uses Nest's 201 default for the successful mutation response.
+      expect(statuses).toEqual([201, 409]);
 
       const staleResponse = res1.status === 409 ? res1.body : res2.body;
-      expect(staleResponse).toEqual(
-        expect.objectContaining({ code: 'STALE_REVISION' }),
+      expect(apiErrorEnvelopeSchema.parse(staleResponse).error.code).toBe(
+        'STALE_REVISION',
       );
 
       // Verify PostgreSQL state
@@ -1014,8 +1017,8 @@ describe.runIf(testDatabaseUrl)(
         });
 
       expect(conflictRes.status).toBe(409);
-      expect(conflictRes.body).toEqual(
-        expect.objectContaining({ code: 'IDEMPOTENCY_KEY_REUSED' }),
+      expect(apiErrorEnvelopeSchema.parse(conflictRes.body).error.code).toBe(
+        'IDEMPOTENCY_KEY_REUSED',
       );
     });
 
