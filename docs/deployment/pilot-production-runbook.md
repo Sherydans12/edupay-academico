@@ -432,6 +432,7 @@ deployment state. Review the target before running them. Never use
    BACKUP_REQUIRE_OFFHOST=1 BACKUP_ROOT=/var/lib/edupay-backup-staging \
      bash ops/backup/backup-pilot.sh
    ```
+
 7. Identity migrations. From the reviewed Identity checkout, run once:
 
    ```sh
@@ -558,6 +559,7 @@ deployment state. Review the target before running them. Never use
     helper succeeds, the dated local staging directory may be pruned according
     to retention policy; never prune the live application volumes and never
     report a local-only copy as a successful production backup.
+
 24. R2 restore verification evidence. Before accepting real pilot data, use
     the approved R2 credentials to copy one completed dated set into a clearly
     labelled disposable restore directory, verify its checksum manifest, and

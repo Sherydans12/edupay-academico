@@ -49,7 +49,9 @@ void main().catch((error: unknown) => {
   } else {
     const message = error instanceof Error ? error.message : 'Unknown error.';
     const databaseUrl = process.env.DATABASE_URL;
-    const safeMessage = databaseUrl ? message.replaceAll(databaseUrl, '[redacted database URL]') : message;
+    const safeMessage = databaseUrl
+      ? message.replaceAll(databaseUrl, '[redacted database URL]')
+      : message;
     console.error(`Academic tenant bootstrap failed: ${safeMessage}`);
   }
   process.exitCode = 1;

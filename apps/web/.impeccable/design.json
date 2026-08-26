@@ -8,39 +8,100 @@
         "role": "primary",
         "displayName": "Institutional Route Blue",
         "canonical": "#1d2f70",
-        "tonalRamp": ["#0d1635", "#14234f", "#1d2f70", "#2d4b82", "#526b9b", "#8293b6", "#bdc7d9", "#eef1f7"]
+        "tonalRamp": [
+          "#0d1635",
+          "#14234f",
+          "#1d2f70",
+          "#2d4b82",
+          "#526b9b",
+          "#8293b6",
+          "#bdc7d9",
+          "#eef1f7"
+        ]
       },
       "conquistadores-accent": {
         "role": "secondary",
         "displayName": "Attention Yellow",
         "canonical": "#e6b83f",
-        "tonalRamp": ["#3f2d00", "#6c4b00", "#9a6500", "#c99520", "#e6b83f", "#efd071", "#f7e8ad", "#fdf8e9"]
+        "tonalRamp": [
+          "#3f2d00",
+          "#6c4b00",
+          "#9a6500",
+          "#c99520",
+          "#e6b83f",
+          "#efd071",
+          "#f7e8ad",
+          "#fdf8e9"
+        ]
       },
       "conquistadores-educational": {
         "role": "tertiary",
         "displayName": "Educational Teal",
         "canonical": "#477e82",
-        "tonalRamp": ["#142c2e", "#274d50", "#477e82", "#68a0a4", "#8dbcbf", "#b5d6d8", "#d9eaea", "#f1f8f8"]
+        "tonalRamp": [
+          "#142c2e",
+          "#274d50",
+          "#477e82",
+          "#68a0a4",
+          "#8dbcbf",
+          "#b5d6d8",
+          "#d9eaea",
+          "#f1f8f8"
+        ]
       },
       "conquistadores-background": {
         "role": "neutral",
         "displayName": "Warm Learning Ground",
         "canonical": "#f5f3ee",
-        "tonalRamp": ["#282724", "#4f4d48", "#77746d", "#9f9b93", "#c3c0b9", "#dfdcd6", "#f0eee9", "#f5f3ee"]
+        "tonalRamp": [
+          "#282724",
+          "#4f4d48",
+          "#77746d",
+          "#9f9b93",
+          "#c3c0b9",
+          "#dfdcd6",
+          "#f0eee9",
+          "#f5f3ee"
+        ]
       }
     },
     "typographyMeta": {
-      "display": { "displayName": "Academic Display", "purpose": "Page greetings and decisive assignment titles." },
-      "body": { "displayName": "Working Body", "purpose": "Readable task guidance and supporting context." },
-      "label": { "displayName": "Status Label", "purpose": "Badges, metadata, and compact control labels." }
+      "display": {
+        "displayName": "Academic Display",
+        "purpose": "Page greetings and decisive assignment titles."
+      },
+      "body": {
+        "displayName": "Working Body",
+        "purpose": "Readable task guidance and supporting context."
+      },
+      "label": {
+        "displayName": "Status Label",
+        "purpose": "Badges, metadata, and compact control labels."
+      }
     },
     "shadows": [
-      { "name": "ambient-surface", "value": "0 3px 12px rgb(25 41 64 / 0.08)", "purpose": "Resting cards and grouped panels." },
-      { "name": "interactive-lift", "value": "0 12px 32px rgb(25 41 64 / 0.13)", "purpose": "Menus, dialogs, drawers, and hovered interactive cards." }
+      {
+        "name": "ambient-surface",
+        "value": "0 3px 12px rgb(25 41 64 / 0.08)",
+        "purpose": "Resting cards and grouped panels."
+      },
+      {
+        "name": "interactive-lift",
+        "value": "0 12px 32px rgb(25 41 64 / 0.13)",
+        "purpose": "Menus, dialogs, drawers, and hovered interactive cards."
+      }
     ],
     "motion": [
-      { "name": "fast", "value": "160ms ease", "purpose": "Color, focus-adjacent, and small hover feedback." },
-      { "name": "standard", "value": "220ms ease", "purpose": "Card lift and responsive drawer transitions." }
+      {
+        "name": "fast",
+        "value": "160ms ease",
+        "purpose": "Color, focus-adjacent, and small hover feedback."
+      },
+      {
+        "name": "standard",
+        "value": "220ms ease",
+        "purpose": "Card lift and responsive drawer transitions."
+      }
     ],
     "breakpoints": [
       { "name": "compact", "value": "400px" },
@@ -108,10 +169,26 @@
       "Responsive learning and review workflows with 44px targets."
     ],
     "rules": [
-      { "name": "Yellow Carries Meaning", "body": "Yellow is reserved for attention and forward action and never carries white text.", "section": "colors" },
-      { "name": "Semantic Tenant", "body": "Change tenant identity through semantic tokens, never component forks.", "section": "colors" },
-      { "name": "Next Step First", "body": "Place the meaningful learning or review action in the first viewport.", "section": "layout" },
-      { "name": "Ambient First", "body": "Stronger lift appears only for hierarchy, overlay, or interaction.", "section": "elevation" }
+      {
+        "name": "Yellow Carries Meaning",
+        "body": "Yellow is reserved for attention and forward action and never carries white text.",
+        "section": "colors"
+      },
+      {
+        "name": "Semantic Tenant",
+        "body": "Change tenant identity through semantic tokens, never component forks.",
+        "section": "colors"
+      },
+      {
+        "name": "Next Step First",
+        "body": "Place the meaningful learning or review action in the first viewport.",
+        "section": "layout"
+      },
+      {
+        "name": "Ambient First",
+        "body": "Stronger lift appears only for hierarchy, overlay, or interaction.",
+        "section": "elevation"
+      }
     ],
     "dos": [
       "Do place the next meaningful learning or review action before broad summaries.",

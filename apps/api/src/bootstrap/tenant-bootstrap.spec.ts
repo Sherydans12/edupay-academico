@@ -98,13 +98,15 @@ function fakePrisma(): PrismaService {
 
 describe('Academic tenant bootstrap', () => {
   it('requires a canonical UUID and applies the 20 GB pilot default', () => {
-    expect(parseTenantBootstrapArguments(['--tenant-id', tenantId])).toMatchObject({
+    expect(
+      parseTenantBootstrapArguments(['--tenant-id', tenantId]),
+    ).toMatchObject({
       tenantId,
       quotaBytes: DEFAULT_TENANT_QUOTA_BYTES,
     });
-    expect(() => parseTenantBootstrapArguments(['--tenant-id', 'demo-tenant'])).toThrow(
-      'canonical UUID',
-    );
+    expect(() =>
+      parseTenantBootstrapArguments(['--tenant-id', 'demo-tenant']),
+    ).toThrow('canonical UUID');
   });
 
   it('is idempotent and refuses an incompatible quota', async () => {
@@ -115,18 +117,22 @@ describe('Academic tenant bootstrap', () => {
       requestId: 'test-bootstrap',
     };
 
-    await expect(bootstrapAcademicTenant(prisma, input)).resolves.toMatchObject({
-      tenantCreated: true,
-      tenantQuotaPolicyCreated: true,
-      tenantUsageAccountCreated: true,
-    });
-    await expect(bootstrapAcademicTenant(prisma, input)).resolves.toMatchObject({
-      tenantCreated: false,
-      globalQuotaPolicyCreated: false,
-      globalUsageAccountCreated: false,
-      tenantQuotaPolicyCreated: false,
-      tenantUsageAccountCreated: false,
-    });
+    await expect(bootstrapAcademicTenant(prisma, input)).resolves.toMatchObject(
+      {
+        tenantCreated: true,
+        tenantQuotaPolicyCreated: true,
+        tenantUsageAccountCreated: true,
+      },
+    );
+    await expect(bootstrapAcademicTenant(prisma, input)).resolves.toMatchObject(
+      {
+        tenantCreated: false,
+        globalQuotaPolicyCreated: false,
+        globalUsageAccountCreated: false,
+        tenantQuotaPolicyCreated: false,
+        tenantUsageAccountCreated: false,
+      },
+    );
     await expect(
       bootstrapAcademicTenant(prisma, { ...input, quotaBytes: 10_000_000_000 }),
     ).rejects.toBeInstanceOf(TenantBootstrapConflictError);

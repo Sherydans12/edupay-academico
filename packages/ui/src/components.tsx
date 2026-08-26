@@ -13,7 +13,8 @@ function classes(...values: ClassValue[]) {
   return values.filter(Boolean).join(' ');
 }
 
-export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'ghost' | 'danger';
+export type ButtonVariant =
+  'primary' | 'secondary' | 'accent' | 'ghost' | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -34,7 +35,12 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={classes('ui-button', `ui-button--${variant}`, `ui-button--${size}`, className)}
+      className={classes(
+        'ui-button',
+        `ui-button--${variant}`,
+        `ui-button--${size}`,
+        className,
+      )}
       disabled={disabled || loading}
       type={type}
       {...props}
@@ -80,12 +86,18 @@ function FieldFrame({
 }
 
 export interface InputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'>,
-    FieldProps {
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'>, FieldProps {
   id: string;
 }
 
-export function Input({ error, hint, id, label, className, ...props }: InputProps) {
+export function Input({
+  error,
+  hint,
+  id,
+  label,
+  className,
+  ...props
+}: InputProps) {
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
   return (
     <FieldFrame error={error} hint={hint} id={id} label={label}>
@@ -101,12 +113,18 @@ export function Input({ error, hint, id, label, className, ...props }: InputProp
 }
 
 export interface TextareaProps
-  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'>,
-    FieldProps {
+  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'>, FieldProps {
   id: string;
 }
 
-export function Textarea({ error, hint, id, label, className, ...props }: TextareaProps) {
+export function Textarea({
+  error,
+  hint,
+  id,
+  label,
+  className,
+  ...props
+}: TextareaProps) {
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
   return (
     <FieldFrame error={error} hint={hint} id={id} label={label}>
@@ -122,12 +140,19 @@ export function Textarea({ error, hint, id, label, className, ...props }: Textar
 }
 
 export interface SelectProps
-  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'>,
-    FieldProps {
+  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'>, FieldProps {
   id: string;
 }
 
-export function Select({ error, hint, id, label, className, children, ...props }: SelectProps) {
+export function Select({
+  error,
+  hint,
+  id,
+  label,
+  className,
+  children,
+  ...props
+}: SelectProps) {
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
   return (
     <FieldFrame error={error} hint={hint} id={id} label={label}>
@@ -144,24 +169,41 @@ export function Select({ error, hint, id, label, className, children, ...props }
   );
 }
 
-export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
+export interface CheckboxProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  'type'
+> {
   description?: string;
   label: string;
 }
 
-export function Checkbox({ className, description, id, label, ...props }: CheckboxProps) {
+export function Checkbox({
+  className,
+  description,
+  id,
+  label,
+  ...props
+}: CheckboxProps) {
   return (
     <label className={classes('ui-checkbox', className)} htmlFor={id}>
-      <input className="ui-checkbox__control" id={id} type="checkbox" {...props} />
+      <input
+        className="ui-checkbox__control"
+        id={id}
+        type="checkbox"
+        {...props}
+      />
       <span>
         <span className="ui-checkbox__label">{label}</span>
-        {description ? <span className="ui-checkbox__description">{description}</span> : null}
+        {description ? (
+          <span className="ui-checkbox__description">{description}</span>
+        ) : null}
       </span>
     </label>
   );
 }
 
-export type BadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'error' | 'creative';
+export type BadgeTone =
+  'neutral' | 'info' | 'success' | 'warning' | 'error' | 'creative';
 
 export function Badge({
   children,
@@ -171,7 +213,10 @@ export function Badge({
   ...props
 }: HTMLAttributes<HTMLSpanElement> & { icon?: ReactNode; tone?: BadgeTone }) {
   return (
-    <span className={classes('ui-badge', `ui-badge--${tone}`, className)} {...props}>
+    <span
+      className={classes('ui-badge', `ui-badge--${tone}`, className)}
+      {...props}
+    >
       {icon}
       {children}
     </span>
@@ -185,7 +230,14 @@ export function Card({
   ...props
 }: HTMLAttributes<HTMLDivElement> & { interactive?: boolean }) {
   return (
-    <div className={classes('ui-card', interactive && 'ui-card--interactive', className)} {...props}>
+    <div
+      className={classes(
+        'ui-card',
+        interactive && 'ui-card--interactive',
+        className,
+      )}
+      {...props}
+    >
       {children}
     </div>
   );
@@ -213,11 +265,20 @@ export function Avatar({
   return src ? (
     // The shared package is framework-neutral; applications may pass optimized asset URLs.
     // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt ?? name} className={classes('ui-avatar', `ui-avatar--${size}`, className)} src={src} />
+    <img
+      alt={alt ?? name}
+      className={classes('ui-avatar', `ui-avatar--${size}`, className)}
+      src={src}
+    />
   ) : (
     <span
       aria-label={name}
-      className={classes('ui-avatar', `ui-avatar--${size}`, 'ui-avatar--fallback', className)}
+      className={classes(
+        'ui-avatar',
+        `ui-avatar--${size}`,
+        'ui-avatar--fallback',
+        className,
+      )}
       role="img"
     >
       {initials}
@@ -225,8 +286,17 @@ export function Avatar({
   );
 }
 
-export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div aria-hidden="true" className={classes('ui-skeleton', className)} {...props} />;
+export function Skeleton({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      aria-hidden="true"
+      className={classes('ui-skeleton', className)}
+      {...props}
+    />
+  );
 }
 
 export function EmptyState({
@@ -292,13 +362,23 @@ export function DataList({
   label: string;
 }) {
   return (
-    <div aria-label={label} className={classes('ui-data-list', className)} role="list">
+    <div
+      aria-label={label}
+      className={classes('ui-data-list', className)}
+      role="list"
+    >
       {children}
     </div>
   );
 }
 
-export function DataListItem({ children, className }: { children: ReactNode; className?: string }) {
+export function DataListItem({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <div className={classes('ui-data-list__item', className)} role="listitem">
       {children}

@@ -20,11 +20,11 @@ or EICAR bytes into this file.
 
 ## Reviewed source baseline
 
-| Repository       | Observed commit SHA                        | Worktree status                                         | Classification                     |
-| ---------------- | ------------------------------------------ | ------------------------------------------------------- | ---------------------------------- |
-| EduPay Académico | `39ab05fc818fe34bd77e3e57e15a9ba81d925808` | clean release/pilot-validation worktree at latest green validation | DISPOSABLE / AUTOMATED CI baseline |
+| Repository       | Observed commit SHA                        | Worktree status                                                      | Classification                     |
+| ---------------- | ------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------- |
+| EduPay Académico | `39ab05fc818fe34bd77e3e57e15a9ba81d925808` | clean release/pilot-validation worktree at latest green validation   | DISPOSABLE / AUTOMATED CI baseline |
 | EduPay Identity  | `16838f526a4ee48fbb518b840fe0c19e766395cf` | clean `main`, matched `origin/main`; PR #1 email-worker fix verified | DISPOSABLE / AUTOMATED CI baseline |
-| BL-002 EduPay    | `abc3776631d5940759d1a45ad949413174f2acf9` | clean `main`, matched `origin/main` at validation start | DISPOSABLE / AUTOMATED CI baseline |
+| BL-002 EduPay    | `abc3776631d5940759d1a45ad949413174f2acf9` | clean `main`, matched `origin/main` at validation start              | DISPOSABLE / AUTOMATED CI baseline |
 
 ## Current-main Identity verification
 
@@ -42,30 +42,30 @@ or EICAR bytes into this file.
 
 ## Gate results
 
-| Gate                                     | Result                 | Classification                 | Safe evidence / link |
-| ---------------------------------------- | ---------------------- | ------------------------------ | -------------------- |
-| GitHub/Linux workflow run                | `PASS; 31547851646`    | AUTOMATED CI                   | [green run](https://github.com/Sherydans12/edupay-academico/actions/runs/31547851646) |
-| Prisma validation/generation             | `PASS`                 | AUTOMATED CI                   | Repository release gate |
-| lint/typecheck/normal tests/build        | `PASS`                 | AUTOMATED CI                   | Repository release gate |
-| PostgreSQL-backed tests                  | `PASS`                 | AUTOMATED CI / DISPOSABLE      | PostgreSQL release gate |
-| API image build                          | `PASS; 96e9fcb4b35a3722e5b679f18a2748c8fc6c0390c704528582467442005b8df3` | AUTOMATED CI | Linux topology gate |
-| Web image build                          | `PASS; 45e3b6a22f41680f55ec81b8e7c57a8fd76369c5c8f4f0a559067fc192901714` | AUTOMATED CI | Linux topology gate |
-| Compose syntax/runtime/health            | `PASS`                 | AUTOMATED CI / DISPOSABLE      | API/Web/DB/ClamAV health routes passed |
-| Academic migration status/deploy         | `PASS`                 | DISPOSABLE; production pending | PostgreSQL, Compose, and smoke gates |
-| `pilot:e2e`                              | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Full pilot with real ClamAV |
-| ClamAV image/version/signature timestamp | `clamav/clamav:1.4.3; signature timestamp not emitted` | DISPOSABLE; production pending | Private topology; production timestamp pending |
-| Clean synthetic upload/download          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Full pilot with real ClamAV |
-| EICAR rejection/download denial          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Rejected; never AVAILABLE/downloadable |
-| Staging/quota cleanup                    | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Failed reservation released; staging clean |
-| Backup/checksum                          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Separate disposable target; SHA256 verified |
-| Restore/database/file-byte verification  | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Both DBs and retained file bytes verified |
-| Identity tenant-admin bootstrap          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Actual command; same UUID; idempotent and incompatible rerun checks |
-| Identity email outbox lifecycle          | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Normal email activation created one intent; Resend not called |
-| Academic tenant bootstrap                | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Same canonical UUID; quota/accounting present |
-| Activation/login                         | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Normal one-time activation and TENANT_ADMIN login |
-| BL-002 incremental sync                  | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Current BL-002 main; source identities/enrollments/watermark |
-| BL-002 full sync                         | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Snapshot completion and watermark verified |
-| Notification/sync/Identity worker checks | `PASS`                 | AUTOMATED CI / DISPOSABLE      | Academic checks plus built Identity `email:deliver` |
+| Gate                                     | Result                                                                   | Classification                 | Safe evidence / link                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ | ------------------------------------------------------------------------------------- |
+| GitHub/Linux workflow run                | `PASS; 31547851646`                                                      | AUTOMATED CI                   | [green run](https://github.com/Sherydans12/edupay-academico/actions/runs/31547851646) |
+| Prisma validation/generation             | `PASS`                                                                   | AUTOMATED CI                   | Repository release gate                                                               |
+| lint/typecheck/normal tests/build        | `PASS`                                                                   | AUTOMATED CI                   | Repository release gate                                                               |
+| PostgreSQL-backed tests                  | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | PostgreSQL release gate                                                               |
+| API image build                          | `PASS; 96e9fcb4b35a3722e5b679f18a2748c8fc6c0390c704528582467442005b8df3` | AUTOMATED CI                   | Linux topology gate                                                                   |
+| Web image build                          | `PASS; 45e3b6a22f41680f55ec81b8e7c57a8fd76369c5c8f4f0a559067fc192901714` | AUTOMATED CI                   | Linux topology gate                                                                   |
+| Compose syntax/runtime/health            | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | API/Web/DB/ClamAV health routes passed                                                |
+| Academic migration status/deploy         | `PASS`                                                                   | DISPOSABLE; production pending | PostgreSQL, Compose, and smoke gates                                                  |
+| `pilot:e2e`                              | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Full pilot with real ClamAV                                                           |
+| ClamAV image/version/signature timestamp | `clamav/clamav:1.4.3; signature timestamp not emitted`                   | DISPOSABLE; production pending | Private topology; production timestamp pending                                        |
+| Clean synthetic upload/download          | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Full pilot with real ClamAV                                                           |
+| EICAR rejection/download denial          | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Rejected; never AVAILABLE/downloadable                                                |
+| Staging/quota cleanup                    | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Failed reservation released; staging clean                                            |
+| Backup/checksum                          | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Separate disposable target; SHA256 verified                                           |
+| Restore/database/file-byte verification  | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Both DBs and retained file bytes verified                                             |
+| Identity tenant-admin bootstrap          | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Actual command; same UUID; idempotent and incompatible rerun checks                   |
+| Identity email outbox lifecycle          | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Normal email activation created one intent; Resend not called                         |
+| Academic tenant bootstrap                | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Same canonical UUID; quota/accounting present                                         |
+| Activation/login                         | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Normal one-time activation and TENANT_ADMIN login                                     |
+| BL-002 incremental sync                  | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Current BL-002 main; source identities/enrollments/watermark                          |
+| BL-002 full sync                         | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Snapshot completion and watermark verified                                            |
+| Notification/sync/Identity worker checks | `PASS`                                                                   | AUTOMATED CI / DISPOSABLE      | Academic checks plus built Identity `email:deliver`                                   |
 
 ## Migration and image evidence
 

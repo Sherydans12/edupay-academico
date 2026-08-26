@@ -3,7 +3,10 @@ import { ConfigService } from '@nestjs/config';
 
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../persistence/prisma.service';
-import { renderAcademicEmail, type AcademicNotificationPayload } from './notification-templates';
+import {
+  renderAcademicEmail,
+  type AcademicNotificationPayload,
+} from './notification-templates';
 import {
   ACADEMIC_EMAIL_ADAPTER,
   AcademicEmailDeliveryError,
@@ -30,9 +33,10 @@ export class NotificationWorkerService {
   ) {}
 
   async runOnce(): Promise<{ materialized: number; claimed: number }> {
-    const materialized = await this.notifications.materializeDueScheduledLearningEvents(
-      this.batchSize(),
-    );
+    const materialized =
+      await this.notifications.materializeDueScheduledLearningEvents(
+        this.batchSize(),
+      );
     const claimed = await this.claimDeliveries();
     for (const delivery of claimed) {
       await this.processClaim(delivery);
@@ -56,7 +60,9 @@ export class NotificationWorkerService {
       while (!stopping) {
         await this.runOnce();
         if (stopping) break;
-        await new Promise((resolve) => setTimeout(resolve, this.pollIntervalMs()));
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.pollIntervalMs()),
+        );
       }
     } finally {
       process.removeListener('SIGINT', stop);
@@ -65,7 +71,9 @@ export class NotificationWorkerService {
   }
 
   async operationalSummary(): Promise<Record<string, number | string | null>> {
-    const rows = await this.prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
+    const rows = await this.prisma.$queryRaw<
+      Array<{ status: string; count: bigint }>
+    >`
       SELECT status::text AS status, COUNT(*)::bigint AS count
       FROM notification_deliveries
       GROUP BY status
@@ -83,7 +91,10 @@ export class NotificationWorkerService {
   }
 
   private async claimDeliveries(): Promise<ClaimedDelivery[]> {
-    const leaseSeconds = this.config.get<number>('NOTIFICATION_PROCESSING_LEASE_SECONDS', 900);
+    const leaseSeconds = this.config.get<number>(
+      'NOTIFICATION_PROCESSING_LEASE_SECONDS',
+      900,
+    );
     return this.prisma.$queryRaw<ClaimedDelivery[]>`
       WITH candidates AS (
         SELECT delivery.tenant_id, delivery.id
@@ -134,7 +145,9 @@ export class NotificationWorkerService {
         },
         data: {
           status: 'SKIPPED',
-          skipReason: delivery.recipientEmail ? 'UNSUPPORTED_CHANNEL' : 'EMAIL_ADDRESS_MISSING',
+          skipReason: delivery.recipientEmail
+            ? 'UNSUPPORTED_CHANNEL'
+            : 'EMAIL_ADDRESS_MISSING',
           lockedAt: null,
         },
       });
@@ -142,11 +155,15 @@ export class NotificationWorkerService {
     }
 
     try {
-      const payload = delivery.event.payload as unknown as AcademicNotificationPayload;
+      const payload = delivery.event
+        .payload as unknown as AcademicNotificationPayload;
       const content = renderAcademicEmail(
         delivery.event.eventType,
         payload,
-        this.config.get<string>('ACADEMIC_PUBLIC_BASE_URL', 'http://localhost:3001'),
+        this.config.get<string>(
+          'ACADEMIC_PUBLIC_BASE_URL',
+          'http://localhost:3001',
+        ),
       );
       const result = await this.emailAdapter.send({
         deliveryId: delivery.id,
@@ -172,21 +189,44 @@ export class NotificationWorkerService {
   }
 
   private async recordFailure(
-    delivery: Prisma.NotificationDeliveryGetPayload<{ include: { event: true } }>,
+    delivery: Prisma.NotificationDeliveryGetPayload<{
+      include: { event: true };
+    }>,
     error: unknown,
   ): Promise<void> {
-    const providerError = error instanceof AcademicEmailDeliveryError
-      ? error
-      : new AcademicEmailDeliveryError('unknown', true, 'The academic email delivery failed.');
-    const maxAttempts = this.config.get<number>('NOTIFICATION_MAX_DELIVERY_ATTEMPTS', 5);
-    const terminal = !providerError.retryable || delivery.attemptCount >= maxAttempts;
-    const schedule = this.config.get<number[]>('NOTIFICATION_RETRY_SCHEDULE_SECONDS', [60, 300, 900, 3600, 21600]);
-    const delaySeconds = schedule[Math.min(Math.max(delivery.attemptCount - 1, 0), schedule.length - 1)] ?? 60;
+    const providerError =
+      error instanceof AcademicEmailDeliveryError
+        ? error
+        : new AcademicEmailDeliveryError(
+            'unknown',
+            true,
+            'The academic email delivery failed.',
+          );
+    const maxAttempts = this.config.get<number>(
+      'NOTIFICATION_MAX_DELIVERY_ATTEMPTS',
+      5,
+    );
+    const terminal =
+      !providerError.retryable || delivery.attemptCount >= maxAttempts;
+    const schedule = this.config.get<number[]>(
+      'NOTIFICATION_RETRY_SCHEDULE_SECONDS',
+      [60, 300, 900, 3600, 21600],
+    );
+    const delaySeconds =
+      schedule[
+        Math.min(Math.max(delivery.attemptCount - 1, 0), schedule.length - 1)
+      ] ?? 60;
     await this.prisma.notificationDelivery.updateMany({
-      where: { tenantId: delivery.tenantId, id: delivery.id, status: 'PROCESSING' },
+      where: {
+        tenantId: delivery.tenantId,
+        id: delivery.id,
+        status: 'PROCESSING',
+      },
       data: {
         status: terminal ? 'FAILED' : 'RETRY',
-        nextAttemptAt: terminal ? new Date() : new Date(Date.now() + delaySeconds * 1_000),
+        nextAttemptAt: terminal
+          ? new Date()
+          : new Date(Date.now() + delaySeconds * 1_000),
         lockedAt: null,
         lastErrorCategory: providerError.category,
         lastErrorMessage: providerError.message.slice(0, 500),
@@ -195,7 +235,10 @@ export class NotificationWorkerService {
   }
 
   private pollIntervalMs(): number {
-    return this.config.get<number>('NOTIFICATION_WORKER_POLL_INTERVAL_MS', 5_000);
+    return this.config.get<number>(
+      'NOTIFICATION_WORKER_POLL_INTERVAL_MS',
+      5_000,
+    );
   }
 
   private batchSize(): number {

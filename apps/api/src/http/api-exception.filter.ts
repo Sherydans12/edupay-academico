@@ -68,7 +68,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
     exceptionResponse: string | object | undefined,
     exception: unknown,
   ): string {
-    if (this.isMultipartLimit(exception) || status === HttpStatus.PAYLOAD_TOO_LARGE) {
+    if (
+      this.isMultipartLimit(exception) ||
+      status === HttpStatus.PAYLOAD_TOO_LARGE
+    ) {
       return 'The file is too large.';
     }
     if (status >= 500) {

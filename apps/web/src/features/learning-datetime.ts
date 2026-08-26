@@ -6,7 +6,8 @@
  */
 export const LEARNING_OPERATIONAL_TIME_ZONE = 'America/Santiago' as const;
 
-const dateTimeLocalPattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
+const dateTimeLocalPattern =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
 
 const operationalDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
   calendar: 'gregory',
@@ -21,7 +22,14 @@ const operationalDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
 });
 
-type DateTimeParts = { year: number; month: number; day: number; hour: number; minute: number; second: number };
+type DateTimeParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
 
 function pad(value: number, length = 2) {
   return String(value).padStart(length, '0');
@@ -29,7 +37,8 @@ function pad(value: number, length = 2) {
 
 function partsAt(instantMs: number): DateTimeParts {
   const parts = Object.fromEntries(
-    operationalDateTimeFormatter.formatToParts(new Date(instantMs))
+    operationalDateTimeFormatter
+      .formatToParts(new Date(instantMs))
       .filter(({ type }) => type !== 'literal')
       .map(({ type, value }) => [type, Number(value)]),
   );
@@ -45,20 +54,45 @@ function partsAt(instantMs: number): DateTimeParts {
 }
 
 function isSameDateTime(left: DateTimeParts, right: DateTimeParts) {
-  return left.year === right.year && left.month === right.month && left.day === right.day && left.hour === right.hour && left.minute === right.minute && left.second === right.second;
+  return (
+    left.year === right.year &&
+    left.month === right.month &&
+    left.day === right.day &&
+    left.hour === right.hour &&
+    left.minute === right.minute &&
+    left.second === right.second
+  );
 }
 
 function operationalOffsetMs(instantMs: number) {
   const parts = partsAt(instantMs);
-  const operationalWallClockMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  const operationalWallClockMs = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
   return operationalWallClockMs - instantMs;
 }
 
-function parseDateTimeLocal(value: string): { wallClockMs: number; parts: DateTimeParts } | undefined {
+function parseDateTimeLocal(
+  value: string,
+): { wallClockMs: number; parts: DateTimeParts } | undefined {
   const match = dateTimeLocalPattern.exec(value);
   if (!match) return undefined;
 
-  const [, yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue = '00', millisecondValue = '0'] = match;
+  const [
+    ,
+    yearValue,
+    monthValue,
+    dayValue,
+    hourValue,
+    minuteValue,
+    secondValue = '00',
+    millisecondValue = '0',
+  ] = match;
   const parts = {
     day: Number(dayValue),
     hour: Number(hourValue),
@@ -68,7 +102,15 @@ function parseDateTimeLocal(value: string): { wallClockMs: number; parts: DateTi
     year: Number(yearValue),
   };
   const millisecond = Number(millisecondValue.padEnd(3, '0'));
-  const wallClockMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, millisecond);
+  const wallClockMs = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    millisecond,
+  );
   const normalized = new Date(wallClockMs);
 
   if (
@@ -79,13 +121,16 @@ function parseDateTimeLocal(value: string): { wallClockMs: number; parts: DateTi
     normalized.getUTCMinutes() !== parts.minute ||
     normalized.getUTCSeconds() !== parts.second ||
     normalized.getUTCMilliseconds() !== millisecond
-  ) return undefined;
+  )
+    return undefined;
 
   return { parts, wallClockMs };
 }
 
 /** Convert an operational datetime-local value into an absolute UTC instant. */
-export function learningDateTimeLocalToInstant(value: string | null | undefined) {
+export function learningDateTimeLocalToInstant(
+  value: string | null | undefined,
+) {
   if (!value) return undefined;
 
   const parsed = parseDateTimeLocal(value);
@@ -105,7 +150,9 @@ export function learningDateTimeLocalToInstant(value: string | null | undefined)
 }
 
 /** Convert an absolute UTC instant into the operational datetime-local value. */
-export function learningInstantToDateTimeLocal(value: string | null | undefined) {
+export function learningInstantToDateTimeLocal(
+  value: string | null | undefined,
+) {
   if (!value) return '';
 
   const instantMs = new Date(value).getTime();

@@ -1,4 +1,12 @@
-import { Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
   inAppNotificationSchema,
@@ -31,7 +39,8 @@ export class NotificationsController {
   @Get()
   @ContractResponse(notificationPageSchema)
   list(
-    @Query(new ZodValidationPipe(notificationListQuerySchema)) input: NotificationListQuery,
+    @Query(new ZodValidationPipe(notificationListQuerySchema))
+    input: NotificationListQuery,
   ): Promise<object> {
     return this.notifications.listCurrent(
       this.context(),
@@ -49,7 +58,9 @@ export class NotificationsController {
 
   @Patch(':notificationId/read')
   @ContractResponse(inAppNotificationSchema)
-  markRead(@Param('notificationId', uuid) notificationId: string): Promise<object> {
+  markRead(
+    @Param('notificationId', uuid) notificationId: string,
+  ): Promise<object> {
     return this.notifications.markRead(this.context(), notificationId);
   }
 
