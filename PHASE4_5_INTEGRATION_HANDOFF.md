@@ -5,10 +5,10 @@ Estado: `RELEASE_CANDIDATE_BLOCKED_PENDING_OWNER_APPROVAL`.
 Las decisiones de alcance y las exclusiones cerradas en este handoff están
 formalizadas en `PHASE4_5_RELEASE_DECISIONS.md`.
 
-Este worktree es una integración aislada creada desde `e2b2688640b70f7f89489d3af1ccfb91f551f4a6`:
+Este worktree final es una integración aislada creada desde `e2b2688640b70f7f89489d3af1ccfb91f551f4a6`:
 
-- Rama: `codex/course-builder-release-integration`.
-- Ruta: `C:\Users\nicol\Documents\EduPayAcademico-worktrees\course-builder-release-integration`.
+- Rama: `codex/course-builder-release-integration-final`.
+- Ruta: `C:\Users\nicol\Documents\EduPayAcademico-worktrees\course-builder-release-integration-final`.
 - No se hizo merge, push, deploy ni migración productiva.
 - El worktree original, las ramas fuente y EduPay Identity no fueron modificados.
 - El Identity disposable usado por el piloto fue `C:\Users\nicol\Documents\EduPayIdentity-worktrees\pilot-release-origin-main`, en `main`, limpio y sincronizado con `origin/main` en `98da17b013c9fbf74f618a2f54e0eea8779c5136`.
@@ -55,13 +55,13 @@ Pasada dirigida:
 | `pnpm release:config:check -- --service academico --env-file deploy/env/academico-api.ci.env.example` | PASS, 35 settings                                                   |
 | `pnpm pilot:e2e` con Identity disposable explícito                                                    | PASS, `CHECKPOINT PASS full real-service pilot cross-service smoke` |
 
-`pnpm format:check` ejecuta directamente `prettier --check .`, por lo que el gate global exige cero diferencias. En esta ejecución quedan 104 archivos heredados del baseline; todas las rutas propias de esta integración están formateadas. No se modificaron masivamente esos archivos ni existe un waiver válido registrado. Por tanto el gate global sigue FAIL y el release permanece bloqueado.
+`pnpm format:check` ejecuta directamente `prettier --check .`, por lo que el gate global exige cero diferencias. Los 104 archivos heredados fueron formateados en el commit baseline separado `fdbf238`; el único conflicto en una suite F4/F5 se resolvió conservando su contenido y formateándolo en `628a3d3`. La comprobación global final es PASS y no usa waiver.
 
 ## Exclusiones vigentes y pendientes
 
 - `apps/web/src/features/student-deliverables-screens.spec.tsx` no se incorpora: queda excluida por pertenecer a Fase 6.
 - Las suites baseline fuera del alcance F4/F5 quedan excluidas y enumeradas en `PHASE4_5_RELEASE_DECISIONS.md`; ampliar ese alcance requiere aprobación explícita y commit separado.
-- Los 104 archivos heredados con formato pendiente no se reformatean dentro de F4/F5; requieren aprobación o waiver formal separado.
+- La limpieza de los 104 archivos heredados queda en commits de formato separados; no contiene cambios funcionales F4/F5 ni incluye `7081279`.
 - No se copian cambios de `.claude/**`, Identity, Fase 6, notificaciones/sincronización fuera del RFC ni scripts de laboratorio.
 
 ## Rollback
@@ -70,4 +70,4 @@ Pasada dirigida:
 - El body document y receipts/ordering son migraciones aditivas ya presentes en el candidato; ante rollback operacional se vuelve al código anterior y se deja `ACADEMIC_BODY_DOCUMENT_READ_ENABLED=0` si corresponde.
 - No ejecutar `DROP COLUMN`, borrar tablas ni aplicar migraciones productivas como parte de este handoff.
 
-No emitir `GO` de release mientras `format:check` global siga fallando sin waiver, mientras permanezcan exclusiones sin decisión explícita o si el owner no aprueba el alcance final.
+No emitir `GO` de release mientras la validación API con PostgreSQL mantenga fallos/skips sin decisión técnica, mientras permanezcan exclusiones sin decisión explícita o si el owner no aprueba el alcance final.

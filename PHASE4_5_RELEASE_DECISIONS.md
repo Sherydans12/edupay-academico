@@ -8,22 +8,27 @@ integración está en `codex/course-builder-release-integration`, creada desde
 `e2b2688640b70f7f89489d3af1ccfb91f551f4a6`. El candidato original, las ramas
 fuente, el worktree original y EduPay Identity permanecen sin cambios.
 
-## 1. Prettier global: decisión pendiente de aprobación
+## 1. Prettier global: decisión ejecutada
 
-La decisión de ruta para este RC es **un commit separado de limpieza del
+La ruta elegida y ejecutada es **un commit separado de limpieza del
 baseline**, fuera de los commits funcionales F4/F5. No se adopta una política
 CI baseline-aware para este RC: cambiaría la semántica del gate global y
 requeriría una aprobación específica de política CI.
 
-Esta ruta aún no está autorizada ni ejecutada. Los 104 archivos heredados que
-reporta `pnpm format:check` no se reformatean en esta integración y no tienen
-waiver válido registrado. Por tanto:
+El branch `codex/baseline-format-cleanup-final` se creó desde
+`5b0ad1f5f8ab0552ed1c502f30840b4afcc13fd8` y produjo
+`fdbf238e02e785fd06c61b9f0dfebabc50c2a2fa`, con los 104 archivos heredados.
+Al integrarlo en el worktree final, un conflicto mecánico afectó
+`apps/api/test/storage-submissions.e2e-spec.ts`, ya modificado funcionalmente
+por F4/F5. Se preservó el lado integración y se completó su formato en
+`628a3d33e74eca3bfd805b63aa67752d7171c397`.
 
-- `pnpm format:check` global permanece `FAIL`.
-- El commit de baseline, si el owner lo aprueba, debe ser separado,
-  revisable y no mezclarse con F4/F5.
-- No se considera resuelto el gate mientras el owner no apruebe la limpieza
-  o una política CI alternativa formal y equivalente.
+Por tanto:
+
+- `pnpm format:check` global es `PASS`, con cero diferencias.
+- No existe waiver ni se modificó la semántica de CI.
+- El commit `7081279aa2834ccb6d364ecc2beb18c1de7c5464` no es solución ni
+  forma parte de la cadena.
 
 ## 2. Exclusión confirmada: Student Deliverables
 
@@ -122,8 +127,8 @@ condiciones:
 2. las exclusiones de alcance, incluida Fase 6 y las suites baseline de esta
    página, estén aceptadas explícitamente por el owner.
 
-El `pilot:e2e` verde, incluido `/storage/usage`, no sustituye estas
-condiciones de release.
+El `pilot:e2e` verde, incluido `/storage/usage`, no sustituye la validación
+DB pendiente ni la aprobación del owner.
 
 ## Rollback
 
