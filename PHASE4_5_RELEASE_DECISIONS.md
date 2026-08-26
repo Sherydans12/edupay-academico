@@ -1,11 +1,12 @@
 # Decisiones de release — Fases 4 y 5
 
 Fecha de cierre documental: 2026-08-26  
-Estado: `RELEASE_CANDIDATE_READY_FOR_OWNER_APPROVAL`
+Estado: `RELEASE_CANDIDATE_BLOCKED_PENDING_OWNER_APPROVAL`
 
-Este registro cierra el alcance de release sin cambiar código funcional. La
-integración está en `codex/course-builder-release-integration`, creada desde
-`e2b2688640b70f7f89489d3af1ccfb91f551f4a6`. El candidato original, las ramas
+Este registro cierra el alcance de release sin cambiar el candidato original.
+La validación está en `codex/course-builder-db-gates-fix`, creada desde
+`9a2da4f08513355ba203e09d4a6ca09da5937dac`; su corrección posterior es
+`317f60fb3b72eaad451186bda24f058cf8f2874f`. El candidato original, las ramas
 fuente, el worktree original y EduPay Identity permanecen sin cambios.
 
 ## 1. Prettier global: decisión ejecutada
@@ -117,21 +118,27 @@ formato independiente y no deben confundirse con exclusiones de suites.
 
 ## 5. Decisión de release
 
-El formato global está resuelto y las exclusiones están formalizadas. Por
-tanto, el estado es `RELEASE_CANDIDATE_READY_FOR_OWNER_APPROVAL`. Esto no
-emite `GO PRODUCCIÓN`; la aprobación del owner debe considerar los seis
-fallos y 14 skips de la validación API con PostgreSQL documentados en
-`PHASE4_5_FINAL_VALIDATION.md`.
+El formato global está resuelto y las exclusiones están formalizadas. La
+validación PostgreSQL posterior pasó `28/28` suites y `226/226` tests, sin
+skips; la solicitud de “14 skips restantes” no es reproducible en este
+commit. El gate estándar interno de `release:check` se ejecuta sin DB y
+reporta 37 skips condicionales, que no se cuentan como PASS de PostgreSQL.
+Por tanto, el estado se conserva explícitamente como
+`RELEASE_CANDIDATE_BLOCKED_PENDING_OWNER_APPROVAL` hasta la aprobación del
+owner y la aceptación formal de las exclusiones. Esto no emite `GO
+PRODUCCIÓN`.
 
 No emitir `GO PRODUCCIÓN` hasta que:
 
 1. el owner acepte explícitamente las exclusiones de alcance, incluida Fase 6
    y las suites baseline de esta página;
-2. exista una decisión técnica sobre los seis fallos/14 skips DB o una
-   ejecución posterior completamente verde.
+2. el owner confirme el resultado DB verde y la diferencia entre el gate
+   API explícito con `TEST_DATABASE_URL` y el subgate estándar de
+   `release:check` sin DB;
+3. no se interpreten los 37 skips condicionales del modo sin DB como PASS.
 
-El `pilot:e2e` verde, incluido `/storage/usage`, no sustituye la validación
-DB pendiente ni la aprobación del owner.
+El `pilot:e2e` verde, incluido `/storage/usage`, no sustituye la aprobación
+del owner.
 
 ## Rollback
 
