@@ -12,7 +12,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const identityRoot = resolve(
   process.env.EDUPAY_IDENTITY_DIR ?? join(root, '..', '..', 'EduPayIdentity'),
 );
-const postgresImage = process.env.PILOT_POSTGRES_IMAGE ?? 'postgres:15-alpine';
+const postgresImage =
+  process.env.PILOT_POSTGRES_IMAGE ??
+  'postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b';
 const resources = { containers: [], processes: [], temp: undefined };
 
 function checkpoint(message) {

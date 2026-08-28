@@ -35,6 +35,7 @@ import {
   MAX_FILE_SIZE_BYTES,
   FileValidationError,
   allowedExtensions,
+  validateUploadBytes,
   validateUploadFilePath,
   validateUploadMetadata,
   type ValidatedFile,
@@ -284,7 +285,12 @@ export class StorageService implements LearningAttachmentPort {
   async completeUpload(
     context: AcademicRequestContext,
     intentId: string,
-    input: { filePath: string; filename: string; mimeType: string },
+    input: {
+      filePath?: string;
+      fileBytes?: Buffer;
+      filename: string;
+      mimeType: string;
+    },
   ): Promise<StoredFileResult> {
     const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
     this.authorization.requireCapability(
@@ -327,16 +333,31 @@ export class StorageService implements LearningAttachmentPort {
 
     let validated: ValidatedFile;
     try {
-      validated = await validateUploadFilePath({
-        filename: input.filename,
-        mimeType: input.mimeType,
-        sizeBytes: this.toSafeNumber(intent.expectedSizeBytes),
-        filePath: input.filePath,
-      });
+      const expectedSizeBytes = this.toSafeNumber(intent.expectedSizeBytes);
+      if (input.fileBytes) {
+        validated = validateUploadBytes({
+          filename: input.filename,
+          mimeType: input.mimeType,
+          sizeBytes: expectedSizeBytes,
+          bytes: input.fileBytes,
+        });
+      } else if (input.filePath) {
+        validated = await validateUploadFilePath({
+          filename: input.filename,
+          mimeType: input.mimeType,
+          sizeBytes: expectedSizeBytes,
+          filePath: input.filePath,
+        });
+      } else {
+        throw new FileValidationError(
+          'FILE_CONTENT_MISMATCH',
+          'The uploaded file is missing its content.',
+        );
+      }
       if (
         validated.normalizedFilename !== intent.expectedFilename ||
         validated.declaredMime !== intent.expectedMime ||
-        validated.declaredSizeBytes !== this.toSafeNumber(intent.expectedSizeBytes)
+        validated.declaredSizeBytes !== expectedSizeBytes
       ) {
         throw new FileValidationError(
           'FILE_CONTENT_MISMATCH',
@@ -351,10 +372,20 @@ export class StorageService implements LearningAttachmentPort {
     let stagedKey: string | undefined;
     let finalKey: string | undefined;
     try {
+      if (input.fileBytes) {
+        await this.scanUpload(
+          context,
+          intent.id,
+          input.fileBytes,
+          validated.authoritativeSizeBytes,
+        );
+      }
       const staged = await this.provider.stage({
         tenantId,
         intentId: intent.id,
-        sourcePath: input.filePath,
+        ...(input.fileBytes !== undefined
+          ? { sourceBytes: input.fileBytes }
+          : { sourcePath: input.filePath as string }),
       });
       if (staged.sizeBytes !== validated.authoritativeSizeBytes || staged.sizeBytes > MAX_FILE_SIZE_BYTES) {
         throw new BadRequestException('The authoritative stored size is invalid.');
@@ -365,7 +396,14 @@ export class StorageService implements LearningAttachmentPort {
         data: { status: 'STAGED' },
       });
 
-      await this.scanStagedUpload(context, intent.id, stagedKey, validated.authoritativeSizeBytes);
+      if (!input.fileBytes) {
+        await this.scanUpload(
+          context,
+          intent.id,
+          await this.provider.read(stagedKey),
+          validated.authoritativeSizeBytes,
+        );
+      }
 
       const existingBlob = await this.prisma.storedBlob.findFirst({
         where: {
@@ -707,10 +745,10 @@ export class StorageService implements LearningAttachmentPort {
     throw error;
   }
 
-  private async scanStagedUpload(
+  private async scanUpload(
     context: AcademicRequestContext,
     uploadIntentId: string,
-    stagingKey: string,
+    content: Buffer | Readable,
     sizeBytes: number,
   ): Promise<void> {
     await this.audit.record({
@@ -724,7 +762,7 @@ export class StorageService implements LearningAttachmentPort {
     let outcome: Awaited<ReturnType<MalwareScanner['scan']>>;
     try {
       outcome = await this.malwareScanner.scan({
-        content: await this.provider.read(stagingKey),
+        content,
         sizeBytes,
         tenantId: context.tenant.tenantId,
         uploadIntentId,

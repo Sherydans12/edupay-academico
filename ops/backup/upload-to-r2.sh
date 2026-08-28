@@ -55,8 +55,26 @@ fi
 remote_prefix="${BACKUP_R2_PREFIX%/}/$(basename "$backup_dir")"
 export AWS_ACCESS_KEY_ID="$BACKUP_R2_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$BACKUP_R2_SECRET_ACCESS_KEY"
-export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}"
+export AWS_DEFAULT_REGION=auto
+export AWS_REGION=auto
+export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+export AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+export AWS_EC2_METADATA_DISABLED=true
 export AWS_PAGER=""
+
+aws_config_file="$(mktemp)"
+cleanup_aws_config() {
+  rm -f -- "$aws_config_file"
+}
+trap cleanup_aws_config EXIT
+cat > "$aws_config_file" <<'EOF'
+[default]
+region = auto
+s3 =
+    addressing_style = path
+    payload_signing_enabled = false
+EOF
+export AWS_CONFIG_FILE="$aws_config_file"
 
 aws s3 cp \
   --endpoint-url "$BACKUP_R2_ENDPOINT" \

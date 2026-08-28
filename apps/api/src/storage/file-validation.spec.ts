@@ -52,6 +52,26 @@ describe('private upload validation', () => {
     ).toThrowError(/content does not match/);
   });
 
+  it('accepts the controlled EICAR text payload during preliminary validation', () => {
+    const bytes = Buffer.from(
+      [
+        'X5O!P%@AP[4\\PZX54(P^)7CC)7}$',
+        'EICAR-STANDARD-ANTIVIRUS-TEST-FILE',
+        '!$H+H*',
+      ].join(''),
+      'utf8',
+    );
+
+    expect(
+      validateUploadBytes({
+        filename: 'security-check.txt',
+        mimeType: 'text/plain',
+        sizeBytes: bytes.length,
+        bytes,
+      }).authoritativeSizeBytes,
+    ).toBe(bytes.length);
+  });
+
   it('differentiates Open XML packages by their package part', () => {
     const bytes = Buffer.concat([
       Buffer.from([80, 75, 3, 4]),

@@ -1,6 +1,6 @@
 services:
   clamav:
-    image: clamav/clamav:1.4.3
+    image: clamav/clamav@sha256:75fb5fd95fcbe1d7e6d240c369c1572b686ee2c95949d1042b5148de8eddebb4
     restart: unless-stopped
     volumes:
       - clamav-signatures:/var/lib/clamav
@@ -16,7 +16,7 @@ services:
       start_period: 60s
 
   academico-db:
-    image: postgres:15-alpine
+    image: postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${ACADEMICO_DB_NAME:?set ACADEMICO_DB_NAME in the deployment environment}

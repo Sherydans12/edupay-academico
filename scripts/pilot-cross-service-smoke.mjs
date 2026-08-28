@@ -22,9 +22,14 @@ const identityRoot = resolve(
   process.env.EDUPAY_IDENTITY_DIR ??
     join(repositoryRoot, '..', '..', 'EduPayIdentity'),
 );
-const postgresImage = process.env.PILOT_POSTGRES_IMAGE ?? 'postgres:15-alpine';
-const clamavImage = process.env.PILOT_CLAMAV_IMAGE ?? 'clamav/clamav:1.4.3';
+const postgresImage =
+  process.env.PILOT_POSTGRES_IMAGE ??
+  'postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b';
+const clamavImage =
+  process.env.PILOT_CLAMAV_IMAGE ??
+  'clamav/clamav@sha256:75fb5fd95fcbe1d7e6d240c369c1572b686ee2c95949d1042b5148de8eddebb4';
 const useClamAv = process.env.PILOT_MALWARE_SCANNER === 'clamav';
+const expectedIdentitySha = process.env.PILOT_IDENTITY_SHA ?? '';
 const requestPrefix = `pilot-${randomUUID().slice(0, 8)}`;
 const resources = {
   containers: [],
@@ -642,28 +647,26 @@ async function prepareRepositories(identityDatabaseUrl, academicDatabaseUrl) {
   checkpoint(
     'prepare: generating clients, applying migrations, and building both services',
   );
-  await run('git', ['rev-parse', '--verify', 'origin/main'], {
-    cwd: identityRoot,
-    label: 'verify Identity origin/main',
-  });
+  assert.match(
+    expectedIdentitySha,
+    /^[0-9a-f]{40}$/,
+    'PILOT_IDENTITY_SHA must pin the reviewed Identity commit.',
+  );
+  const identityHead = (
+    await run('git', ['rev-parse', 'HEAD'], {
+      cwd: identityRoot,
+      label: 'verify reviewed Identity SHA',
+    })
+  ).stdout.trim();
+  assert.equal(
+    identityHead,
+    expectedIdentitySha,
+    'EduPay Identity is not at the reviewed commit SHA.',
+  );
   const identityBranch = (
     await run('git', ['branch', '--show-current'], { cwd: identityRoot })
   ).stdout.trim();
   assert.equal(identityBranch, 'main', 'EduPay Identity must be on main.');
-  const identityDivergence = (
-    await run(
-      'git',
-      ['rev-list', '--left-right', '--count', 'origin/main...HEAD'],
-      {
-        cwd: identityRoot,
-      },
-    )
-  ).stdout.trim();
-  assert.equal(
-    identityDivergence,
-    '0\t0',
-    'EduPay Identity main must match origin/main.',
-  );
   const identityStatus = (
     await run('git', ['status', '--porcelain', '--untracked-files=all'], {
       cwd: identityRoot,

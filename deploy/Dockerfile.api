@@ -1,4 +1,4 @@
-FROM node:22-bookworm AS build
+FROM node:22-bookworm@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d AS build
 
 ENV COREPACK_HOME=/tmp/corepack
 RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
@@ -20,7 +20,7 @@ RUN pnpm --filter @edupay/api deploy --legacy --prod /out
 FROM build AS migrate
 CMD ["pnpm", "--filter", "@edupay/api", "db:migrate:deploy"]
 
-FROM node:22-bookworm AS runtime
+FROM node:22-bookworm@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d AS runtime
 
 ENV COREPACK_HOME=/tmp/corepack
 RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
