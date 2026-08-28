@@ -53,10 +53,10 @@ Cliente validado: AWS CLI `2.23.6`.
 - Restore disposable separado: **PASS**.
 - Tenant canónico restaurado en ambas bases: **PASS**.
 - File object restaurado: **1**; tamaño y SHA del archivo privado: **PASS**.
-El artefacto remoto no productivo queda como evidencia del ejercicio. No se
-creó otro bucket y no se usó el destino productivo. Las credenciales se
-inyectaron solo en el runner disposable y no aparecen en este repositorio,
-logs ni evidencia.
+  El artefacto remoto no productivo queda como evidencia del ejercicio. No se
+  creó otro bucket y no se usó el destino productivo. Las credenciales se
+  inyectaron solo en el runner disposable y no aparecen en este repositorio,
+  logs ni evidencia.
 
 ## Validaciones ejecutadas
 
