@@ -15,10 +15,12 @@ This documentation governs the first implementation phase of EduPay Académico. 
 6. [Identity model](architecture/identity-model.md) and [roles and authorization](architecture/roles-and-authorization.md)
 7. [Academic model](architecture/academic-model.md), [learning model](architecture/learning-model.md), and [submissions workflow](architecture/submissions-workflow.md)
 8. [Cross-cutting architecture](architecture/file-storage.md), [notifications](architecture/notifications.md), [EduPay integration](architecture/edupay-integration.md), and [API conventions](architecture/api-conventions.md)
-9. [Frontend architecture](architecture/frontend-architecture.md) and [design system](architecture/design-system.md)
-10. [Pilot production deployment runbook](deployment/pilot-production-runbook.md), [environment matrix](deployment/environment-matrix.md), [backup/restore](deployment/backup-restore.md), [release checklist](deployment/release-checklist.md), and [native Coolify preparation evidence](deployment/native-coolify-preparation-evidence.md)
-10. [Security](architecture/security.md), [audit strategy](architecture/audit-strategy.md), [testing strategy](architecture/testing-strategy.md), [deployment](architecture/deployment.md), and [definition of done](architecture/definition-of-done.md)
-11. [Roadmap](product/roadmap.md), [unresolved decisions](governance/unresolved-decisions.md), [risks](governance/risks.md), [implementation phases](governance/implementation-phases.md), and [agent boundaries](governance/agent-boundaries.md)
+9. [EduPay ecosystem architecture](architecture/edupay-ecosystem-architecture.md) for the audited cross-service ownership proposal and no-big-bang transition
+10. [Academic → Financial Projection](integration/academic-financial-projection.md) for the designed, not-yet-implemented financial projection contract
+11. [Frontend architecture](architecture/frontend-architecture.md) and [design system](architecture/design-system.md)
+12. [Pilot production deployment runbook](deployment/pilot-production-runbook.md), [environment matrix](deployment/environment-matrix.md), [backup/restore](deployment/backup-restore.md), [release checklist](deployment/release-checklist.md), and [native Coolify preparation evidence](deployment/native-coolify-preparation-evidence.md)
+13. [Security](architecture/security.md), [audit strategy](architecture/audit-strategy.md), [testing strategy](architecture/testing-strategy.md), [deployment](architecture/deployment.md), and [definition of done](architecture/definition-of-done.md)
+14. [Roadmap](product/roadmap.md), [unresolved decisions](governance/unresolved-decisions.md), [risks](governance/risks.md), [implementation phases](governance/implementation-phases.md), and [agent boundaries](governance/agent-boundaries.md)
 
 ## Implementation notes
 

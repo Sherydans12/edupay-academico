@@ -26,6 +26,7 @@ These records capture major architectural choices from the brief and architectur
 | [0018](ADR-0018-file-security-retention-and-malware-policy.md) | Pilot file-security, retention, and malware policy | Accepted (2026-08-11); resolves D-11 for the controlled pilot |
 | [0019](ADR-0019-audit-retention-and-support-policy.md) | Pilot audit retention and support access policy | Accepted; resolves D-17 for the pilot |
 | [0020](ADR-0020-pilot-scope-and-success-targets.md) | Colegio Conquistadores pilot scope and success targets | Accepted; resolves D-18 |
+| [0021](ADR-0021-ecosystem-domain-ownership-transition.md) | Ecosystem domain ownership and incremental transition | Accepted (2026-09-03); cross-service audit and authority-inversion plan |
 
 ## ADR workflow
 
