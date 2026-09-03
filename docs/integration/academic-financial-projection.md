@@ -1,6 +1,6 @@
 # Contrato Académico → Financial Projection
 
-Estado: **diseñado para Fase 1B; no implementado ni conectado a BL**.
+Estado: **implementado en Fase 1B como schemas Zod, tipos, declaración OpenAPI, fixtures y pruebas; sin producer ni consumidor BL habilitado**.
 
 Este contrato invierte la dirección futura de sincronización: EduPay
 Académico será el productor de la proyección mínima que EduPay Pagos/BL-002
@@ -34,12 +34,12 @@ El productor expondrá un namespace versionado y read-only, por ejemplo
 `/api/v1/integrations/financial-projection`. Los nombres definitivos de rutas
 deben aparecer en OpenAPI antes de implementarse.
 
-1. `GET /snapshot` captura una frontera común, devuelve `snapshotToken`,
-   `runId`, `schemaVersion`, `canonicalTenantId` y entidades requeridas.
-2. `GET /enrollments` drena páginas de la proyección mediante cursor opaco.
+1. `POST /snapshots` inicia una frontera común y devuelve `snapshotToken`,
+   `snapshotId`, `schemaVersion`, `canonicalTenantId` y entidad requerida.
+2. `GET /snapshots/{snapshotToken}/enrollments` drena páginas mediante cursor opaco.
    La respuesta contiene `page`, `watermark` terminal y tombstones explícitos.
-3. `GET /snapshot/complete` sólo confirma el snapshot si todos sus watermarks
-   pertenecen a la misma frontera.
+3. `GET /snapshots/{snapshotToken}/complete` confirma el snapshot si se
+   drenaron las páginas de la misma frontera.
 
 Los cursores/watermarks son opacos, tenant-bound, versión-bound y no se
 persisten como `page.nextCursor`. Se adopta la semántica de fronteras, replay,
@@ -92,3 +92,27 @@ tenant por clientes. Los logs excluyen PII, tokens y payloads completos.
 - mapping ausente/ambiguo, tenant cruzado y token de servicio inválido;
 - confirmación de ausencia de campos prohibidos y de RUT/PII no aprobada;
 - reconciliación de snapshot después de interrupción del consumer.
+
+## Resolución implementada en Fase 1B
+
+La fuente de contrato es `packages/contracts/src/academic-financial-projection.ts`: Zod 4 estricto, tipos inferidos y OpenAPI derivado mediante `ContractResponse`. Es la infraestructura de contratos existente; no se crearon DTOs duplicados ni modelos Prisma públicos.
+
+| Campo contractual               | Modelo Prisma      | Campo/regla real                                                                            |
+| ------------------------------- | ------------------ | ------------------------------------------------------------------------------------------- |
+| `canonicalTenantId`             | `Tenant`           | `Tenant.id`, UUID canónico de Identity en contexto de integración.                          |
+| `academicYearId`                | `AcademicYear`     | `AcademicYear.id`.                                                                          |
+| `academicStudentId`             | `Student`          | `Student.id`; `identityUserId` se excluye y puede ser nulo.                                 |
+| `academicCourseId`              | `Course`           | `Course.id`; su año es `Course.academicYearId`.                                             |
+| `academicEnrollmentId`          | `CourseEnrollment` | `CourseEnrollment.id`.                                                                      |
+| `enrollmentStatus`              | `CourseEnrollment` | `CourseEnrollment.status` (`ACTIVE`/`INACTIVE`).                                            |
+| `updatedAt`                     | `CourseEnrollment` | `CourseEnrollment.updatedAt`, ISO 8601.                                                     |
+| `effectiveFrom` / `effectiveTo` | lifecycle futuro   | No hay columnas actuales; 1C debe obtener fecha efectiva auditable sin inventar historia.   |
+| `version` / `entityVersion`     | versión futura     | No hay columna monotónica actual; 1C debe producir versión durable separada de `updatedAt`. |
+
+El contrato declara `POST /api/v1/integrations/financial-projection/snapshots`, `GET /api/v1/integrations/financial-projection/snapshots/{snapshotToken}/enrollments` y `GET /api/v1/integrations/financial-projection/snapshots/{snapshotToken}/complete`. En 1B los tres endpoints fallan cerrados para principals de usuario y no leen Prisma ni devuelven datos. Sus páginas limitan 1–100, asocian cursor/snapshot/watermark a tenant y sólo exponen watermark terminal.
+
+Los eventos futuros concretos son `academic.financial-projection.enrollment.upserted.v1` y `academic.financial-projection.enrollment.tombstoned.v1`. El envelope incluye `eventId`, `eventType`, `schemaVersion`, tenant, aggregate, versión, fecha y `correlationId`; la schema exige coherencia con el payload. El consumidor futuro deduplica `(producer, canonicalTenantId, eventId)`, sólo aplica versión mayor y repara replay o reordenamiento mediante snapshot completo.
+
+La proyección excluye password, hashes, tokens, sesiones, RUT, nombre, email, dirección, teléfono, apoderados, notas, evaluaciones, entregas, hoja de vida, datos clínicos y financieros. Profesores no aparecen. Una necesidad de nombre para UI/reportes de BL requiere una decisión futura de minimización, no se incorporó silenciosamente.
+
+Fase 1C implementará autorización S2S tenant-bound, versionado/outbox durable, snapshot Prisma con cursores seguros, publisher/telemetría y un shadow consumer BL desactivado que contraste mapping 1A y reconcilie antes de uso financiero. No se implementaron pagos, obligaciones, reportes, login BL, feed v1/v2, backfill, migraciones reales, `PromotionRun` ni rollover.

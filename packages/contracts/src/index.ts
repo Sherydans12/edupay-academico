@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export * from './academic.js';
+export * from './academic-financial-projection.js';
 export * from './learning.js';
 export * from './notifications.js';
 export * from './storage.js';

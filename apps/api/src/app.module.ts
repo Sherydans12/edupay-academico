@@ -10,6 +10,7 @@ import { SecurityFoundationModule } from './security/security-foundation.module'
 import { StorageModule } from './storage/storage.module';
 import { NotificationsApiModule } from './notifications/notifications-api.module';
 import { SyncModule } from './sync/sync.module';
+import { FinancialProjectionContractModule } from './financial-projection/financial-projection-contract.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { SyncModule } from './sync/sync.module';
     StorageModule,
     NotificationsApiModule,
     SyncModule,
+    FinancialProjectionContractModule,
     HealthModule,
   ],
 })
