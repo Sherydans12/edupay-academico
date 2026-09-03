@@ -1,6 +1,10 @@
 # Contrato Académico → Financial Projection
 
-Estado: **Fase 1C-A implementada; el producer está desactivado por defecto y BL no es un consumidor operativo de decisiones financieras**.
+Estado: **Fase 1A (mapeo explícito de tenant), 1B (contrato estricto) y 1C
+(producer/outbox Académico y shadow BL) están implementadas en worktrees
+aislados**. No hay activación de producción, migraciones ni backfills reales;
+el producer está desactivado por defecto y BL no toma decisiones financieras
+desde la sombra.
 
 Este contrato invierte la dirección futura de sincronización: EduPay
 Académico será el productor de la proyección mínima que EduPay Pagos/BL-002

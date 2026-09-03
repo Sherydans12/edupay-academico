@@ -42,7 +42,6 @@ CREATE TABLE "financial_projection_outbox_events" (
 CREATE UNIQUE INDEX "financial_projection_outbox_events_sequence_key" ON "financial_projection_outbox_events"("sequence");
 CREATE UNIQUE INDEX "financial_projection_outbox_events_tenant_id_aggregate_id_entity_version_key" ON "financial_projection_outbox_events"("tenant_id", "aggregate_id", "entity_version");
 CREATE INDEX "financial_projection_outbox_events_status_next_attempt_at_created_at_idx" ON "financial_projection_outbox_events"("status", "next_attempt_at", "created_at");
-CREATE INDEX "financial_projection_outbox_events_tenant_id_aggregate_id_entity_version_idx" ON "financial_projection_outbox_events"("tenant_id", "aggregate_id", "entity_version");
 
 CREATE TABLE "financial_projection_snapshots" (
   "id" UUID NOT NULL,

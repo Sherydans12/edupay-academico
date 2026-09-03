@@ -1,8 +1,10 @@
 # Arquitectura del ecosistema EduPay
 
-Estado: **decisión arquitectónica aceptada; Fase 1A implementada en worktree
-aislado**. No autoriza ejecutar migraciones, backfills ni cambios de
-producción.
+Estado: **decisión arquitectónica aceptada; Fases 1A, 1B y 1C implementadas
+en worktrees aislados**. Ninguna fase activa producción, ejecuta migraciones o
+backfills reales, ni autoriza cambios de producción. La proyección shadow de
+BL no crea ni modifica obligaciones, pagos, reportes, portal ni entidades
+legadas.
 
 Fecha de auditoría: 2026-09-03.
 
