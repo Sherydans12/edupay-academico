@@ -1,6 +1,6 @@
 # Contrato Académico → Financial Projection
 
-Estado: **implementado en Fase 1B como schemas Zod, tipos, declaración OpenAPI, fixtures y pruebas; sin producer ni consumidor BL habilitado**.
+Estado: **Fase 1C-A implementada; el producer está desactivado por defecto y BL no es un consumidor operativo de decisiones financieras**.
 
 Este contrato invierte la dirección futura de sincronización: EduPay
 Académico será el productor de la proyección mínima que EduPay Pagos/BL-002
@@ -28,7 +28,7 @@ eventId cuando aplique
 No lleva credenciales, tokens, contraseñas, RUT, datos de Guardian, notas,
 evaluaciones, entregas, hoja de vida, asignaturas ni información pedagógica.
 
-## Snapshot propuesto
+## Snapshot implementado
 
 El productor expondrá un namespace versionado y read-only, por ejemplo
 `/api/v1/integrations/financial-projection`. Los nombres definitivos de rutas
@@ -41,11 +41,16 @@ deben aparecer en OpenAPI antes de implementarse.
 3. `GET /snapshots/{snapshotToken}/complete` confirma el snapshot si se
    drenaron las páginas de la misma frontera.
 
-Los cursores/watermarks son opacos, tenant-bound, versión-bound y no se
-persisten como `page.nextCursor`. Se adopta la semántica de fronteras, replay,
-orden determinista y reconciliación del contrato v2 de BL, no su ownership.
+Cada `POST` materializa las filas contractuales en
+`financial_projection_snapshot_items` dentro de una transacción Prisma. Por
+ello una página posterior no observa una matrícula creada, modificada o dada
+de baja después del inicio. El orden es `CourseEnrollment.id ASC`; el cursor
+lleva `{snapshotToken, ordinal}` con HMAC, no es offset contra tablas vivas.
+El watermark persistido es la secuencia monotónica máxima del outbox al
+capturar la frontera y sólo se revela al final. El token caduca y está ligado
+al tenant del principal S2S, nunca a un selector del request.
 
-## Eventos propuestos
+## Eventos y outbox implementados
 
 Un outbox académico durable publicará cambios después de la transacción de
 dominio. Cada evento contendrá, como mínimo:
@@ -115,4 +120,37 @@ Los eventos futuros concretos son `academic.financial-projection.enrollment.upse
 
 La proyección excluye password, hashes, tokens, sesiones, RUT, nombre, email, dirección, teléfono, apoderados, notas, evaluaciones, entregas, hoja de vida, datos clínicos y financieros. Profesores no aparecen. Una necesidad de nombre para UI/reportes de BL requiere una decisión futura de minimización, no se incorporó silenciosamente.
 
-Fase 1C implementará autorización S2S tenant-bound, versionado/outbox durable, snapshot Prisma con cursores seguros, publisher/telemetría y un shadow consumer BL desactivado que contraste mapping 1A y reconcilie antes de uso financiero. No se implementaron pagos, obligaciones, reportes, login BL, feed v1/v2, backfill, migraciones reales, `PromotionRun` ni rollover.
+## Fase 1C-A implementada y no activada
+
+`FinancialProjectionOutboxEvent` se inserta en la **misma transacción** que
+la creación o baja de un `CourseEnrollment`. La versión durable es
+`CourseEnrollment.financialProjectionVersion` (BIGINT); la baja incrementa la
+versión y fija `financialProjectionEffectiveTo`, por lo que genera el
+tombstone v1. Los cambios futuros de matrícula, incluido cambio de curso,
+deben usar el mismo escritor antes de confirmar su transacción.
+
+El worker `pnpm --filter @edupay/api financial-projection:publish` drena una
+cantidad acotada, reclama el registro, entrega por HTTP S2S a BL y sólo marca
+`PUBLISHED` después de 2xx. `PUBLISHING` vencido se recupera como `RETRY`; el
+`eventId` estable permite entrega at-least-once. Eventos `FAILED` conservan
+intentos y código seguro para operar/reintentar sin guardar secretos ni PII.
+
+Las rutas son `@Public` sólo para omitir el JWT de usuario; exigen después el
+guard dedicado. `ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS` es un arreglo
+JSON de `{keyId, token, canonicalTenantId}`. El `keyId` y token se comparan en
+tiempo constante, `X-EduPay-Service` debe ser `BL_SHADOW` y el tenant se toma
+exclusivamente de la credencial. Varias filas permiten solapamiento para
+rotación. JWTs de usuario, un `canonicalTenantId` en body/query y credenciales
+no registradas son rechazados. La solución es reversible/transitoria hasta que
+un ADR defina identidad workload emitida por Identity.
+
+La migración `20260903110000_financial_projection_producer` fue **CREADA y
+validada contra schema Prisma; NO EJECUTADA en datos reales**. Crea versión
+durable, outbox y snapshots; no hace backfill de eventos ni toca entidades
+financieras. El producer requiere explícitamente
+`ACADEMIC_FINANCIAL_PROJECTION_ENABLED=true`; el publisher requiere además su
+flag separado y URL/credencial de BL. El valor por defecto de ambos es
+`false`.
+
+No se implementaron pagos, obligaciones, reportes, login BL, feed v1/v2,
+backfill real, `PromotionRun` ni rollover.

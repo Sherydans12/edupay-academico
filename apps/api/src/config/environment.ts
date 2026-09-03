@@ -107,6 +107,12 @@ const optionalIntegrationToken = z.preprocess(
     .optional(),
 );
 
+const optionalProjectionCredentials = z.preprocess(
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().max(16_384).optional(),
+);
+
 const trustedWebOrigins = z
   .string()
   .default('')
@@ -348,6 +354,39 @@ const environmentSchema = z
       .max(86_400)
       .default(900),
     NOTIFICATION_RETRY_SCHEDULE_SECONDS: retryScheduleSeconds,
+    ACADEMIC_FINANCIAL_PROJECTION_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS:
+      optionalProjectionCredentials,
+    ACADEMIC_FINANCIAL_PROJECTION_CURSOR_SECRET: optionalIntegrationToken,
+    ACADEMIC_FINANCIAL_PROJECTION_SNAPSHOT_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(60)
+      .max(86_400)
+      .default(3_600),
+    ACADEMIC_FINANCIAL_PROJECTION_PUBLISHER_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    BL_FINANCIAL_PROJECTION_BASE_URL: optionalHttpOrigin,
+    BL_FINANCIAL_PROJECTION_SERVICE_KEY_ID: optionalNonEmptyString,
+    BL_FINANCIAL_PROJECTION_SERVICE_TOKEN: optionalIntegrationToken,
+    BL_FINANCIAL_PROJECTION_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(30_000)
+      .default(5_000),
+    BL_FINANCIAL_PROJECTION_MAX_ATTEMPTS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(5),
+    BL_FINANCIAL_PROJECTION_RETRY_SCHEDULE_SECONDS: retryScheduleSeconds,
   })
   .superRefine((environment, context) => {
     if (
@@ -366,6 +405,38 @@ const environmentSchema = z
 
     if (environment.NODE_ENV !== 'production') {
       return;
+    }
+
+    if (environment.ACADEMIC_FINANCIAL_PROJECTION_ENABLED) {
+      for (const key of [
+        'ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS',
+        'ACADEMIC_FINANCIAL_PROJECTION_CURSOR_SECRET',
+      ] as const) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            message:
+              'must be configured when the financial projection is enabled',
+            path: [key],
+          });
+        }
+      }
+    }
+    if (environment.ACADEMIC_FINANCIAL_PROJECTION_PUBLISHER_ENABLED) {
+      for (const key of [
+        'BL_FINANCIAL_PROJECTION_BASE_URL',
+        'BL_FINANCIAL_PROJECTION_SERVICE_KEY_ID',
+        'BL_FINANCIAL_PROJECTION_SERVICE_TOKEN',
+      ] as const) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            message:
+              'must be configured when the financial projection publisher is enabled',
+            path: [key],
+          });
+        }
+      }
     }
 
     if (!environment.EDUPAY_INTEGRATION_BASE_URL) {

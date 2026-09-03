@@ -1,10 +1,11 @@
 import {
   Controller,
   Get,
-  NotImplementedException,
   Param,
   Post,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {
@@ -15,43 +16,50 @@ import {
   type AcademicFinancialProjectionSnapshotQuery,
 } from '@edupay/contracts';
 
-import { RequireCapabilities } from '../authorization/require-capabilities.decorator';
+import { Public } from '../authentication/public.decorator';
 import { ContractResponse } from '../http/zod-response.interceptor';
 import { ZodValidationPipe } from '../http/zod-validation.pipe';
+import { FinancialProjectionProducerService } from './financial-projection-producer.service';
+import {
+  FinancialProjectionServiceAuthGuard,
+  type FinancialProjectionRequest,
+} from './financial-projection-service-auth.guard';
 
 /**
- * OpenAPI declaration for the outbound Academic Financial Projection contract.
- * The empty capability requirement fails closed until Phase 1C supplies the
- * reviewed service-to-service authorization and durable producer.
+ * The dedicated S2S guard sets the only tenant selector. User JWTs never
+ * reach these handlers as an authorized principal.
  */
-@ApiTags('Academic Financial Projection (planned)')
+@Public()
+@ApiTags('Academic Financial Projection')
 @Controller('integrations/financial-projection')
-@RequireCapabilities()
+@UseGuards(FinancialProjectionServiceAuthGuard)
 export class FinancialProjectionContractController {
+  constructor(private readonly producer: FinancialProjectionProducerService) {}
+
   @Post('snapshots')
   @ApiOperation({
     summary: 'Start a consistent Academic Financial Projection snapshot',
-    description:
-      'Contract declaration only. Disabled until Phase 1C provides service-to-service authorization and a durable producer.',
+    description: 'Starts a tenant-bound materialized snapshot for BL Shadow.',
   })
   @ApiResponse({
-    status: 403,
-    description: 'Disabled for end-user principals.',
+    status: 401,
+    description:
+      'A user token or an unregistered service credential was rejected.',
   })
   @ApiResponse({
     status: 503,
-    description: 'Producer not enabled in Phase 1B.',
+    description: 'Producer intentionally disabled by configuration.',
   })
   @ContractResponse(academicFinancialProjectionSnapshotStartSchema)
-  startSnapshot(): never {
-    throw this.notEnabled();
+  startSnapshot(@Req() request: FinancialProjectionRequest) {
+    return this.producer.startSnapshot(this.canonicalTenantId(request));
   }
 
   @Get('snapshots/:snapshotToken/enrollments')
   @ApiOperation({
     summary: 'Read one bounded page from a consistent projection snapshot',
     description:
-      'Contract declaration only. The future service principal determines the authorized canonical tenant; no tenant selector is accepted from a client.',
+      'The service principal determines the tenant; no tenant selector is accepted from a client.',
   })
   @ApiParam({
     name: 'snapshotToken',
@@ -67,15 +75,18 @@ export class FinancialProjectionContractController {
   })
   @ContractResponse(academicFinancialProjectionSnapshotPageSchema)
   listEnrollments(
-    @Param('snapshotToken') _snapshotToken: string,
+    @Req() request: FinancialProjectionRequest,
+    @Param('snapshotToken') snapshotToken: string,
     @Query(
       new ZodValidationPipe(academicFinancialProjectionSnapshotQuerySchema),
     )
-    _query: AcademicFinancialProjectionSnapshotQuery,
-  ): never {
-    void _snapshotToken;
-    void _query;
-    throw this.notEnabled();
+    query: AcademicFinancialProjectionSnapshotQuery,
+  ) {
+    return this.producer.listSnapshotEnrollments(
+      this.canonicalTenantId(request),
+      snapshotToken,
+      query,
+    );
   }
 
   @Get('snapshots/:snapshotToken/complete')
@@ -83,7 +94,7 @@ export class FinancialProjectionContractController {
     summary:
       'Confirm terminal watermark for an Academic Financial Projection snapshot',
     description:
-      'Contract declaration only. A consumer may trust completion only after it has drained every page for its authorized snapshot.',
+      'A consumer may trust completion only after it has drained every page for its authorized snapshot.',
   })
   @ApiParam({
     name: 'snapshotToken',
@@ -98,14 +109,20 @@ export class FinancialProjectionContractController {
     description: 'Producer not enabled in Phase 1B.',
   })
   @ContractResponse(academicFinancialProjectionSnapshotCompleteSchema)
-  completeSnapshot(@Param('snapshotToken') _snapshotToken: string): never {
-    void _snapshotToken;
-    throw this.notEnabled();
+  completeSnapshot(
+    @Req() request: FinancialProjectionRequest,
+    @Param('snapshotToken') snapshotToken: string,
+  ) {
+    return this.producer.completeSnapshot(
+      this.canonicalTenantId(request),
+      snapshotToken,
+    );
   }
 
-  private notEnabled(): NotImplementedException {
-    return new NotImplementedException(
-      'Academic Financial Projection is a Phase 1B contract declaration; its producer is not enabled.',
-    );
+  private canonicalTenantId(request: FinancialProjectionRequest): string {
+    const principal = request.financialProjectionPrincipal;
+    if (!principal)
+      throw new Error('Financial projection service principal missing.');
+    return principal.canonicalTenantId;
   }
 }

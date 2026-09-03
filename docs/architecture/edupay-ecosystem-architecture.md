@@ -270,17 +270,17 @@ introduzca una segunda relación de matrícula.
 
 ## Plan de transición incremental
 
-| Fase                                                | Objetivo y repositorios                                   | Compatibilidad / pruebas                                                                                                         | Rollback                                                                                                                              |
-| --------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 0. Congelar la dirección                            | Documentar esta decisión; BL, Académico, Identity         | No ejecutar migraciones de rollover BL ni backfill; conservar v1 y el worktree local                                             | N/A, sólo documentación                                                                                                               |
-| 1A. Canonical Tenant Mapping                        | BL, con Identity y Académico como referencias de contrato | **Implementado en worktree aislado**: mapeo explícito, único, idempotente y auditado; `dryRun`, conflicto y pruebas cross-tenant | La migración aditiva permanece sin aplicar; el mapping queda sin uso por contratos productivos y no modifica PKs ni datos financieros |
-| 1B. Académico → Financial Projection Contract       | Académico, BL                                             | **Implementado en worktree aislado**: contrato Zod v1, OpenAPI, fixtures y contract tests; endpoints fallan cerrados sin S2S     | Retirar artefactos de contrato no desplegados sin datos de negocio                                                                    |
-| 1C. Financial Projection Producer + Shadow Consumer | Académico, BL                                             | Outbox y snapshot en Académico; consumer de BL desactivado por defecto, deduplicado y comparado en sombra                        | Deshabilitar el consumer y conservar evidencia/proyección de sólo lectura                                                             |
-| 2. Completar administración académica               | Académico, Identity                                       | Año/oferta, alumnos, docentes, asignaturas, matrículas y carga reanudable bajo tenancy; pruebas de autorización e idempotencia   | Mantener creación manual; no redirigir aún BL                                                                                         |
-| 3. Llevar rollover a Académico                      | Académico                                                 | Portar reglas del `PromotionRun` como nuevo aggregate, pruebas de promoción/repetición/traslado/compensación e historial         | No confirmar run; compensación semántica de un run confirmado                                                                         |
-| 4. BL consume proyección                            | Académico, BL                                             | Snapshot inicial, outbox/eventos, consumer idempotente, reconciliación y shadow comparison con el feed BL v1                     | Detener consumer y conservar proyección/mapeo de sólo lectura; no borrar datos legados                                                |
-| 5. Cortar autoridad de BL                           | Académico, BL                                             | Académico crea años/ofertas/matrículas; BL bloquea escritura académica nueva y sólo mantiene proyección/read compatibility       | Rehabilitar lectura v1 sólo durante ventana documentada; nunca reescribir historia                                                    |
-| 6. Retirar compatibilidad legada                    | BL, Académico                                             | Retención, export, conciliación financiera y aprobación formal antes de remover modelos/endpoints legados                        | Restauración lógica desde backups y proyecciones, no reset destructivo                                                                |
+| Fase                                                | Objetivo y repositorios                                   | Compatibilidad / pruebas                                                                                                          | Rollback                                                                                                                              |
+| --------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Congelar la dirección                            | Documentar esta decisión; BL, Académico, Identity         | No ejecutar migraciones de rollover BL ni backfill; conservar v1 y el worktree local                                              | N/A, sólo documentación                                                                                                               |
+| 1A. Canonical Tenant Mapping                        | BL, con Identity y Académico como referencias de contrato | **Implementado en worktree aislado**: mapeo explícito, único, idempotente y auditado; `dryRun`, conflicto y pruebas cross-tenant  | La migración aditiva permanece sin aplicar; el mapping queda sin uso por contratos productivos y no modifica PKs ni datos financieros |
+| 1B. Académico → Financial Projection Contract       | Académico, BL                                             | **Implementado en worktree aislado**: contrato Zod v1, OpenAPI, fixtures y contract tests; endpoints fallan cerrados sin S2S      | Retirar artefactos de contrato no desplegados sin datos de negocio                                                                    |
+| 1C. Financial Projection Producer + Shadow Consumer | Académico, BL                                             | **Implementado en ramas aisladas, no activado:** outbox/snapshot S2S en Académico y projection/ledger/reconciliación shadow en BL | Deshabilitar el consumer y conservar evidencia/proyección de sólo lectura                                                             |
+| 2. Completar administración académica               | Académico, Identity                                       | Año/oferta, alumnos, docentes, asignaturas, matrículas y carga reanudable bajo tenancy; pruebas de autorización e idempotencia    | Mantener creación manual; no redirigir aún BL                                                                                         |
+| 3. Llevar rollover a Académico                      | Académico                                                 | Portar reglas del `PromotionRun` como nuevo aggregate, pruebas de promoción/repetición/traslado/compensación e historial          | No confirmar run; compensación semántica de un run confirmado                                                                         |
+| 4. BL consume proyección                            | Académico, BL                                             | Snapshot inicial, outbox/eventos, consumer idempotente, reconciliación y shadow comparison con el feed BL v1                      | Detener consumer y conservar proyección/mapeo de sólo lectura; no borrar datos legados                                                |
+| 5. Cortar autoridad de BL                           | Académico, BL                                             | Académico crea años/ofertas/matrículas; BL bloquea escritura académica nueva y sólo mantiene proyección/read compatibility        | Rehabilitar lectura v1 sólo durante ventana documentada; nunca reescribir historia                                                    |
+| 6. Retirar compatibilidad legada                    | BL, Académico                                             | Retención, export, conciliación financiera y aprobación formal antes de remover modelos/endpoints legados                         | Restauración lógica desde backups y proyecciones, no reset destructivo                                                                |
 
 ### Convergencia futura de autenticación de BL
 
@@ -305,7 +305,7 @@ El corte de producción exige migraciones aisladas, backup restaurable, dry-run,
 reconciliación por tenant y aprobación explícita. No se permite un big bang ni
 una migración cruzada de bases.
 
-## Estado del primer corte y siguiente implementación
+## Estado de los cortes 1A–1C
 
 La Fase 1A se implementa en un worktree BL propio. Su migración sólo crea una
 tabla vacía; no hace backfill y no se aplicó a una base real. El endpoint de
@@ -315,19 +315,26 @@ Identity continúa siendo la única autoridad del UUID: el cliente no puede
 elegirlo como contexto de una operación financiera futura.
 
 Fase 1B quedó implementada como artefactos de contrato y declaración OpenAPI
-en un worktree propio. No contiene publisher, lectura de Prisma, outbox ni
-consumer BL. El siguiente corte es **Fase 1C**, sujeto a revisión de este
-contrato:
+en un worktree propio. Fase 1C añadió producer y shadow consumer en ramas
+separadas. Ninguna migración fue ejecutada, ningún secreto fue configurado y
+ningún dato real fue sincronizado. El flujo disponible, pero inactivo, es:
 
-1. En Académico, definir el contrato versionado y una proyección read-only de
-   `AcademicYear`, `Course`, `Student` y `CourseEnrollment` para el
-   dominio financiero; incluir snapshot paginado, watermark, tombstones,
-   idempotency/event IDs y un outbox académico durable.
-2. No conectar aún BL como consumidor de producción. Añadir sólo fixtures,
-   contratos y pruebas de compatibilidad multi-tenant/cross-tenant.
-3. Preparar las pruebas de contrato de BL sin conectar consumidor operativo ni
-   crear una proyección financiera. La lectura se activa recién en 1C después
-   de una reconciliación en sombra.
+```text
+Académico CourseEnrollment + versión durable
+  └─ misma transacción → outbox académico → HTTP S2S at-least-once
+      └─ BL TenantCanonicalMapping → proyección shadow aislada
+          └─ ledger/cuarentena/snapshot/reconciliación (sin Payments/Charges)
+```
+
+La siguiente implementación **no autorizada aún** es:
+
+1. Completar Administración/Onboarding académico con tenancy, alta explícita
+   y configuración operable por colegio antes de introducir ciclos masivos.
+2. No conectar aún BL como consumidor de producción ni como fuente financiera.
+   Puede mantener la proyección shadow solamente tras una activación explícita
+   y reconciliación por tenant.
+3. Mantener el rollover 2026→2027 de BL intacto; su port a Académico requiere
+   un corte/ADR propio y no forma parte de 1C.
 
 Este corte invierte la dirección futura sin tocar el historial financiero ni
 ejecutar las migraciones académicas locales de BL. El port de rollover es el

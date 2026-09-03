@@ -8,6 +8,7 @@
     "sync:configure": "tsx src/sync/sync-configure-main.ts",
     "sync:run": "tsx src/sync/sync-run-main.ts",
     "sync:worker": "tsx src/sync/sync-worker-main.ts",
+    "financial-projection:publish": "tsx src/financial-projection/financial-projection-publisher-main.ts",
     "sync:worker:check": "tsx src/sync/sync-worker-main.ts --check",
     "worker": "tsx src/notifications/notification-worker-main.ts",
     "worker:check": "tsx src/notifications/notification-worker-main.ts --check",

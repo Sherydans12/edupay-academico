@@ -204,6 +204,15 @@ describe('Academic Financial Projection OpenAPI declaration', () => {
     }
     vi.stubEnv('ACADEMIC_TRUSTED_WEB_ORIGINS', 'http://localhost:3000');
     vi.stubEnv('ACADEMIC_MALWARE_SCANNER', 'fake');
+    vi.stubEnv('ACADEMIC_FINANCIAL_PROJECTION_ENABLED', 'true');
+    vi.stubEnv(
+      'ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS',
+      '[{"keyId":"bl-shadow-test","token":"abcdefghijklmnopqrstuvwxyz-0123456789-test-token","canonicalTenantId":"11111111-1111-4111-8111-111111111111"}]',
+    );
+    vi.stubEnv(
+      'ACADEMIC_FINANCIAL_PROJECTION_CURSOR_SECRET',
+      'abcdefghijklmnopqrstuvwxyz-0123456789-cursor-secret',
+    );
     const { AppModule } = await import('../src/app.module');
     const testingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -219,7 +228,7 @@ describe('Academic Financial Projection OpenAPI declaration', () => {
     vi.unstubAllEnvs();
   });
 
-  it('publishes the v1 shapes in OpenAPI but fails closed for end-user tokens', async () => {
+  it('publishes the v1 shapes in OpenAPI but rejects end-user tokens', async () => {
     const openApi = await request(application.getHttpServer())
       .get('/api/docs/openapi.json')
       .expect(200);
@@ -238,6 +247,6 @@ describe('Academic Financial Projection OpenAPI declaration', () => {
         await identity.sign({ roles: ['TENANT_ADMIN'], tenant_id: tenantA }),
         { type: 'bearer' },
       )
-      .expect(403);
+      .expect(401);
   });
 });
