@@ -1,3 +1,5 @@
 import { StudentAssignmentScreen } from '@/features/student-screens';
 
-export default function StudentAssignmentPage() { return <StudentAssignmentScreen />; }
+export default function StudentAssignmentPage() {
+  return <StudentAssignmentScreen />;
+}

@@ -65,9 +65,12 @@ export function parseTenantBootstrapArguments(
     index += 1;
 
     if (argument === '--tenant-id') {
-      if (tenantId) throw new TenantBootstrapUsageError('Specify --tenant-id once.');
+      if (tenantId)
+        throw new TenantBootstrapUsageError('Specify --tenant-id once.');
       if (!UUID_PATTERN.test(value)) {
-        throw new TenantBootstrapUsageError('--tenant-id must be a canonical UUID.');
+        throw new TenantBootstrapUsageError(
+          '--tenant-id must be a canonical UUID.',
+        );
       }
       tenantId = value.toLowerCase();
       continue;
@@ -78,7 +81,9 @@ export function parseTenantBootstrapArguments(
         throw new TenantBootstrapUsageError('Specify --quota-bytes once.');
       }
       if (!/^\d+$/.test(value)) {
-        throw new TenantBootstrapUsageError('--quota-bytes must be a positive integer.');
+        throw new TenantBootstrapUsageError(
+          '--quota-bytes must be a positive integer.',
+        );
       }
       const parsed = Number(value);
       if (
@@ -95,7 +100,8 @@ export function parseTenantBootstrapArguments(
       continue;
     }
 
-    if (requestId) throw new TenantBootstrapUsageError('Specify --request-id once.');
+    if (requestId)
+      throw new TenantBootstrapUsageError('Specify --request-id once.');
     if (!SAFE_REQUEST_ID_PATTERN.test(value)) {
       throw new TenantBootstrapUsageError(
         '--request-id must contain only letters, numbers, dot, underscore, colon, or hyphen.',
@@ -226,7 +232,9 @@ export async function bootstrapAcademicTenant(
   const tenantScopeKey = `TENANT:${input.tenantId}`;
 
   return prisma.$transaction(async (tx) => {
-    const tenant = await tx.tenant.findUnique({ where: { id: input.tenantId } });
+    const tenant = await tx.tenant.findUnique({
+      where: { id: input.tenantId },
+    });
     const tenantCreated = !tenant;
     if (!tenant) {
       await tx.tenant.create({ data: { id: input.tenantId } });

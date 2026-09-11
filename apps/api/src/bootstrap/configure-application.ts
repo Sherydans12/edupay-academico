@@ -9,7 +9,9 @@ import { correlationIdMiddleware } from '../http/correlation-id.middleware';
 
 export function configureApplication(application: INestApplication): void {
   const config = application.get(ConfigService<Environment, true>);
-  const trustedOrigins = new Set(config.getOrThrow('ACADEMIC_TRUSTED_WEB_ORIGINS'));
+  const trustedOrigins = new Set(
+    config.getOrThrow('ACADEMIC_TRUSTED_WEB_ORIGINS'),
+  );
 
   application.setGlobalPrefix('api');
   application.enableVersioning({
@@ -36,21 +38,17 @@ export function configureApplication(application: INestApplication): void {
           parsed.hash === ''
             ? parsed.origin
             : null;
-        callback(null, normalized && trustedOrigins.has(normalized) ? origin : false);
+        callback(
+          null,
+          normalized && trustedOrigins.has(normalized) ? origin : false,
+        );
       } catch {
         callback(null, false);
       }
     },
     credentials: false,
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Accept',
-      'Content-Type',
-      'Authorization',
-      'X-Request-Id',
-      'X-EduPay-Client-Type',
-      'X-EduPay-Upload-Token',
-    ],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
     exposedHeaders: ['X-Request-Id'],
     maxAge: 600,
     optionsSuccessStatus: 204,

@@ -3,7 +3,8 @@ import { useContext, useEffect, useState } from 'react';
 import { IdentitySessionContext } from './session-context';
 
 export type WorkspaceKind = 'student' | 'teacher' | 'tenant-admin';
-export type IdentityRole = 'SYSTEM_ADMIN' | 'TENANT_ADMIN' | 'TEACHER' | 'STUDENT';
+export type IdentityRole =
+  'SYSTEM_ADMIN' | 'TENANT_ADMIN' | 'TEACHER' | 'STUDENT';
 
 /**
  * Read-only view of server-validated Identity and Académico context.
@@ -67,13 +68,16 @@ export function useTrustedCurrentSession(fallback: TrustedCurrentSession): {
       return;
     }
     let mounted = true;
-    void adapter.getCurrentSession().then((current) => {
-      if (!mounted) return;
-      if (current) setSession(current);
-      setLoading(false);
-    }).catch(() => {
-      if (mounted) setLoading(false);
-    });
+    void adapter
+      .getCurrentSession()
+      .then((current) => {
+        if (!mounted) return;
+        if (current) setSession(current);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (mounted) setLoading(false);
+      });
     return () => {
       mounted = false;
     };

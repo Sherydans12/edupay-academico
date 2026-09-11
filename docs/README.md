@@ -1,9 +1,13 @@
 # EduPay Académico documentation
 
-Status: reconciled architecture baseline for implementation bootstrap
-Repository state at baseline: empty; no application code, schema, tests, or prior documentation were found.
+Estado actual: implementación y remediación productiva cerradas en su alcance el 2026-09-11.
+La descripción de repositorio vacío corresponde al bootstrap histórico.
 
-This documentation governs the first implementation phase of EduPay Académico. It separates product scope from architectural constraints, records the approved Identity integration contract, and keeps later unresolved choices explicit instead of hiding them in code.
+Leer primero [topología vigente](operations/PRODUCTION.md),
+[runbook](operations/RUNBOOK.md), [cierre y pendientes](operations/PHASE-CLOSEOUT.md)
+y [el inventario de Coolify](operations/coolify-inventory.json).
+Los ADR aceptados mantienen autoridad sobre arquitectura y seguridad; los
+runbooks anteriores no sustituyen la fotografía operativa actual.
 
 ## Reading order
 
@@ -16,9 +20,9 @@ This documentation governs the first implementation phase of EduPay Académico. 
 7. [Academic model](architecture/academic-model.md), [learning model](architecture/learning-model.md), and [submissions workflow](architecture/submissions-workflow.md)
 8. [Cross-cutting architecture](architecture/file-storage.md), [notifications](architecture/notifications.md), [EduPay integration](architecture/edupay-integration.md), and [API conventions](architecture/api-conventions.md)
 9. [Frontend architecture](architecture/frontend-architecture.md) and [design system](architecture/design-system.md)
-10. [Pilot production deployment runbook](deployment/pilot-production-runbook.md), [environment matrix](deployment/environment-matrix.md), [backup/restore](deployment/backup-restore.md), [release checklist](deployment/release-checklist.md), and [native Coolify preparation evidence](deployment/native-coolify-preparation-evidence.md)
-10. [Security](architecture/security.md), [audit strategy](architecture/audit-strategy.md), [testing strategy](architecture/testing-strategy.md), [deployment](architecture/deployment.md), and [definition of done](architecture/definition-of-done.md)
-11. [Roadmap](product/roadmap.md), [unresolved decisions](governance/unresolved-decisions.md), [risks](governance/risks.md), [implementation phases](governance/implementation-phases.md), and [agent boundaries](governance/agent-boundaries.md)
+10. [Pilot production deployment runbook](deployment/pilot-production-runbook.md), [environment matrix](deployment/environment-matrix.md), [backup/restore](deployment/backup-restore.md), and [release checklist](deployment/release-checklist.md)
+11. [Security](architecture/security.md), [audit strategy](architecture/audit-strategy.md), [testing strategy](architecture/testing-strategy.md), [deployment](architecture/deployment.md), and [definition of done](architecture/definition-of-done.md)
+12. [Roadmap](product/roadmap.md), [unresolved decisions](governance/unresolved-decisions.md), [risks](governance/risks.md), [implementation phases](governance/implementation-phases.md), and [agent boundaries](governance/agent-boundaries.md)
 
 ## Implementation notes
 

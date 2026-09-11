@@ -78,7 +78,9 @@ describe('Health endpoint (e2e)', () => {
       .set('Access-Control-Request-Method', 'GET')
       .expect(204);
 
-    expect(trusted.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(trusted.headers['access-control-allow-origin']).toBe(
+      'http://localhost:3000',
+    );
     expect(trusted.headers['access-control-allow-origin']).not.toBe('*');
 
     const untrusted = await request(application.getHttpServer())

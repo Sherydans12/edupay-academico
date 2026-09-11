@@ -1,3 +1,5 @@
-import { StudentPlaceholderScreen } from '@/features/student-screens';
+import { StudentDeliverablesScreen } from '@/features/student-screens';
 
-export default function StudentSubmissionsPage() { return <StudentPlaceholderScreen title="Mis entregas" />; }
+export default function StudentSubmissionsPage() {
+  return <StudentDeliverablesScreen />;
+}

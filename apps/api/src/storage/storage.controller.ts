@@ -17,6 +17,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { memoryStorage } from 'multer';
 import {
   createUploadIntentSchema,
   storageFileSchema,
@@ -24,7 +25,7 @@ import {
   storageUsageSchema,
   uploadIntentSchema,
 } from '@edupay/contracts';
-import type { CreateUploadIntent } from '@edupay/contracts';
+import type { CreateUploadIntent, StorageUsage } from '@edupay/contracts';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Environment } from '../config/environment';
@@ -42,7 +43,8 @@ import { MAX_FILE_SIZE_BYTES } from './file-validation';
 
 const uuid = new ParseUUIDPipe({ version: '4' });
 type MultipartFile = {
-  readonly path: string;
+  readonly path?: string;
+  readonly buffer?: Buffer;
   readonly originalname: string;
   readonly mimetype: string;
 };
@@ -58,8 +60,14 @@ export class BoundedMultipartUploadInterceptor implements NestInterceptor {
   ) {
     const tempRoot = config.get('STORAGE_TEMP_ROOT', { infer: true }) ??
       join(config.get('STORAGE_ROOT', { infer: true }) ?? join(process.cwd(), 'var', 'private-storage'), 'tmp');
+    // The disposable Windows host can quarantine EICAR before the application
+    // can read a disk-staged file. Keep this escape hatch test-only; production
+    // remains disk-staged and bounded by the same Multer file-size limit.
     const Interceptor = FileInterceptor('file', {
-      dest: tempRoot,
+      ...(config.get('NODE_ENV', { infer: true }) === 'test' &&
+      config.get('ACADEMIC_MALWARE_SCANNER', { infer: true }) === 'clamav'
+        ? { storage: memoryStorage() }
+        : { dest: tempRoot }),
       limits: {
         fileSize: MAX_FILE_SIZE_BYTES,
         files: 1,
@@ -119,7 +127,7 @@ export class StorageController {
 
   @Get('storage/usage')
   @ContractResponse(storageUsageSchema)
-  usage(): Promise<object> {
+  usage(): Promise<StorageUsage> {
     return this.storage.getUsage(this.context());
   }
 
@@ -153,17 +161,21 @@ export class StorageController {
     @Param('intentId', uuid) intentId: string,
     @UploadedFile() file: MultipartFile | undefined,
   ): Promise<object> {
-    if (!file) {
+    if (!file || (file.path === undefined && file.buffer === undefined)) {
       throw new BadRequestException('A single multipart file is required.');
     }
     try {
+      const content =
+        file.buffer === undefined
+          ? { filePath: file.path as string }
+          : { fileBytes: file.buffer };
       return await this.storage.completeUpload(this.context(), intentId, {
-        filePath: file.path,
+        ...content,
         filename: file.originalname,
         mimeType: file.mimetype,
       });
     } finally {
-      await rm(file.path, { force: true });
+      if (file.path) await rm(file.path, { force: true });
     }
   }
 

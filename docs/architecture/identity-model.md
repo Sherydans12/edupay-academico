@@ -16,13 +16,13 @@ In Académico, `tenantId` means the canonical ecosystem tenant identifier. It is
 
 ### Terminology mapping
 
-| Identity term | Académico meaning and boundary |
-| --- | --- |
-| `TenantRealm` | Identity’s minimal login/membership reference. It is not the Académico tenant aggregate, although both use the same canonical ecosystem tenant ID. |
-| `TenantMembership` | Identity access relationship for one user and tenant. It is not a course enrollment or subject enrollment. |
-| Identity `roles` | Membership-scoped authentication capabilities. Académico still evaluates academic relationships and resource policy. |
-| `IdentityUser` / `sub` | The person/account reference used for an optional Student/Teacher link. It is not a Student or Teacher record. |
-| `membership_id` | Identity membership context and audit/correlation reference. It is not an academic-record foreign key. |
+| Identity term          | Académico meaning and boundary                                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TenantRealm`          | Identity’s minimal login/membership reference. It is not the Académico tenant aggregate, although both use the same canonical ecosystem tenant ID. |
+| `TenantMembership`     | Identity access relationship for one user and tenant. It is not a course enrollment or subject enrollment.                                         |
+| Identity `roles`       | Membership-scoped authentication capabilities. Académico still evaluates academic relationships and resource policy.                               |
+| `IdentityUser` / `sub` | The person/account reference used for an optional Student/Teacher link. It is not a Student or Teacher record.                                     |
+| `membership_id`        | Identity membership context and audit/correlation reference. It is not an academic-record foreign key.                                             |
 
 ## Ownership
 
@@ -68,16 +68,16 @@ Identity issues an asymmetric-signed access JWT with a maximum lifetime of 10 mi
 
 The Identity claim names are part of the integration contract. JSON API fields remain camelCase, but JWT claims use the Identity names below:
 
-| JWT claim | Meaning in Académico |
-| --- | --- |
-| `sub` | Stable Identity user ID; the only Identity-user reference Académico stores. |
-| `sid` | Revocable Identity session ID for correlation and high-risk status checks. |
-| `iss`, `aud`, `iat`, `nbf`, `exp`, `jti` | Token validation and audit inputs. `exp - iat` must not exceed 600 seconds. |
-| `tenant_id` | Canonical ecosystem tenant ID for the active membership context. |
-| `membership_id` | Identity membership ID for the active context; not an Académico academic-record foreign key. |
-| `roles` | Roles effective for the selected membership at issuance time; not a substitute for academic resource authorization. |
-| `scope` | Audience/application scope; never interpreted as a tenant role. |
-| `auth_time` | Authentication time for recent-authentication or step-up policies. |
+| JWT claim                                | Meaning in Académico                                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `sub`                                    | Stable Identity user ID; the only Identity-user reference Académico stores.                                         |
+| `sid`                                    | Revocable Identity session ID for correlation and high-risk status checks.                                          |
+| `iss`, `aud`, `iat`, `nbf`, `exp`, `jti` | Token validation and audit inputs. `exp - iat` must not exceed 600 seconds.                                         |
+| `tenant_id`                              | Canonical ecosystem tenant ID for the active membership context.                                                    |
+| `membership_id`                          | Identity membership ID for the active context; not an Académico academic-record foreign key.                        |
+| `roles`                                  | Roles effective for the selected membership at issuance time; not a substitute for academic resource authorization. |
+| `scope`                                  | Audience/application scope; never interpreted as a tenant role.                                                     |
+| `auth_time`                              | Authentication time for recent-authentication or step-up policies.                                                  |
 
 Tenant-scoped requests require `tenant_id` and `membership_id` from a valid active context. A `SYSTEM_ADMIN` token without an active context does not authorize tenant data access. Académico must apply its own role, relationship, lifecycle, publication, enrollment, CourseSubjectTeacher-assignment, and submission-ownership policies after token validation.
 

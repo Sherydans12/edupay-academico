@@ -1,32 +1,13 @@
+> Registro histórico o plantilla. Para estado actual, dominios, UUIDs, versiones y gates usar [PRODUCTION.md](../operations/PRODUCTION.md) y [PHASE-CLOSEOUT.md](../operations/PHASE-CLOSEOUT.md), verificados el 2026-09-11. Estados, nombres y comandos antiguos de este archivo no autorizan recrear recursos eliminados ni ejecutar migraciones.
+
 # Colegio Conquistadores pilot production runbook
 
-Status: owner-approved controlled-pilot operational baseline.
-Current Operational State: **HOLD_PENDING_EXTERNAL_PRODUCTION_GATES**
-
-## Reconciled Pilot Deployment Matrix (2026-08-13)
-
-| Phase / Requirement | Result Category | Description & Verification Evidence |
-| :--- | :--- | :--- |
-| **Host Inventory & Topology** | `PRODUCTION PASS` | Hostinger VPS (`187.77.250.148`, Ubuntu 24.04 LTS, Brazil - Campinas). |
-| **PostgreSQL Migrations** | `PRODUCTION PASS` | Identity (2 migrations) & Académico (6 migrations) applied 100% cleanly. |
-| **Container Orchestration** | `PRODUCTION PASS` | Containers healthy: `edupay-identity-api`, `edupay-academico-api`, `edupay-academico-web`, `clamav`, singletons `notification-worker`, `sync-worker`. |
-| **Coordinated Tenant Bootstrap** | `PRODUCTION PASS` | Tenant ID `6dc797a8-2012-4c28-b212-c1449109a12f` (`colegio-conquistadores`) created in both services. |
-| **Admin Activation & Session** | `PRODUCTION PASS` | Membership `0f00d914-c064-4209-8a8f-616dd0ef26d1` `ACTIVE`. Session revoked & file removed. |
-| **AcademicYear 2026** | `PRODUCTION PASS` | AcademicYear `2330fa9a-1ab1-4c45-99ef-4116c25554c7` created and activated (`ACTIVE`). |
-| **Malware Scanner Gate** | `PRODUCTION PASS` | Clean 70B PDF stored & downloaded clear. 68B EICAR malware string rejected with HTTP 400 `MALWARE_DETECTED` and purged. |
-| **Public DNS Resolution** | `PRODUCTION PASS` | `academico.edupay.baselogic.cl`, `academico-api.edupay.baselogic.cl`, `identity.edupay.baselogic.cl` -> `187.77.250.148`. |
-| **Public TLS & 504 Resolution**| `PRODUCTION PASS` | 504 Gateway Timeout resolved (fixed Traefik YAML syntax & NestJS HTTPS validation). All 5 public HTTPS endpoints return HTTP 200 OK. |
-| **Resend Production Delivery** | `PRODUCTION PASS` | Controlled delivery accepted by Resend API (Identity `75061e91-3363-4922-a0ed-598f0a1fb3b7`, Academic `e8d75250-dbf5-4807-8459-ebae63363f1b`). |
-| **Admin Email Correction** | `ACTION_REQUIRED` | Real admin email `nicolas.18.111@gmail.com` recorded. Identified `IDENTITY_ADMIN_EMAIL_CHANGE_GAP` (Identity service lacks post-bootstrap email update API). |
-| **Cloudflare R2 Off-Host Backup** | `PRODUCTION PASS` | Off-host backup set `20260813T012336Z` uploaded to Cloudflare R2 bucket `edupay-academico-pilot-backups` with strict SHA256SUMS. |
-| **R2-Sourced Restore Verification**| `DISPOSABLE PASS` | Backup set downloaded from R2; restored into isolated test DBs (`r2_test_restore_identity` & `r2_test_restore_academico`) with 100% record match. |
-| **Synthetic Data Isolation** | `PRODUCTION PASS` | Renamed Course (`TEST-ONLY — 1° Medio A`) and updated records to `ARCHIVED`/`INACTIVE` status. Audit history preserved. |
-| **BL-002 Source Discovery** | `PRODUCTION PASS` | Discovered existing BL-002 production application `portal-de-pagos-conquistadores-prod` (`ehuaxp1lx6zjqhmeu4tk3uke`) at `https://portal.edupay.baselogic.cl`. Currently running commit `49b29d6d6e908358e4f9f9b01ef4033461b1fb00`. |
-| **Coolify Deployment Ownership**| `ACTION_REQUIRED` | Evaluated manual vs native Coolify applications. Recorded `COOLIFY_UI_OR_API_OWNER_ACTION_REQUIRED` with complete UI specification. |
-| **Coolify Management Hardening** | `ACTION_REQUIRED` | Recorded `OWNER_HOSTINGER_FIREWALL_ACTION_REQUIRED` to restrict management ports 8000, 8080, 6001, 6002 via provider firewall. |
-| **Final Release Sign-off** | `PRODUCTION PENDING` | Awaiting owner Coolify UI setup, admin email code update, and BL-002 commit upgrade to `abc3776631d5940759d1a45ad949413174f2acf9`. |
-
----
+Status: owner-approved controlled-pilot operational baseline; production
+execution evidence is still pending. ADR-0017 is Accepted for the controlled
+Colegio Conquistadores pilot on 2026-08-11. D-11 is resolved for the controlled
+pilot by ADR-0018; D-17 is resolved for the pilot by ADR-0019 and D-18 is
+resolved for the pilot baseline by ADR-0020. D-16 remains independent branding
+and UX polish.
 
 ## Approved pilot target
 
@@ -453,6 +434,7 @@ deployment state. Review the target before running them. Never use
    BACKUP_REQUIRE_OFFHOST=1 BACKUP_ROOT=/var/lib/edupay-backup-staging \
      bash ops/backup/backup-pilot.sh
    ```
+
 7. Identity migrations. From the reviewed Identity checkout, run once:
 
    ```sh
@@ -579,6 +561,7 @@ deployment state. Review the target before running them. Never use
     helper succeeds, the dated local staging directory may be pruned according
     to retention policy; never prune the live application volumes and never
     report a local-only copy as a successful production backup.
+
 24. R2 restore verification evidence. Before accepting real pilot data, use
     the approved R2 credentials to copy one completed dated set into a clearly
     labelled disposable restore directory, verify its checksum manifest, and

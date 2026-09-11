@@ -29,12 +29,24 @@ async function main(): Promise<void> {
     const worker = application.get(NotificationWorkerService);
     if (process.argv.includes('--check')) {
       const result = await worker.checkReadiness();
-      console.log(JSON.stringify({ service: 'edupay-academico-notification-worker', status: 'ready', ...result }));
+      console.log(
+        JSON.stringify({
+          service: 'edupay-academico-notification-worker',
+          status: 'ready',
+          ...result,
+        }),
+      );
       return;
     }
     if (process.argv.includes('--once')) {
       const result = await worker.runOnce();
-      console.log(JSON.stringify({ service: 'edupay-academico-notification-worker', status: 'ok', ...result }));
+      console.log(
+        JSON.stringify({
+          service: 'edupay-academico-notification-worker',
+          status: 'ok',
+          ...result,
+        }),
+      );
       return;
     }
     await worker.runForever();
@@ -44,6 +56,8 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Notification worker failed.');
+  console.error(
+    error instanceof Error ? error.message : 'Notification worker failed.',
+  );
   process.exitCode = 1;
 });

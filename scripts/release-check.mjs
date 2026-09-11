@@ -3,9 +3,7 @@ import { execFile } from 'node:child_process';
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 function windowsArgument(value) {
-  return /[\s"&|<>^]/.test(value)
-    ? `"${value.replaceAll('"', '""')}"`
-    : value;
+  return /[\s"&|<>^]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
 const commands = [
@@ -22,10 +20,19 @@ if (process.env.RELEASE_RUN_DB_STATUS === '1') {
   if (process.env.EDUPAY_IDENTITY_DIR) {
     commands.push([
       'Identity migration status',
-      ['--dir', process.env.EDUPAY_IDENTITY_DIR, 'exec', 'prisma', 'migrate', 'status'],
+      [
+        '--dir',
+        process.env.EDUPAY_IDENTITY_DIR,
+        'exec',
+        'prisma',
+        'migrate',
+        'status',
+      ],
     ]);
   } else {
-    console.log('SKIP Identity migration status: set EDUPAY_IDENTITY_DIR with a disposable or approved deployment database.');
+    console.log(
+      'SKIP Identity migration status: set EDUPAY_IDENTITY_DIR with a disposable or approved deployment database.',
+    );
   }
 }
 
@@ -36,10 +43,12 @@ if (process.env.RELEASE_RUN_PILOT_E2E === '1') {
 for (const [label, args] of commands) {
   console.log(`RELEASE CHECK ${label}`);
   const result = await new Promise((resolve) => {
-    const executable = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : pnpm;
-    const commandArgs = process.platform === 'win32'
-      ? ['/d', '/s', '/c', [pnpm, ...args].map(windowsArgument).join(' ')]
-      : args;
+    const executable =
+      process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : pnpm;
+    const commandArgs =
+      process.platform === 'win32'
+        ? ['/d', '/s', '/c', [pnpm, ...args].map(windowsArgument).join(' ')]
+        : args;
     execFile(
       executable,
       commandArgs,

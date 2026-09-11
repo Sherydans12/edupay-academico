@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { NotificationWorkerService } from './notification-worker.service';
-import { AcademicEmailDeliveryError, type AcademicEmailAdapter } from './notification.types';
+import {
+  AcademicEmailDeliveryError,
+  type AcademicEmailAdapter,
+} from './notification.types';
 
 function workerWith(input: {
   attemptCount: number;
@@ -9,7 +12,13 @@ function workerWith(input: {
   claimed?: Array<{ tenantId: string; id: string }>;
 }) {
   const prisma = {
-    $queryRaw: vi.fn().mockResolvedValue(input.claimed ?? [{ tenantId: 'tenant-a', id: '00000000-0000-4000-8000-000000000001' }]),
+    $queryRaw: vi
+      .fn()
+      .mockResolvedValue(
+        input.claimed ?? [
+          { tenantId: 'tenant-a', id: '00000000-0000-4000-8000-000000000001' },
+        ],
+      ),
     notificationDelivery: {
       findUnique: vi.fn().mockResolvedValue({
         id: '00000000-0000-4000-8000-000000000001',
@@ -44,7 +53,9 @@ function workerWith(input: {
       return values[key] ?? fallback;
     }),
   };
-  const notifications = { materializeDueScheduledLearningEvents: vi.fn().mockResolvedValue(0) };
+  const notifications = {
+    materializeDueScheduledLearningEvents: vi.fn().mockResolvedValue(0),
+  };
   const service = new NotificationWorkerService(
     prisma as never,
     config as never,
@@ -57,9 +68,15 @@ function workerWith(input: {
 describe('NotificationWorkerService', () => {
   it('moves transient provider failures to bounded retry', async () => {
     const adapter = {
-      send: vi.fn().mockRejectedValue(
-        new AcademicEmailDeliveryError('network', true, 'provider unavailable'),
-      ),
+      send: vi
+        .fn()
+        .mockRejectedValue(
+          new AcademicEmailDeliveryError(
+            'network',
+            true,
+            'provider unavailable',
+          ),
+        ),
     };
     const { service, prisma } = workerWith({ attemptCount: 1, adapter });
 
@@ -77,9 +94,15 @@ describe('NotificationWorkerService', () => {
 
   it('marks the fifth failed attempt terminal instead of retrying forever', async () => {
     const adapter = {
-      send: vi.fn().mockRejectedValue(
-        new AcademicEmailDeliveryError('network', true, 'provider unavailable'),
-      ),
+      send: vi
+        .fn()
+        .mockRejectedValue(
+          new AcademicEmailDeliveryError(
+            'network',
+            true,
+            'provider unavailable',
+          ),
+        ),
     };
     const { service, prisma } = workerWith({ attemptCount: 5, adapter });
 
@@ -93,7 +116,9 @@ describe('NotificationWorkerService', () => {
   });
 
   it('can deliver a retried row after a worker restart', async () => {
-    const adapter = { send: vi.fn().mockResolvedValue({ providerMessageId: 'resend-1' }) };
+    const adapter = {
+      send: vi.fn().mockResolvedValue({ providerMessageId: 'resend-1' }),
+    };
     const { service, prisma } = workerWith({ attemptCount: 2, adapter });
 
     await service.runOnce();
@@ -101,7 +126,10 @@ describe('NotificationWorkerService', () => {
     expect(adapter.send).toHaveBeenCalledTimes(1);
     expect(prisma.notificationDelivery.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: 'DELIVERED', providerMessageId: 'resend-1' }),
+        data: expect.objectContaining({
+          status: 'DELIVERED',
+          providerMessageId: 'resend-1',
+        }),
       }),
     );
   });

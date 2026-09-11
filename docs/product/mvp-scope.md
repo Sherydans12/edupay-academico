@@ -54,12 +54,12 @@ Status: mandated scope with implementation acceptance boundaries
 
 ## MVP role outcomes
 
-| Role | MVP outcome |
-| --- | --- |
-| `SYSTEM_ADMIN` | Support tenants and controlled platform operations with explicit elevated access. |
+| Role           | MVP outcome                                                                         |
+| -------------- | ----------------------------------------------------------------------------------- |
+| `SYSTEM_ADMIN` | Support tenants and controlled platform operations with explicit elevated access.   |
 | `TENANT_ADMIN` | Set up the tenant’s academic structure, memberships, and operational configuration. |
-| `TEACHER` | Manage authorized CourseSubject content and review authorized student submissions. |
-| `STUDENT` | Access assigned work and submit files for authorized assignments and assessments. |
+| `TEACHER`      | Manage authorized CourseSubject content and review authorized student submissions.  |
+| `STUDENT`      | Access assigned work and submit files for authorized assignments and assessments.   |
 
 ## MVP acceptance boundary
 

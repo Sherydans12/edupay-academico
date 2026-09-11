@@ -4,14 +4,14 @@ Status: reconciled conceptual model; not a Prisma schema
 
 ## Bounded contexts
 
-| Context | Owns | Does not own |
-| --- | --- | --- |
-| Identity | Users, credentials, sessions, refresh tokens, memberships, roles, invitations, authentication audit, minimal `TenantRealm` references | Students, teachers, courses, subjects, tenant academic configuration, payments, grades |
-| Tenant configuration | Académico tenant lifecycle, tenant settings, theme tokens, and the canonical ecosystem tenant ID reference | Identity credentials, Identity membership state, and academic work owned by other contexts |
-| Academic structure | Academic years, courses, students, teachers, subjects, enrollments, subject-teacher assignments | Authentication and learning content |
-| Learning | Learning units and typed learning items, publishing, ordering, and the attachment integration seam | Identity, submission records, and payment records |
-| Work and review | Submissions, submission files, reviews, comments, change requests | Grades and automatic evaluation |
-| Platform services | Notifications, delivery attempts, integrations, operational audit | The source domain records being notified |
+| Context              | Owns                                                                                                                                  | Does not own                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Identity             | Users, credentials, sessions, refresh tokens, memberships, roles, invitations, authentication audit, minimal `TenantRealm` references | Students, teachers, courses, subjects, tenant academic configuration, payments, grades     |
+| Tenant configuration | Académico tenant lifecycle, tenant settings, theme tokens, and the canonical ecosystem tenant ID reference                            | Identity credentials, Identity membership state, and academic work owned by other contexts |
+| Academic structure   | Academic years, courses, students, teachers, subjects, enrollments, subject-teacher assignments                                       | Authentication and learning content                                                        |
+| Learning             | Learning units and typed learning items, publishing, ordering, and the attachment integration seam                                    | Identity, submission records, and payment records                                          |
+| Work and review      | Submissions, submission files, reviews, comments, change requests                                                                     | Grades and automatic evaluation                                                            |
+| Platform services    | Notifications, delivery attempts, integrations, operational audit                                                                     | The source domain records being notified                                                   |
 
 ## Relationship overview
 

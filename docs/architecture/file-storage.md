@@ -38,20 +38,20 @@ Policy values are configurable through validated, audited server-side configurat
 
 ### Allowed originals
 
-| Extension | Canonical declared MIME | Required content evidence |
-| --- | --- | --- |
-| `.pdf` | `application/pdf` | PDF signature and successful bounded structural identification |
-| `.doc` | `application/msword` | OLE Compound File signature and Word-specific structure where the detector supports it |
-| `.docx` | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | Valid ZIP package with Word Open XML content types/parts |
-| `.xls` | `application/vnd.ms-excel` | OLE Compound File signature and Excel-specific structure where the detector supports it |
-| `.xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` | Valid ZIP package with Spreadsheet Open XML content types/parts |
-| `.ppt` | `application/vnd.ms-powerpoint` | OLE Compound File signature and PowerPoint-specific structure where the detector supports it |
-| `.pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` | Valid ZIP package with Presentation Open XML content types/parts |
-| `.txt` | `text/plain` | Bounded text/encoding inspection; reject binary/NUL-heavy content |
-| `.jpg`, `.jpeg` | `image/jpeg` | JPEG signature and successful image decode/header inspection |
-| `.png` | `image/png` | PNG signature and successful image decode/header inspection |
-| `.webp` | `image/webp` | RIFF/WEBP signature and successful image decode/header inspection |
-| `.zip` | `application/zip` | Valid bounded ZIP structure and central directory |
+| Extension       | Canonical declared MIME                                                     | Required content evidence                                                                    |
+| --------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `.pdf`          | `application/pdf`                                                           | PDF signature and successful bounded structural identification                               |
+| `.doc`          | `application/msword`                                                        | OLE Compound File signature and Word-specific structure where the detector supports it       |
+| `.docx`         | `application/vnd.openxmlformats-officedocument.wordprocessingml.document`   | Valid ZIP package with Word Open XML content types/parts                                     |
+| `.xls`          | `application/vnd.ms-excel`                                                  | OLE Compound File signature and Excel-specific structure where the detector supports it      |
+| `.xlsx`         | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`         | Valid ZIP package with Spreadsheet Open XML content types/parts                              |
+| `.ppt`          | `application/vnd.ms-powerpoint`                                             | OLE Compound File signature and PowerPoint-specific structure where the detector supports it |
+| `.pptx`         | `application/vnd.openxmlformats-officedocument.presentationml.presentation` | Valid ZIP package with Presentation Open XML content types/parts                             |
+| `.txt`          | `text/plain`                                                                | Bounded text/encoding inspection; reject binary/NUL-heavy content                            |
+| `.jpg`, `.jpeg` | `image/jpeg`                                                                | JPEG signature and successful image decode/header inspection                                 |
+| `.png`          | `image/png`                                                                 | PNG signature and successful image decode/header inspection                                  |
+| `.webp`         | `image/webp`                                                                | RIFF/WEBP signature and successful image decode/header inspection                            |
+| `.zip`          | `application/zip`                                                           | Valid bounded ZIP structure and central directory                                            |
 
 The extension, declared MIME, and detected type must agree with one allowed row. Approved MIME aliases, if operationally required, are an explicit policy list rather than a permissive fallback. Open XML documents are identified by package contents, not accepted merely because they have a ZIP signature. Legacy Office formats share an OLE signature, so subtype inspection is used where supported; a file that cannot be identified with sufficient confidence fails closed. Parsers must bound decompression, entry count, dimensions, and processing time to resist archive and parser abuse.
 
@@ -98,13 +98,13 @@ Usage by category is reported from `FileObject.category` as logical bytes and fi
 
 Default thresholds are configurable and ordered as follows:
 
-| State | Allocated percentage (`usedBytes + reservedBytes`) | Upload behavior |
-| --- | ---: | --- |
-| `NORMAL` | `< 75%` | Allowed when all checks pass |
-| `INFO` | `>= 75%` and `< 90%` | Allowed; informational notice |
-| `WARNING` | `>= 90%` and `< 95%` | Allowed; prominent warning |
-| `CRITICAL` | `>= 95%` and `< 100%` | Allowed only while projected usage fits; urgent warning |
-| `FULL` | `>= 100%` or quota is already exceeded | Reject new uploads |
+| State      | Allocated percentage (`usedBytes + reservedBytes`) | Upload behavior                                         |
+| ---------- | -------------------------------------------------: | ------------------------------------------------------- |
+| `NORMAL`   |                                            `< 75%` | Allowed when all checks pass                            |
+| `INFO`     |                               `>= 75%` and `< 90%` | Allowed; informational notice                           |
+| `WARNING`  |                               `>= 90%` and `< 95%` | Allowed; prominent warning                              |
+| `CRITICAL` |                              `>= 95%` and `< 100%` | Allowed only while projected usage fits; urgent warning |
+| `FULL`     |             `>= 100%` or quota is already exceeded | Reject new uploads                                      |
 
 At `FULL`, existing metadata, previews, originals, and downloads remain available subject to normal authorization. A scope can be temporarily `FULL` because active reservations have allocated its remaining capacity. Quota failure never hides or deletes existing academic evidence.
 
@@ -255,20 +255,20 @@ does not expose JSON or base64 upload bodies. File bytes use only the dedicated
 one-file multipart content endpoint; provider-specific paths and presigned URLs
 remain outside the contract:
 
-| Method and route | Purpose | Minimum authorization |
-| --- | --- | --- |
-| `POST /api/v1/file-upload-intents` | Preflight validation, authorization, and dual-scope reservation | Actor may attach to the referenced parent |
-| `POST /api/v1/file-upload-intents/{intentId}/content` | One-file multipart transfer followed by authoritative validation, deduplication, metadata/reference creation, and accounting | Intent actor or explicit authorized server workflow |
-| `GET /api/v1/files/{fileObjectId}` | Authorized logical metadata | Parent-resource read permission |
-| `GET /api/v1/files/{fileObjectId}/download` | Authorized stream or short-lived redirect | Parent-resource download permission |
-| `POST /api/v1/learning-items/{learningItemId}/attachments` | Validate and attach a LearningItem source/material file | Assigned teacher or `TENANT_ADMIN` |
-| `GET /api/v1/learning-items/{learningItemId}/attachments` | List authorized LearningItem attachments | Parent-resource read permission |
-| `POST /api/v1/learning-items/{learningItemId}/submission` | Create first revision or permitted resubmission | Entitled student |
-| `GET /api/v1/submissions/{submissionId}` | View one submission and revision/review history | Owner, assigned teacher, or `TENANT_ADMIN` |
-| `POST /api/v1/submission-revisions/{revisionId}/reviews` | Comment, review, or request changes | Assigned teacher |
-| `GET /api/v1/storage/usage` | Current tenant usage view shaped to role | `TENANT_ADMIN` detailed; `TEACHER` summary |
-| `GET /api/v1/platform/storage/usage` | Global and per-tenant operational usage | Explicit audited `SYSTEM_ADMIN` support context |
-| `PATCH /api/v1/platform/storage/quotas/{scope}` | Change a configured quota/threshold policy | Explicit audited platform policy authority; exact role policy remains open |
+| Method and route                                           | Purpose                                                                                                                      | Minimum authorization                                                      |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `POST /api/v1/file-upload-intents`                         | Preflight validation, authorization, and dual-scope reservation                                                              | Actor may attach to the referenced parent                                  |
+| `POST /api/v1/file-upload-intents/{intentId}/content`      | One-file multipart transfer followed by authoritative validation, deduplication, metadata/reference creation, and accounting | Intent actor or explicit authorized server workflow                        |
+| `GET /api/v1/files/{fileObjectId}`                         | Authorized logical metadata                                                                                                  | Parent-resource read permission                                            |
+| `GET /api/v1/files/{fileObjectId}/download`                | Authorized stream or short-lived redirect                                                                                    | Parent-resource download permission                                        |
+| `POST /api/v1/learning-items/{learningItemId}/attachments` | Validate and attach a LearningItem source/material file                                                                      | Assigned teacher or `TENANT_ADMIN`                                         |
+| `GET /api/v1/learning-items/{learningItemId}/attachments`  | List authorized LearningItem attachments                                                                                     | Parent-resource read permission                                            |
+| `POST /api/v1/learning-items/{learningItemId}/submission`  | Create first revision or permitted resubmission                                                                              | Entitled student                                                           |
+| `GET /api/v1/submissions/{submissionId}`                   | View one submission and revision/review history                                                                              | Owner, assigned teacher, or `TENANT_ADMIN`                                 |
+| `POST /api/v1/submission-revisions/{revisionId}/reviews`   | Comment, review, or request changes                                                                                          | Assigned teacher                                                           |
+| `GET /api/v1/storage/usage`                                | Current tenant usage view shaped to role                                                                                     | `TENANT_ADMIN` detailed; `TEACHER` summary                                 |
+| `GET /api/v1/platform/storage/usage`                       | Global and per-tenant operational usage                                                                                      | Explicit audited `SYSTEM_ADMIN` support context                            |
+| `PATCH /api/v1/platform/storage/quotas/{scope}`            | Change a configured quota/threshold policy                                                                                   | Explicit audited platform policy authority; exact role policy remains open |
 
 No upload contract accepts `tenantId`, storage key, detected type, or trusted checksum from the client. A parent selector is authorization input only and is resolved inside trusted tenant context.
 

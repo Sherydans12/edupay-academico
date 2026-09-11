@@ -1,115 +1,115 @@
 ---
-name: "EduPay Académico"
-description: "La Ruta de Aprendizaje: un entorno académico cálido, claro y orientado al próximo paso."
+name: 'EduPay Académico'
+description: 'La Ruta de Aprendizaje: un entorno académico cálido, claro y orientado al próximo paso.'
 colors:
-  default-primary: "#334e68"
-  default-primary-medium: "#486581"
-  default-primary-dark: "#243b53"
-  default-accent: "#d5a021"
-  default-accent-hover: "#b78212"
-  default-educational: "#3d777b"
-  default-creative: "#735b7b"
-  default-background: "#f5f6f4"
-  default-surface: "#ffffff"
-  default-surface-secondary: "#eef1f3"
-  default-selected: "#e4ebf0"
-  default-border: "#d5dce1"
-  default-text: "#243b53"
-  default-text-secondary: "#526777"
-  default-success: "#267052"
-  default-warning: "#8d6000"
-  default-error: "#ac3f47"
-  default-focus: "#e1a51c"
-  conquistadores-primary: "#1d2f70"
-  conquistadores-primary-medium: "#2d4b82"
-  conquistadores-primary-dark: "#14234f"
-  conquistadores-accent: "#e6b83f"
-  conquistadores-accent-hover: "#c99520"
-  conquistadores-educational: "#477e82"
-  conquistadores-creative: "#74527d"
-  conquistadores-background: "#f5f3ee"
-  conquistadores-surface: "#fffefa"
-  conquistadores-surface-secondary: "#f0f1f5"
-  conquistadores-selected: "#e4e9f1"
-  conquistadores-border: "#d7dce5"
-  conquistadores-text: "#263149"
-  conquistadores-text-secondary: "#5f687b"
-  conquistadores-success: "#2e765a"
-  conquistadores-warning: "#9a6500"
-  conquistadores-warning-foreground: "#885900"
-  conquistadores-error: "#b1444b"
-  conquistadores-focus: "#f0b429"
-  on-brand: "#ffffff"
-  on-accent: "#252016"
+  default-primary: '#334e68'
+  default-primary-medium: '#486581'
+  default-primary-dark: '#243b53'
+  default-accent: '#d5a021'
+  default-accent-hover: '#b78212'
+  default-educational: '#3d777b'
+  default-creative: '#735b7b'
+  default-background: '#f5f6f4'
+  default-surface: '#ffffff'
+  default-surface-secondary: '#eef1f3'
+  default-selected: '#e4ebf0'
+  default-border: '#d5dce1'
+  default-text: '#243b53'
+  default-text-secondary: '#526777'
+  default-success: '#267052'
+  default-warning: '#8d6000'
+  default-error: '#ac3f47'
+  default-focus: '#e1a51c'
+  conquistadores-primary: '#1d2f70'
+  conquistadores-primary-medium: '#2d4b82'
+  conquistadores-primary-dark: '#14234f'
+  conquistadores-accent: '#e6b83f'
+  conquistadores-accent-hover: '#c99520'
+  conquistadores-educational: '#477e82'
+  conquistadores-creative: '#74527d'
+  conquistadores-background: '#f5f3ee'
+  conquistadores-surface: '#fffefa'
+  conquistadores-surface-secondary: '#f0f1f5'
+  conquistadores-selected: '#e4e9f1'
+  conquistadores-border: '#d7dce5'
+  conquistadores-text: '#263149'
+  conquistadores-text-secondary: '#5f687b'
+  conquistadores-success: '#2e765a'
+  conquistadores-warning: '#9a6500'
+  conquistadores-warning-foreground: '#885900'
+  conquistadores-error: '#b1444b'
+  conquistadores-focus: '#f0b429'
+  on-brand: '#ffffff'
+  on-accent: '#252016'
 typography:
   display:
     fontFamily: "var(--font-montserrat, 'Montserrat'), 'Montserrat', 'Avenir Next', Avenir, 'Segoe UI', sans-serif"
-    fontSize: "clamp(1.75rem, 3vw, 2.55rem)"
+    fontSize: 'clamp(1.75rem, 3vw, 2.55rem)'
     fontWeight: 790
     lineHeight: 1.08
-    letterSpacing: "-0.035em"
+    letterSpacing: '-0.035em'
   headline:
     fontFamily: "var(--font-montserrat, 'Montserrat'), 'Montserrat', 'Avenir Next', Avenir, 'Segoe UI', sans-serif"
-    fontSize: "clamp(1.45rem, 3vw, 2.15rem)"
+    fontSize: 'clamp(1.45rem, 3vw, 2.15rem)'
     fontWeight: 700
     lineHeight: 1.16
-    letterSpacing: "-0.03em"
+    letterSpacing: '-0.03em'
   title:
     fontFamily: "var(--font-montserrat, 'Montserrat'), 'Montserrat', 'Avenir Next', Avenir, 'Segoe UI', sans-serif"
-    fontSize: "1.25rem"
+    fontSize: '1.25rem'
     fontWeight: 700
     lineHeight: 1.2
-    letterSpacing: "-0.02em"
+    letterSpacing: '-0.02em'
   body:
     fontFamily: "var(--font-montserrat, 'Montserrat'), 'Montserrat', 'Avenir Next', Avenir, 'Segoe UI', sans-serif"
-    fontSize: "0.9rem"
+    fontSize: '0.9rem'
     fontWeight: 400
     lineHeight: 1.6
   label:
     fontFamily: "var(--font-montserrat, 'Montserrat'), 'Montserrat', 'Avenir Next', Avenir, 'Segoe UI', sans-serif"
-    fontSize: "0.72rem"
+    fontSize: '0.72rem'
     fontWeight: 750
     lineHeight: 1.1
 rounded:
-  sm: "0.5rem"
-  md: "0.75rem"
-  lg: "1rem"
-  pill: "999px"
+  sm: '0.5rem'
+  md: '0.75rem'
+  lg: '1rem'
+  pill: '999px'
 spacing:
-  xs: "0.25rem"
-  sm: "0.5rem"
-  md: "0.75rem"
-  lg: "1rem"
-  xl: "1.25rem"
-  2xl: "2rem"
+  xs: '0.25rem'
+  sm: '0.5rem'
+  md: '0.75rem'
+  lg: '1rem'
+  xl: '1.25rem'
+  2xl: '2rem'
 components:
   button-primary:
-    backgroundColor: "{colors.conquistadores-primary}"
-    textColor: "{colors.on-brand}"
-    rounded: "{rounded.sm}"
-    padding: "0.68rem 1rem"
-    height: "44px"
+    backgroundColor: '{colors.conquistadores-primary}'
+    textColor: '{colors.on-brand}'
+    rounded: '{rounded.sm}'
+    padding: '0.68rem 1rem'
+    height: '44px'
   button-accent:
-    backgroundColor: "{colors.conquistadores-accent}"
-    textColor: "{colors.on-accent}"
-    rounded: "{rounded.sm}"
-    padding: "0.68rem 1rem"
-    height: "44px"
+    backgroundColor: '{colors.conquistadores-accent}'
+    textColor: '{colors.on-accent}'
+    rounded: '{rounded.sm}'
+    padding: '0.68rem 1rem'
+    height: '44px'
   input:
-    backgroundColor: "{colors.conquistadores-surface}"
-    textColor: "{colors.conquistadores-text}"
-    rounded: "{rounded.sm}"
-    padding: "0.7rem 0.82rem"
-    height: "44px"
+    backgroundColor: '{colors.conquistadores-surface}'
+    textColor: '{colors.conquistadores-text}'
+    rounded: '{rounded.sm}'
+    padding: '0.7rem 0.82rem'
+    height: '44px'
   badge-warning:
-    textColor: "{colors.conquistadores-warning-foreground}"
-    rounded: "{rounded.pill}"
-    padding: "0.28rem 0.58rem"
-    height: "26px"
+    textColor: '{colors.conquistadores-warning-foreground}'
+    rounded: '{rounded.pill}'
+    padding: '0.28rem 0.58rem'
+    height: '26px'
   card:
-    backgroundColor: "{colors.conquistadores-surface}"
-    textColor: "{colors.conquistadores-text}"
-    rounded: "{rounded.lg}"
+    backgroundColor: '{colors.conquistadores-surface}'
+    textColor: '{colors.conquistadores-text}'
+    rounded: '{rounded.lg}'
 ---
 
 # Design System: EduPay Académico

@@ -12,7 +12,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceRoot = resolve(
   process.env.EDUPAY_SOURCE_DIR ?? join(root, '..', '..', 'EduPay'),
 );
-const postgresImage = process.env.PILOT_POSTGRES_IMAGE ?? 'postgres:15-alpine';
+const postgresImage =
+  process.env.PILOT_POSTGRES_IMAGE ??
+  'postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b';
+const expectedSourceSha = process.env.PILOT_EDUPAY_SOURCE_SHA ?? '';
 const sourceTenantId = 'colegio-conquistadores';
 const resources = { containers: [], processes: [], temp: undefined };
 
@@ -273,17 +276,21 @@ async function main() {
     await run('git', ['branch', '--show-current'], { cwd: sourceRoot })
   ).stdout.trim();
   assert.equal(sourceBranch, 'main', 'BL-002 source checkout must be on main.');
-  const sourceDivergence = (
-    await run(
-      'git',
-      ['rev-list', '--left-right', '--count', 'origin/main...HEAD'],
-      { cwd: sourceRoot },
-    )
+  assert.match(
+    expectedSourceSha,
+    /^[0-9a-f]{40}$/,
+    'PILOT_EDUPAY_SOURCE_SHA must pin the reviewed BL-002 commit.',
+  );
+  const sourceHead = (
+    await run('git', ['rev-parse', 'HEAD'], {
+      cwd: sourceRoot,
+      label: 'verify reviewed BL-002 SHA',
+    })
   ).stdout.trim();
   assert.equal(
-    sourceDivergence,
-    '0\t0',
-    'BL-002 source main must match origin/main.',
+    sourceHead,
+    expectedSourceSha,
+    'BL-002 source checkout is not at the reviewed commit SHA.',
   );
 
   resources.temp = await mkdtemp(join(tmpdir(), 'edupay-source-smoke-'));

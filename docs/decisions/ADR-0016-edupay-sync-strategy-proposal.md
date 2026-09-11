@@ -28,13 +28,13 @@ Therefore, no current source interface is sufficient for a safe incremental Acad
 
 ## Options considered
 
-| Option | Complexity | Reliability/error recovery | Load/latency | Deployment coupling | Security | Finding |
-| --- | --- | --- | --- | --- | --- | --- |
-| A. Scheduled pull from EduPay API | Medium after contract changes; simple operational model | Retryable/replayable with cursor and full reconciliation | Predictable bounded load; eventual consistency | Depends on an explicit API contract, not DB schema | Dedicated S2S auth and tenant mapping | **Accepted MVP; source API prerequisite.** |
-| B. Scheduled pull from supported export/interface | Low-medium consumer; export operations required | Good replay of complete files; weak incremental/tombstone semantics unless designed in | Bursty and less fresh | Operational export producer is coupled | Secure delivery, integrity, tenant binding, PII minimization | **Fallback only.** Existing XLSX is not sufficient. |
-| C. Push/webhook/event | High producer and consumer complexity | Requires durable delivery, replay, ordering, dead-lettering, and backstop | Low latency; producer must emit every change | High source/target coupling | Signed tenant-bound delivery and replay protection | **Not supported by source today.** |
-| D. Hybrid events plus scheduled reconciliation | Highest initial complexity; best eventual correctness | Events reduce latency; full run repairs drift/missed messages | Low latency plus periodic load | Highest | Two secure contracts and event operations | **Recommended future evolution.** |
-| Direct database coupling | Low initial coding effort only | Fragile across migrations and outages; poor service audit boundary | Shared/unbounded load | Maximal migration/deployment coupling | Expands credentials and tenant exposure | **Rejected.** |
+| Option                                            | Complexity                                              | Reliability/error recovery                                                             | Load/latency                                   | Deployment coupling                                | Security                                                     | Finding                                             |
+| ------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------- |
+| A. Scheduled pull from EduPay API                 | Medium after contract changes; simple operational model | Retryable/replayable with cursor and full reconciliation                               | Predictable bounded load; eventual consistency | Depends on an explicit API contract, not DB schema | Dedicated S2S auth and tenant mapping                        | **Accepted MVP; source API prerequisite.**          |
+| B. Scheduled pull from supported export/interface | Low-medium consumer; export operations required         | Good replay of complete files; weak incremental/tombstone semantics unless designed in | Bursty and less fresh                          | Operational export producer is coupled             | Secure delivery, integrity, tenant binding, PII minimization | **Fallback only.** Existing XLSX is not sufficient. |
+| C. Push/webhook/event                             | High producer and consumer complexity                   | Requires durable delivery, replay, ordering, dead-lettering, and backstop              | Low latency; producer must emit every change   | High source/target coupling                        | Signed tenant-bound delivery and replay protection           | **Not supported by source today.**                  |
+| D. Hybrid events plus scheduled reconciliation    | Highest initial complexity; best eventual correctness   | Events reduce latency; full run repairs drift/missed messages                          | Low latency plus periodic load                 | Highest                                            | Two secure contracts and event operations                    | **Recommended future evolution.**                   |
+| Direct database coupling                          | Low initial coding effort only                          | Fragile across migrations and outages; poor service audit boundary                     | Shared/unbounded load                          | Maximal migration/deployment coupling              | Expands credentials and tenant exposure                      | **Rejected.**                                       |
 
 ## Accepted decision
 
@@ -111,12 +111,12 @@ The source currently has `updatedAt` but no incremental API. The required API mu
 
 ### Student status mapping
 
-| EduPay state | Target action |
-| --- | --- |
-| `ACTIVE` | Set source-linked Student `ACTIVE`. |
-| `INACTIVE` | Set source-linked Student `INACTIVE`. |
-| `GRADUATED` | Set target Student `INACTIVE`; preserve raw source state in accepted sync evidence/provenance if available. |
-| `deletedAt != null` | Set target Student `INACTIVE` only after a trusted tombstone or complete reconciliation rule. |
+| EduPay state        | Target action                                                                                               |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `ACTIVE`            | Set source-linked Student `ACTIVE`.                                                                         |
+| `INACTIVE`          | Set source-linked Student `INACTIVE`.                                                                       |
+| `GRADUATED`         | Set target Student `INACTIVE`; preserve raw source state in accepted sync evidence/provenance if available. |
+| `deletedAt != null` | Set target Student `INACTIVE` only after a trusted tombstone or complete reconciliation rule.               |
 
 No Student hard delete is proposed.
 

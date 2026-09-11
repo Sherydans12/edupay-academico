@@ -1,37 +1,52 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  TrustedIdentityPrincipal,
+  type IdentityRole,
+} from '../identity/identity.types';
 
-import type { TrustedIdentityPrincipal } from '../identity/identity.types';
-
+/**
+ * Contexto de confianza por tenant, inmutable y verificado.
+ * Solo se construye si el principal tiene membresía activa en el tenant
+ * y un rol distinto de SYSTEM_ADMIN.
+ * Además, valida que el tenantId del cliente coincida con el del JWT (T-03).
+ */
+@Injectable()
 export class TrustedTenantContext {
   readonly identityUserId: string;
-  readonly membershipId: string;
-  readonly roles: TrustedIdentityPrincipal['roles'];
-  readonly sessionId: string;
   readonly tenantId: string;
+  readonly membershipId: string;
+  readonly roles: ReadonlyArray<IdentityRole>;
+  readonly sessionId: string;
 
   private constructor(principal: TrustedIdentityPrincipal) {
     this.identityUserId = principal.identityUserId;
-    this.membershipId = principal.membershipId as string;
-    this.roles = principal.roles;
+    this.tenantId = principal.tenantId!;
+    this.membershipId = principal.membershipId!;
+    this.roles = Object.freeze([...principal.roles]);
     this.sessionId = principal.sessionId;
-    this.tenantId = principal.tenantId as string;
-    Object.freeze(this);
   }
 
   static fromPrincipal(
     principal: TrustedIdentityPrincipal,
+    clientTenantId?: string,
   ): TrustedTenantContext {
-    const hasActiveMembership =
-      principal.tenantId !== undefined && principal.membershipId !== undefined;
-    const hasTenantMembershipRole = principal.roles.some(
-      (role) => role !== 'SYSTEM_ADMIN',
-    );
+    const { tenantId, membershipId, roles } = principal;
 
-    if (!hasActiveMembership || !hasTenantMembershipRole) {
+    if (!tenantId || !membershipId) {
       throw new ForbiddenException('Tenant access is not authorized.');
     }
 
-    return new TrustedTenantContext(principal);
+    const hasNonSystemAdminRole = roles.some((role) => role !== 'SYSTEM_ADMIN');
+    if (!hasNonSystemAdminRole) {
+      throw new ForbiddenException('Tenant access is not authorized.');
+    }
+
+    // T-03: Rechazar si el tenantId del cliente no coincide con el del JWT
+    if (clientTenantId && clientTenantId !== tenantId) {
+      throw new ForbiddenException('Tenant access is not authorized.');
+    }
+
+    return Object.freeze(new TrustedTenantContext(principal));
   }
 
   static isTrusted(value: unknown): value is TrustedTenantContext {

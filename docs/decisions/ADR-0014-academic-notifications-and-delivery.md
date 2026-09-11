@@ -80,14 +80,14 @@ scans and worker restarts are idempotent.
 
 ### MVP event catalog and channels
 
-| Event | Recipients | Channels |
-| --- | --- | --- |
-| `ASSIGNMENT_PUBLISHED` | eligible students for the CourseSubject | `IN_APP` + `EMAIL` |
-| `ASSESSMENT_PUBLISHED` | eligible students for the CourseSubject | `IN_APP` + `EMAIL` |
-| `SUBMISSION_RECEIVED` | active teachers assigned to the CourseSubject | `IN_APP` |
-| `RESUBMISSION_RECEIVED` | active teachers assigned to the CourseSubject | `IN_APP` |
-| `SUBMISSION_REVIEWED` | submitting student | `IN_APP` + `EMAIL` |
-| `CHANGES_REQUESTED` | submitting student | `IN_APP` + `EMAIL` |
+| Event                   | Recipients                                    | Channels           |
+| ----------------------- | --------------------------------------------- | ------------------ |
+| `ASSIGNMENT_PUBLISHED`  | eligible students for the CourseSubject       | `IN_APP` + `EMAIL` |
+| `ASSESSMENT_PUBLISHED`  | eligible students for the CourseSubject       | `IN_APP` + `EMAIL` |
+| `SUBMISSION_RECEIVED`   | active teachers assigned to the CourseSubject | `IN_APP`           |
+| `RESUBMISSION_RECEIVED` | active teachers assigned to the CourseSubject | `IN_APP`           |
+| `SUBMISSION_REVIEWED`   | submitting student                            | `IN_APP` + `EMAIL` |
+| `CHANGES_REQUESTED`     | submitting student                            | `IN_APP` + `EMAIL` |
 
 Eligible students are active academic Students reached through an active
 default CourseEnrollment or active direct StudentSubjectEnrollment. Teacher

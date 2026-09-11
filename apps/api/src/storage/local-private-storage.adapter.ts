@@ -11,6 +11,7 @@ import {
   rm,
   statfs,
   stat,
+  writeFile,
 } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 
@@ -63,17 +64,29 @@ export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
   async stage(input: {
     tenantId: string;
     intentId: string;
-    sourcePath: string;
+    sourcePath?: string;
+    sourceBytes?: Buffer;
   }): Promise<{ storageKey: string; sizeBytes: number }> {
-    const sourceStats = await stat(input.sourcePath);
-    if (!sourceStats.isFile()) throw new Error('The staged upload is not a file.');
-    await this.assertPhysicalCapacity(sourceStats.size);
+    if (Boolean(input.sourcePath) === Boolean(input.sourceBytes)) {
+      throw new Error('Exactly one upload source must be provided.');
+    }
+    const sourceStats = input.sourcePath ? await stat(input.sourcePath) : undefined;
+    if (sourceStats && !sourceStats.isFile()) throw new Error('The staged upload is not a file.');
+    const sourceSize = sourceStats?.size ?? input.sourceBytes?.length ?? 0;
+    await this.assertPhysicalCapacity(sourceSize);
     const storageKey = `tenants/${keyPart(input.tenantId)}/pending/${keyPart(input.intentId)}`;
     const target = this.absolute(storageKey);
     await mkdir(join(target, '..'), { recursive: true });
-    await copyFile(input.sourcePath, target, 1);
-    await rm(input.sourcePath, { force: true });
-    return { storageKey, sizeBytes: sourceStats.size };
+    if (input.sourcePath) {
+      await copyFile(input.sourcePath, target, 1);
+      await rm(input.sourcePath, { force: true });
+    } else {
+      await writeFile(target, input.sourceBytes as Buffer, {
+        flag: 'wx',
+        mode: 0o600,
+      });
+    }
+    return { storageKey, sizeBytes: sourceSize };
   }
 
   async promote(input: { stagingKey: string; finalKey: string }): Promise<void> {
@@ -90,6 +103,25 @@ export class LocalPrivateStorageAdapter implements PrivateStorageProvider {
 
   async read(storageKey: string): Promise<Readable> {
     return createReadStream(this.absolute(storageKey));
+  }
+
+  async getVolumeStats(): Promise<{ totalBytes: number; freeBytes: number } | null> {
+    try {
+      const filesystem = await statfs(this.root);
+      const totalBytes = Number(filesystem.blocks) * Number(filesystem.bsize);
+      const freeBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
+      if (
+        !Number.isSafeInteger(totalBytes) ||
+        !Number.isSafeInteger(freeBytes) ||
+        totalBytes < 0 ||
+        freeBytes < 0
+      ) {
+        return null;
+      }
+      return { totalBytes, freeBytes };
+    } catch {
+      return null;
+    }
   }
 
   private absolute(storageKey: string): string {

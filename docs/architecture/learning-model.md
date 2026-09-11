@@ -57,12 +57,12 @@ visibility remains correct through the existing effective-visibility query.
 
 ## Item types
 
-| Type | MVP behavior |
-| --- | --- |
-| `MATERIAL` | Readable content and optional files/links for student study. |
-| `ASSIGNMENT` | Instructions, optional attachments, deadline, and student file submission. |
-| `ASSESSMENT` | Document-based instructions, attachments, deadline, and file submission; no exam engine or grade. |
-| `ANNOUNCEMENT` | Teacher/tenant communication displayed in the appropriate CourseSubject context; no submission. |
+| Type           | MVP behavior                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------- |
+| `MATERIAL`     | Readable content and optional files/links for student study.                                      |
+| `ASSIGNMENT`   | Instructions, optional attachments, deadline, and student file submission.                        |
+| `ASSESSMENT`   | Document-based instructions, attachments, deadline, and file submission; no exam engine or grade. |
+| `ANNOUNCEMENT` | Teacher/tenant communication displayed in the appropriate CourseSubject context; no submission.   |
 
 `ASSESSMENT` is intentionally a content/work type, not an online question bank or automatic evaluation model.
 

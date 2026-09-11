@@ -23,22 +23,37 @@ export function Dialog({
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = controlledOpen ?? uncontrolledOpen;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   const setOpen = (next: boolean) => {
+    if (!next && openerRef.current) {
+      const opener = openerRef.current;
+      openerRef.current = null;
+      window.setTimeout(() => opener.focus(), 0);
+    }
     if (!isControlled) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
-  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      openerRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
       try {
         if (typeof dialog.showModal === 'function') dialog.showModal();
         else dialog.open = true;
       } catch {
         dialog.setAttribute('open', '');
       }
+      dialog
+        .querySelector<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        )
+        ?.focus();
     }
     if (!open && dialog.open) {
       try {
@@ -51,9 +66,12 @@ export function Dialog({
 
   return (
     <>
-      {openLabel ? <Button onClick={() => setOpen(true)}>{openLabel}</Button> : null}
+      {openLabel ? (
+        <Button onClick={() => setOpen(true)}>{openLabel}</Button>
+      ) : null}
       <dialog
         className="ui-dialog"
+        aria-modal="true"
         onCancel={() => setOpen(false)}
         onClose={() => setOpen(false)}
         ref={dialogRef}
@@ -63,8 +81,15 @@ export function Dialog({
             <h2>{title}</h2>
             {description ? <p>{description}</p> : null}
           </div>
-          <Button aria-label="Cerrar diálogo" onClick={() => setOpen(false)} size="icon" variant="ghost">
-            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          <Button
+            aria-label="Cerrar diálogo"
+            onClick={() => setOpen(false)}
+            size="icon"
+            variant="ghost"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
           </Button>
         </div>
         <div className="ui-dialog__content">{children}</div>
@@ -79,24 +104,56 @@ export function DropdownMenu({
   label,
   trigger,
 }: {
-  align?: 'start' | 'end';
+  align?: 'end' | 'start';
   children: ReactNode;
   label: string;
   trigger: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [measuredAlign, setMeasuredAlign] = useState<'end' | 'start'>(align);
+  const effectiveAlign = open ? measuredAlign : align;
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const adjustAlignment = () => {
+      if (!menuRef.current) return;
+      const rect = menuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      if (rect.left < 8) {
+        setMeasuredAlign('start');
+      } else if (rect.right > viewportWidth - 8) {
+        setMeasuredAlign('end');
+      }
+    };
+    const frameId = window.requestAnimationFrame(adjustAlignment);
+    window.addEventListener('resize', adjustAlignment);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', adjustAlignment);
+    };
+  }, [open, align]);
+
   return (
-    <div className="ui-dropdown" ref={wrapperRef}>
+    <div
+      className={`ui-dropdown ${open ? 'ui-dropdown--open' : ''}`}
+      data-open={open ? 'true' : undefined}
+      ref={wrapperRef}
+    >
       <button
         aria-expanded={open}
         aria-haspopup="menu"
@@ -107,7 +164,12 @@ export function DropdownMenu({
         {trigger}
       </button>
       {open ? (
-        <div aria-label={label} className={`ui-dropdown__menu ui-dropdown__menu--${align}`} role="menu">
+        <div
+          aria-label={label}
+          className={`ui-dropdown__menu ui-dropdown__menu--${effectiveAlign}`}
+          ref={menuRef}
+          role="menu"
+        >
           {children}
         </div>
       ) : null}
@@ -123,7 +185,12 @@ export function DropdownItem({
   onSelect?: () => void;
 }) {
   return (
-    <button className="ui-dropdown__item" onClick={onSelect} role="menuitem" type="button">
+    <button
+      className="ui-dropdown__item"
+      onClick={onSelect}
+      role="menuitem"
+      type="button"
+    >
       {children}
     </button>
   );
@@ -135,7 +202,15 @@ export interface TabItem {
   label: string;
 }
 
-export function Tabs({ defaultTab, items, label }: { defaultTab?: string; items: TabItem[]; label: string }) {
+export function Tabs({
+  defaultTab,
+  items,
+  label,
+}: {
+  defaultTab?: string;
+  items: TabItem[];
+  label: string;
+}) {
   const fallback = items[0]?.id ?? '';
   const [active, setActive] = useState(defaultTab ?? fallback);
 
@@ -143,7 +218,8 @@ export function Tabs({ defaultTab, items, label }: { defaultTab?: string; items:
     if (!items.length) return;
     let nextIndex: number | undefined;
     if (key === 'ArrowRight') nextIndex = (currentIndex + 1) % items.length;
-    if (key === 'ArrowLeft') nextIndex = (currentIndex - 1 + items.length) % items.length;
+    if (key === 'ArrowLeft')
+      nextIndex = (currentIndex - 1 + items.length) % items.length;
     if (key === 'Home') nextIndex = 0;
     if (key === 'End') nextIndex = items.length - 1;
     if (nextIndex === undefined) return;
@@ -164,7 +240,9 @@ export function Tabs({ defaultTab, items, label }: { defaultTab?: string; items:
             id={`${item.id}-tab`}
             key={item.id}
             onKeyDown={(event) => {
-              if (['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) {
+              if (
+                ['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)
+              ) {
                 event.preventDefault();
                 activateByKeyboard(index, event.key);
               }
@@ -194,7 +272,13 @@ export function Tabs({ defaultTab, items, label }: { defaultTab?: string; items:
   );
 }
 
-export function Tooltip({ children, content }: { children: ReactNode; content: string }) {
+export function Tooltip({
+  children,
+  content,
+}: {
+  children: ReactNode;
+  content: string;
+}) {
   const id = useId();
   return (
     <span className="ui-tooltip">

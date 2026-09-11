@@ -33,15 +33,15 @@ course.
 
 Lifecycle values are stable strings:
 
-| Concept | Allowed states |
-| --- | --- |
-| AcademicYear | `DRAFT`, `ACTIVE`, `CLOSED`, `ARCHIVED` |
-| Course | `DRAFT`, `ACTIVE`, `ARCHIVED` |
-| Subject catalog | `ACTIVE`, `ARCHIVED` |
-| CourseSubject | `ACTIVE`, `ARCHIVED` |
-| CourseEnrollment | `ACTIVE`, `INACTIVE` |
-| StudentSubjectEnrollment | `ACTIVE`, `INACTIVE` |
-| CourseSubjectTeacher assignment | `ACTIVE`, `INACTIVE` |
+| Concept                         | Allowed states                          |
+| ------------------------------- | --------------------------------------- |
+| AcademicYear                    | `DRAFT`, `ACTIVE`, `CLOSED`, `ARCHIVED` |
+| Course                          | `DRAFT`, `ACTIVE`, `ARCHIVED`           |
+| Subject catalog                 | `ACTIVE`, `ARCHIVED`                    |
+| CourseSubject                   | `ACTIVE`, `ARCHIVED`                    |
+| CourseEnrollment                | `ACTIVE`, `INACTIVE`                    |
+| StudentSubjectEnrollment        | `ACTIVE`, `INACTIVE`                    |
+| CourseSubjectTeacher assignment | `ACTIVE`, `INACTIVE`                    |
 
 `DRAFT` may be configured before an AcademicYear opens. `ACTIVE` is
 operational. `CLOSED` preserves the completed academic period and prevents

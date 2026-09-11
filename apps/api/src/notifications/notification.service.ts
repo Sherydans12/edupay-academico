@@ -88,17 +88,21 @@ export class NotificationService {
       input.tenantId,
       item.courseSubjectId,
     );
-    await this.createEventAndDeliveries(tx, {
-      tenantId: input.tenantId,
-      eventId,
-      eventType: input.eventType,
-      aggregateType: 'LearningItem',
-      aggregateId: item.id,
-      payload,
-      occurredAt: input.occurredAt,
-      notBefore: input.notBefore,
-      requestId: input.requestId,
-    }, recipients);
+    await this.createEventAndDeliveries(
+      tx,
+      {
+        tenantId: input.tenantId,
+        eventId,
+        eventType: input.eventType,
+        aggregateType: 'LearningItem',
+        aggregateId: item.id,
+        payload,
+        occurredAt: input.occurredAt,
+        notBefore: input.notBefore,
+        requestId: input.requestId,
+      },
+      recipients,
+    );
   }
 
   async createSubmissionIntent(
@@ -121,7 +125,9 @@ export class NotificationService {
       include: {
         submission: {
           include: {
-            learningItem: { include: { courseSubject: { include: { subject: true } } } },
+            learningItem: {
+              include: { courseSubject: { include: { subject: true } } },
+            },
           },
         },
       },
@@ -142,17 +148,22 @@ export class NotificationService {
       input.tenantId,
       item.courseSubjectId,
     );
-    await this.createEventAndDeliveries(tx, {
-      tenantId: input.tenantId,
-      eventId: `submission:${input.tenantId}:${revision.id}:${input.eventType}`,
-      eventType: input.eventType,
-      aggregateType: 'SubmissionRevision',
-      aggregateId: revision.id,
-      payload,
-      occurredAt: input.occurredAt,
-      notBefore: input.occurredAt,
-      requestId: input.requestId,
-    }, recipients, ['IN_APP']);
+    await this.createEventAndDeliveries(
+      tx,
+      {
+        tenantId: input.tenantId,
+        eventId: `submission:${input.tenantId}:${revision.id}:${input.eventType}`,
+        eventType: input.eventType,
+        aggregateType: 'SubmissionRevision',
+        aggregateId: revision.id,
+        payload,
+        occurredAt: input.occurredAt,
+        notBefore: input.occurredAt,
+        requestId: input.requestId,
+      },
+      recipients,
+      ['IN_APP'],
+    );
   }
 
   async createReviewIntent(
@@ -173,7 +184,9 @@ export class NotificationService {
             submission: {
               include: {
                 student: true,
-                learningItem: { include: { courseSubject: { include: { subject: true } } } },
+                learningItem: {
+                  include: { courseSubject: { include: { subject: true } } },
+                },
               },
             },
           },
@@ -196,21 +209,27 @@ export class NotificationService {
           : 'CHANGES_REQUESTED',
     };
     const student = review.submissionRevision.submission.student;
-    await this.createEventAndDeliveries(tx, {
-      tenantId: input.tenantId,
-      eventId: `review:${input.tenantId}:${review.id}:${input.eventType}`,
-      eventType: input.eventType,
-      aggregateType: 'Review',
-      aggregateId: review.id,
-      payload,
-      occurredAt: input.occurredAt,
-      notBefore: input.occurredAt,
-      requestId: input.requestId,
-    }, [{
-      key: student.identityUserId ?? `student:${student.id}`,
-      identityUserId: student.identityUserId,
-      email: student.email,
-    }]);
+    await this.createEventAndDeliveries(
+      tx,
+      {
+        tenantId: input.tenantId,
+        eventId: `review:${input.tenantId}:${review.id}:${input.eventType}`,
+        eventType: input.eventType,
+        aggregateType: 'Review',
+        aggregateId: review.id,
+        payload,
+        occurredAt: input.occurredAt,
+        notBefore: input.occurredAt,
+        requestId: input.requestId,
+      },
+      [
+        {
+          key: student.identityUserId ?? `student:${student.id}`,
+          identityUserId: student.identityUserId,
+          email: student.email,
+        },
+      ],
+    );
   }
 
   async materializeDueScheduledLearningEvents(limit = 50): Promise<number> {
@@ -287,11 +306,14 @@ export class NotificationService {
       take: input.limit + 1,
     });
     const hasMore = notifications.length > input.limit;
-    const pageItems = hasMore ? notifications.slice(0, input.limit) : notifications;
+    const pageItems = hasMore
+      ? notifications.slice(0, input.limit)
+      : notifications;
     const last = pageItems.at(-1);
     return {
       items: pageItems.map(this.mapNotification),
-      nextCursor: hasMore && last ? this.encodeCursor(last.createdAt, last.id) : null,
+      nextCursor:
+        hasMore && last ? this.encodeCursor(last.createdAt, last.id) : null,
     };
   }
 
@@ -303,7 +325,10 @@ export class NotificationService {
     const record = await this.prisma.inAppNotification.findUnique({
       where: { tenantId_id: { tenantId, id: notificationId } },
     });
-    if (!record || record.recipientIdentityUserId !== context.principal.identityUserId) {
+    if (
+      !record ||
+      record.recipientIdentityUserId !== context.principal.identityUserId
+    ) {
       throw new NotFoundException('The requested notification was not found.');
     }
     const updated = await this.prisma.inAppNotification.update({
@@ -313,7 +338,9 @@ export class NotificationService {
     return this.mapNotification(updated);
   }
 
-  async markAllRead(context: AcademicRequestContext): Promise<{ updatedCount: number }> {
+  async markAllRead(
+    context: AcademicRequestContext,
+  ): Promise<{ updatedCount: number }> {
     const tenantId = this.tenantId(context);
     const result = await this.prisma.inAppNotification.updateMany({
       where: {
@@ -326,7 +353,9 @@ export class NotificationService {
     return { updatedCount: result.count };
   }
 
-  async unreadCount(context: AcademicRequestContext): Promise<{ count: number }> {
+  async unreadCount(
+    context: AcademicRequestContext,
+  ): Promise<{ count: number }> {
     const tenantId = this.tenantId(context);
     const count = await this.prisma.inAppNotification.count({
       where: {
@@ -345,7 +374,9 @@ export class NotificationService {
     channels?: readonly NotificationChannel[],
   ): Promise<void> {
     if (!isSafeApplicationPath(input.payload.targetPath)) {
-      throw new Error('Notification targetPath must be a safe application-relative path.');
+      throw new Error(
+        'Notification targetPath must be a safe application-relative path.',
+      );
     }
     await tx.notificationEvent.upsert({
       where: { tenantId_id: { tenantId: input.tenantId, id: input.eventId } },
@@ -380,7 +411,7 @@ export class NotificationService {
           channel,
           templateVersion: ACADEMIC_NOTIFICATION_TEMPLATE_VERSION,
           idempotencyKey: `${input.eventId}:${recipient.key}:${channel}:${ACADEMIC_NOTIFICATION_TEMPLATE_VERSION}`,
-          status: skipped ? 'SKIPPED' as const : 'PENDING' as const,
+          status: skipped ? ('SKIPPED' as const) : ('PENDING' as const),
           ...(skipped
             ? {
                 skipReason: missingIdentity
@@ -395,11 +426,17 @@ export class NotificationService {
 
     const existing = await tx.notificationDelivery.findMany({
       where: { tenantId: input.tenantId, eventId: input.eventId },
-      select: { recipientKey: true, channel: true, templateVersion: true, id: true },
+      select: {
+        recipientKey: true,
+        channel: true,
+        templateVersion: true,
+        id: true,
+      },
     });
     const existingKeys = new Set(
-      existing.map((delivery) =>
-        `${delivery.recipientKey}:${delivery.channel}:${delivery.templateVersion}`,
+      existing.map(
+        (delivery) =>
+          `${delivery.recipientKey}:${delivery.channel}:${delivery.templateVersion}`,
       ),
     );
     const missing = deliveryData.filter(
@@ -409,11 +446,17 @@ export class NotificationService {
         ),
     );
     if (missing.length > 0) {
-      await tx.notificationDelivery.createMany({ data: missing, skipDuplicates: true });
+      await tx.notificationDelivery.createMany({
+        data: missing,
+        skipDuplicates: true,
+      });
     }
 
     const inApp = missing.filter(
-      (delivery) => delivery.channel === 'IN_APP' && delivery.status === 'PENDING' && delivery.recipientIdentityUserId,
+      (delivery) =>
+        delivery.channel === 'IN_APP' &&
+        delivery.status === 'PENDING' &&
+        delivery.recipientIdentityUserId,
     );
     if (inApp.length > 0) {
       const copy = notificationCopy(input.eventType, input.payload);
@@ -463,7 +506,11 @@ export class NotificationService {
                 status: 'ACTIVE',
                 course: {
                   courseSubjects: {
-                    some: { id: courseSubjectId, status: 'ACTIVE', defaultForCourse: true },
+                    some: {
+                      id: courseSubjectId,
+                      status: 'ACTIVE',
+                      defaultForCourse: true,
+                    },
                   },
                 },
               },
@@ -492,7 +539,9 @@ export class NotificationService {
         status: 'ACTIVE',
         teacher: { status: 'ACTIVE' },
       },
-      select: { teacher: { select: { id: true, identityUserId: true, email: true } } },
+      select: {
+        teacher: { select: { id: true, identityUserId: true, email: true } },
+      },
     });
     return assignments.map(({ teacher }) => ({
       key: teacher.identityUserId ?? `teacher:${teacher.id}`,
@@ -502,14 +551,19 @@ export class NotificationService {
   }
 
   private channelsFor(eventType: NotificationEventType): NotificationChannel[] {
-    if (eventType === 'SUBMISSION_RECEIVED' || eventType === 'RESUBMISSION_RECEIVED') {
+    if (
+      eventType === 'SUBMISSION_RECEIVED' ||
+      eventType === 'RESUBMISSION_RECEIVED'
+    ) {
       return ['IN_APP'];
     }
     if (eventType === 'ANNOUNCEMENT_PUBLISHED') return ['IN_APP'];
     return ['IN_APP', 'EMAIL'];
   }
 
-  private learningEventType(type: 'MATERIAL' | 'ASSIGNMENT' | 'ASSESSMENT' | 'ANNOUNCEMENT'): NotificationEventType {
+  private learningEventType(
+    type: 'MATERIAL' | 'ASSIGNMENT' | 'ASSESSMENT' | 'ANNOUNCEMENT',
+  ): NotificationEventType {
     if (type === 'ASSIGNMENT') return 'ASSIGNMENT_PUBLISHED';
     if (type === 'ASSESSMENT') return 'ASSESSMENT_PUBLISHED';
     return 'ANNOUNCEMENT_PUBLISHED';
@@ -524,11 +578,14 @@ export class NotificationService {
 
   private decodeCursor(cursor: string): { createdAt: Date; id: string } {
     try {
-      const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      const value = JSON.parse(
+        Buffer.from(cursor, 'base64url').toString('utf8'),
+      ) as {
         createdAt?: unknown;
         id?: unknown;
       };
-      if (typeof value.createdAt !== 'string' || typeof value.id !== 'string') throw new Error();
+      if (typeof value.createdAt !== 'string' || typeof value.id !== 'string')
+        throw new Error();
       const createdAt = new Date(value.createdAt);
       if (Number.isNaN(createdAt.getTime()) || !value.id) throw new Error();
       return { createdAt, id: value.id };
@@ -538,7 +595,9 @@ export class NotificationService {
   }
 
   private encodeCursor(createdAt: Date, id: string): string {
-    return Buffer.from(JSON.stringify({ createdAt: createdAt.toISOString(), id })).toString('base64url');
+    return Buffer.from(
+      JSON.stringify({ createdAt: createdAt.toISOString(), id }),
+    ).toString('base64url');
   }
 
   private mapNotification = (record: {

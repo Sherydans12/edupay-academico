@@ -50,7 +50,8 @@ export class ResendAcademicEmailAdapter implements AcademicEmailAdapter {
     }
 
     if (!response.ok) {
-      const category = response.status >= 500 ? 'provider_unavailable' : 'provider_rejected';
+      const category =
+        response.status >= 500 ? 'provider_unavailable' : 'provider_rejected';
       throw new AcademicEmailDeliveryError(
         category,
         response.status >= 500 || response.status === 429,

@@ -36,18 +36,22 @@ export const submissionRevisionSchema = z
     isLate: z.boolean(),
     createdByIdentityUserId: z.string().min(1).max(128),
     createdAt: timestampSchema,
-    files: z.array(
-      z.object({
-        id: opaqueIdSchema,
-        originalFilename: z.string().min(1).max(255),
-        sizeBytes: z.number().int().nonnegative(),
-        declaredMime: z.string().min(1).max(160),
-        detectedMime: z.string().min(1).max(160),
-        extension: z.string().min(1).max(16),
-        category: z.literal('STUDENT_SUBMISSION'),
-        createdAt: timestampSchema,
-      }).strict(),
-    ).min(1),
+    files: z
+      .array(
+        z
+          .object({
+            id: opaqueIdSchema,
+            originalFilename: z.string().min(1).max(255),
+            sizeBytes: z.number().int().nonnegative(),
+            declaredMime: z.string().min(1).max(160),
+            detectedMime: z.string().min(1).max(160),
+            extension: z.string().min(1).max(16),
+            category: z.literal('STUDENT_SUBMISSION'),
+            createdAt: timestampSchema,
+          })
+          .strict(),
+      )
+      .min(1),
     reviews: z.array(submissionReviewSchema),
   })
   .strict();

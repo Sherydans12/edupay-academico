@@ -4,7 +4,10 @@ import { Alert, Button } from '@edupay/ui';
 import type { StorageFile } from '@edupay/contracts';
 import { useCallback, useEffect, useState } from 'react';
 
-import { AcademicApiError, type AcademicApiClient } from '@/api/academic-client';
+import {
+  AcademicApiError,
+  type AcademicApiClient,
+} from '@/api/academic-client';
 import { formatFileSize } from '@/components/file-upload-queue';
 import { Icon } from '@/components/icons';
 
@@ -47,9 +50,11 @@ export function LearningAttachmentList({
     try {
       setAttachments(await api.listLearningAttachments(learningItemId));
     } catch (nextError) {
-      setError(nextError instanceof AcademicApiError && nextError.status === 403
-        ? 'Los archivos adjuntos no están disponibles para esta sesión.'
-        : 'No pudimos cargar los archivos adjuntos.');
+      setError(
+        nextError instanceof AcademicApiError && nextError.status === 403
+          ? 'Los archivos adjuntos no están disponibles para esta sesión.'
+          : 'No pudimos cargar los archivos adjuntos.',
+      );
     } finally {
       setLoading(false);
     }
@@ -70,22 +75,72 @@ export function LearningAttachmentList({
     }
   }
 
-  if (!supported || (!loading && !error && attachments.length === 0)) return null;
+  if (!supported || (!loading && !error && attachments.length === 0))
+    return null;
 
-  return <section aria-labelledby={`learning-attachments-title-${learningItemId}`} className="learning-attachments">
-    <div className="section-heading">
-      <div>
-        <h2 id={`learning-attachments-title-${learningItemId}`}>Archivos adjuntos</h2>
-        <p>Descarga los materiales autorizados por tu docente.</p>
+  return (
+    <section
+      aria-labelledby={`learning-attachments-title-${learningItemId}`}
+      className="learning-attachments"
+    >
+      <div className="section-heading">
+        <div>
+          <h2 id={`learning-attachments-title-${learningItemId}`}>
+            Archivos adjuntos
+          </h2>
+          <p>Descarga los materiales autorizados por tu docente.</p>
+        </div>
       </div>
-    </div>
-    {error ? <Alert action={<Button onClick={() => void load()} variant="secondary">Reintentar</Button>} title="No pudimos cargar los adjuntos" tone="error">{error}</Alert> : null}
-    {downloadErrorMessage ? <Alert title="No se pudo descargar el archivo" tone="error">{downloadErrorMessage}</Alert> : null}
-    {loading ? <div aria-label="Cargando archivos adjuntos" className="academic-loading"><div className="ui-skeleton" /></div> : null}
-    {!loading && attachments.length ? <div className="attachment-list">{attachments.map((file) => <div className="attachment-row" key={file.id}>
-      <Icon name="paperclip" />
-      <span><strong>{file.originalFilename}</strong><small>{formatFileSize(file.sizeBytes)} · {file.detectedMime}</small></span>
-      <Button aria-label={`Descargar ${file.originalFilename}`} onClick={() => void download(file)} size="icon" title="Descargar" variant="ghost"><Icon name="download" /></Button>
-    </div>)}</div> : null}
-  </section>;
+      {error ? (
+        <Alert
+          action={
+            <Button onClick={() => void load()} variant="secondary">
+              Reintentar
+            </Button>
+          }
+          title="No pudimos cargar los adjuntos"
+          tone="error"
+        >
+          {error}
+        </Alert>
+      ) : null}
+      {downloadErrorMessage ? (
+        <Alert title="No se pudo descargar el archivo" tone="error">
+          {downloadErrorMessage}
+        </Alert>
+      ) : null}
+      {loading ? (
+        <div
+          aria-label="Cargando archivos adjuntos"
+          className="academic-loading"
+        >
+          <div className="ui-skeleton" />
+        </div>
+      ) : null}
+      {!loading && attachments.length ? (
+        <div className="attachment-list">
+          {attachments.map((file) => (
+            <div className="attachment-row" key={file.id}>
+              <Icon name="paperclip" />
+              <span>
+                <strong>{file.originalFilename}</strong>
+                <small>
+                  {formatFileSize(file.sizeBytes)} · {file.detectedMime}
+                </small>
+              </span>
+              <Button
+                aria-label={`Descargar ${file.originalFilename}`}
+                onClick={() => void download(file)}
+                size="icon"
+                title="Descargar"
+                variant="ghost"
+              >
+                <Icon name="download" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
 }

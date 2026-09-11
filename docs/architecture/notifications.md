@@ -73,14 +73,14 @@ if no worker is running; no notification is sent before the effective time.
 
 ## MVP event catalog
 
-| Event | Recipient | Channel |
-| --- | --- | --- |
-| `ASSIGNMENT_PUBLISHED` | eligible students | in-app + email |
-| `ASSESSMENT_PUBLISHED` | eligible students | in-app + email |
-| `SUBMISSION_RECEIVED` | active assigned teachers | in-app |
-| `RESUBMISSION_RECEIVED` | active assigned teachers | in-app |
-| `SUBMISSION_REVIEWED` | submitting student | in-app + email |
-| `CHANGES_REQUESTED` | submitting student | in-app + email |
+| Event                   | Recipient                | Channel        |
+| ----------------------- | ------------------------ | -------------- |
+| `ASSIGNMENT_PUBLISHED`  | eligible students        | in-app + email |
+| `ASSESSMENT_PUBLISHED`  | eligible students        | in-app + email |
+| `SUBMISSION_RECEIVED`   | active assigned teachers | in-app         |
+| `RESUBMISSION_RECEIVED` | active assigned teachers | in-app         |
+| `SUBMISSION_REVIEWED`   | submitting student       | in-app + email |
+| `CHANGES_REQUESTED`     | submitting student       | in-app + email |
 
 Eligible means active CourseSubject access through default course enrollment
 or direct StudentSubjectEnrollment, and active Teacher assignment for teacher
