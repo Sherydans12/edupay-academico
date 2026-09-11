@@ -1,3 +1,5 @@
+> Registro histórico o plantilla. Para estado actual, dominios, UUIDs, versiones y gates usar [PRODUCTION.md](../operations/PRODUCTION.md) y [PHASE-CLOSEOUT.md](../operations/PHASE-CLOSEOUT.md), verificados el 2026-09-11. Estados, nombres y comandos antiguos de este archivo no autorizan recrear recursos eliminados ni ejecutar migraciones.
+
 # EduPay -> EduPay Académico synchronization discovery
 
 Status: source discovery complete; D-05 and D-06 **Accepted** 2026-08-11

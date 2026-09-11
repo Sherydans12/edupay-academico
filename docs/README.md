@@ -1,9 +1,13 @@
 # EduPay Académico documentation
 
-Status: reconciled architecture baseline for implementation bootstrap
-Repository state at baseline: empty; no application code, schema, tests, or prior documentation were found.
+Estado actual: implementación y remediación productiva cerradas en su alcance el 2026-09-11.
+La descripción de repositorio vacío corresponde al bootstrap histórico.
 
-This documentation governs the first implementation phase of EduPay Académico. It separates product scope from architectural constraints, records the approved Identity integration contract, and keeps later unresolved choices explicit instead of hiding them in code.
+Leer primero [topología vigente](operations/PRODUCTION.md),
+[runbook](operations/RUNBOOK.md), [cierre y pendientes](operations/PHASE-CLOSEOUT.md)
+y [el inventario de Coolify](operations/coolify-inventory.json).
+Los ADR aceptados mantienen autoridad sobre arquitectura y seguridad; los
+runbooks anteriores no sustituyen la fotografía operativa actual.
 
 ## Reading order
 

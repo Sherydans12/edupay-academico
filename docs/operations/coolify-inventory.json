@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "verifiedDate": "2026-09-11",
+  "scope": "EduPay production only; not a full inventory of unrelated VPS projects",
+  "status": "PRODUCTION_TOPOLOGY_CORRECTED",
+  "project": {
+    "name": "My first project",
+    "uuid": "p5gswqrr8ot1oaoxwytrpsho"
+  },
+  "environment": {
+    "name": "production",
+    "uuid": "oej046b1ozl6a1w329bx8zdd"
+  },
+  "server": {
+    "name": "localhost",
+    "uuid": "h10grmpaqnhiissqexi1k4mu",
+    "address": "187.77.250.148"
+  },
+  "resources": [
+    {
+      "uuid": "ktgdely86kx0by10p9cb91os",
+      "name": "EDUPAY FRONT",
+      "type": "application",
+      "repository": "Sherydans12/BL-002-EduPay",
+      "sha": "502e6463464de0a54b440362a64da0c31450818f",
+      "branch": "main",
+      "domain": "edupay.baselogic.cl",
+      "port": 3000,
+      "baseDirectory": "/frontend",
+      "dockerfile": "/Dockerfile",
+      "target": "runner",
+      "health": "/login",
+      "autoDeploy": true,
+      "dependsOn": [
+        "km0aljzabdiqtaixj9dsequu"
+      ],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "km0aljzabdiqtaixj9dsequu",
+      "name": "EDUPAY BACK",
+      "type": "application",
+      "repository": "Sherydans12/BL-002-EduPay",
+      "sha": "502e6463464de0a54b440362a64da0c31450818f",
+      "branch": "main",
+      "domain": "api-edupay.baselogic.cl",
+      "port": 3001,
+      "baseDirectory": "/backend",
+      "dockerfile": "/Dockerfile",
+      "target": null,
+      "health": "/api/v1/health",
+      "autoDeploy": true,
+      "dependsOn": [
+        "dms5i3e0i5t4kyh7h683mi7v"
+      ],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "qf65r4ltig6jhb6t8dmv2qyw",
+      "name": "edupay-academico-web",
+      "type": "application",
+      "repository": "Sherydans12/edupay-academico",
+      "sha": "4f5ad2839e08e561e0335f6e4fdedfe448f15415",
+      "branch": "codex/production-latest-web-recovery",
+      "domain": "academico.edupay.baselogic.cl",
+      "port": 3000,
+      "baseDirectory": "/",
+      "dockerfile": "/deploy/Dockerfile.web",
+      "target": "runtime",
+      "health": "/login",
+      "autoDeploy": false,
+      "dependsOn": [
+        "iobfkpujjoa2kj5urbpnjvzi",
+        "0vrvqepcukwcubxga0narorf"
+      ],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "iobfkpujjoa2kj5urbpnjvzi",
+      "name": "edupay-academico-pinned",
+      "type": "service",
+      "repository": "Sherydans12/edupay-academico",
+      "sha": "b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9",
+      "image": "ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a",
+      "domain": "academico-api.edupay.baselogic.cl",
+      "port": 3001,
+      "health": [
+        "/api/v1/health/live",
+        "/api/v1/health/ready"
+      ],
+      "dependsOn": [
+        "v5w9hacwtftulf4m46l1rn2g",
+        "0vrvqepcukwcubxga0narorf",
+        "ttrrmrkod9hmqo68er6q2ghs"
+      ],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "0vrvqepcukwcubxga0narorf",
+      "name": "edupay-identity-pinned",
+      "type": "service",
+      "repository": "Sherydans12/edupay-identity",
+      "sha": "b38849be78fee492f68f2d0e99cff3b69a08415a",
+      "image": "ghcr.io/sherydans12/edupay-identity@sha256:eb35930f4fb0358d891c50c57e301d47fb033b9d9a0b53284fea0b68e73aa7f8",
+      "domain": "identity.edupay.baselogic.cl",
+      "port": 3000,
+      "health": "/api/v1/identity/health",
+      "jwks": "/.well-known/jwks.json",
+      "dependsOn": [
+        "bluypktxta8uisbrfzu6p9pw"
+      ],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "nn8yrhitex2r6squev0auwrs",
+      "name": "edupay-academico-notification-worker-pinned",
+      "type": "service",
+      "repository": "Sherydans12/edupay-academico",
+      "sha": "b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9",
+      "image": "ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a",
+      "domain": null,
+      "dependsOn": [
+        "v5w9hacwtftulf4m46l1rn2g"
+      ],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "r8mtn1xqtex96j4a8wu5hae6",
+      "name": "edupay-academico-sync-worker-pinned",
+      "type": "service",
+      "repository": "Sherydans12/edupay-academico",
+      "sha": "b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9",
+      "image": "ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a",
+      "domain": null,
+      "dependsOn": [
+        "v5w9hacwtftulf4m46l1rn2g",
+        "km0aljzabdiqtaixj9dsequu",
+        "0vrvqepcukwcubxga0narorf"
+      ],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "ttrrmrkod9hmqo68er6q2ghs",
+      "name": "clamav",
+      "type": "application",
+      "image": "clamav/clamav:1.4.3",
+      "domain": null,
+      "dependsOn": [],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "dms5i3e0i5t4kyh7h683mi7v",
+      "name": "postgresql-database-EDUPAY",
+      "type": "postgresql",
+      "image": "postgres:18-alpine",
+      "domain": null,
+      "volume": "postgres-data-dms5i3e0i5t4kyh7h683mi7v",
+      "mount": "/var/lib/postgresql",
+      "dependsOn": [],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "v5w9hacwtftulf4m46l1rn2g",
+      "name": "academico-db",
+      "type": "postgresql",
+      "image": "postgres:15-alpine",
+      "domain": null,
+      "volume": "postgres-data-v5w9hacwtftulf4m46l1rn2g",
+      "mount": "/var/lib/postgresql/data",
+      "dependsOn": [],
+      "observedState": "running:healthy"
+    },
+    {
+      "uuid": "bluypktxta8uisbrfzu6p9pw",
+      "name": "identity-db",
+      "type": "postgresql",
+      "image": "postgres:15-alpine",
+      "domain": null,
+      "volume": "postgres-data-bluypktxta8uisbrfzu6p9pw",
+      "mount": "/var/lib/postgresql/data",
+      "dependsOn": [],
+      "observedState": "running:healthy"
+    }
+  ],
+  "retiredApplicationUuids": [
+    "d8dqmfqwp45hkk2hdqodohav",
+    "upo2mfye6i58mtx9uch6vseq",
+    "pzqsdpn95gxuvgkt674qld08",
+    "tbv6wqmv2h0u4flrufjzch4b",
+    "w14ok9mcfn0ntjsr443wkjrb",
+    "ax0c9tmr72i7qjnzg9o0tks1",
+    "m5p3pkoasepszgd6do1u6j95",
+    "v127kn940v754d98x7bmfsme",
+    "bgaqul218khdtq3se4pf8dnj",
+    "h1j4z41841v4d8qx2cwmrbht",
+    "83ifd38kf0yjpfptkyogrsdq",
+    "tsxyd25bacjm4ibsyma6ckyn",
+    "gtpzq9l8jjkf0m4eboj5l9no"
+  ],
+  "retiredServiceUuids": [
+    "npp3f3xrpktvwvo33j4frhxi",
+    "ayj9cwg9ycvy338gb7ehrzpf"
+  ],
+  "retiredProjectUuid": "4bll3uuvtbnsehe7fsrmnodh",
+  "backup": {
+    "timer": "edupay-backup.timer",
+    "verifiedDatabaseUuids": [
+      "v5w9hacwtftulf4m46l1rn2g",
+      "bluypktxta8uisbrfzu6p9pw"
+    ],
+    "preRepairPoint": "20260911T130031Z",
+    "postRepairPoint": "20260911T130501Z",
+    "remoteVerified": true,
+    "bl002RecoveryVerified": false
+  },
+  "nextSchemaChangeRequiresReconciliation": true
+}
