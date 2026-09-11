@@ -182,9 +182,8 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
         const cleanEvent = new Event('beforeunload', {
           cancelable: true,
         }) as BeforeUnloadEvent;
-        const cleanPreventSpy = vi.spyOn(cleanEvent, 'preventDefault');
         window.dispatchEvent(cleanEvent);
-        expect(cleanPreventSpy).not.toHaveBeenCalled();
+        expect(cleanEvent.defaultPrevented).toBe(false);
       });
     });
 

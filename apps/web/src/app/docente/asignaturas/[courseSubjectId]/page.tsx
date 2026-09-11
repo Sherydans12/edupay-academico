@@ -6,5 +6,5 @@ export default async function TeacherCourseSubjectPage({
   params: Promise<{ courseSubjectId: string }>;
 }) {
   const { courseSubjectId } = await params;
-  return <TeacherSubjectScreen courseSubjectId={courseSubjectId} />;
+  return <TeacherSubjectScreen courseSubjectId={courseSubjectId} v2={true} />;
 }

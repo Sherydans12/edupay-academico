@@ -3,7 +3,7 @@
 import { Button, Input, Select, Textarea } from '@edupay/ui';
 import type { LearningItem } from '@edupay/contracts';
 import { useCallback, useEffect, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 
 import type { AcademicApiClient } from '@/api/academic-client';
 import {
@@ -67,7 +67,7 @@ export function ItemEditor({
     reset,
     setError,
     setValue,
-    control,
+    watch,
   } = useForm<ItemEditorFormValues>({
     defaultValues,
   });
@@ -76,7 +76,7 @@ export function ItemEditor({
     register('bodyDocument');
   }, [register]);
 
-  const selectedType = useWatch({ control, name: 'type' });
+  const selectedType = watch('type');
 
   // Handle browser tab/page close prevention when form is dirty
   useEffect(() => {

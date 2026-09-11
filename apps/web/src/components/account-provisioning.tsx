@@ -1,6 +1,6 @@
 'use client';
 
-import { Alert, Badge, Button, Dialog, Input } from '@edupay/ui';
+import { Alert, Badge, Button, Checkbox, Dialog, Input } from '@edupay/ui';
 import { useMemo, useState } from 'react';
 
 import {
@@ -70,6 +70,7 @@ export function AccountProvisioning({
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState(() => usernameSuggestion(person));
   const [email, setEmail] = useState(person.email ?? '');
+  const [noEmailMode, setNoEmailMode] = useState(false);
   const [provisioned, setProvisioned] = useState<ProvisionedMembership | null>(
     null,
   );
@@ -98,6 +99,7 @@ export function AccountProvisioning({
     setProvisioned(null);
     setError('');
     setPhase('form');
+    setNoEmailMode(false);
     setUsername(usernameSuggestion(person));
     setEmail(person.email ?? '');
   }
@@ -132,15 +134,24 @@ export function AccountProvisioning({
   async function link(created: ProvisionedMembership) {
     setPhase('linking');
     setError('');
+    const normalizedEmail = email.trim().toLowerCase();
     try {
-      if (kind === 'student')
+      if (!noEmailMode && normalizedEmail && normalizedEmail !== person.email) {
+        if (kind === 'student') {
+          await api.updateStudent(person.id, { email: normalizedEmail });
+        } else {
+          await api.updateTeacher(person.id, { email: normalizedEmail });
+        }
+      }
+      if (kind === 'student') {
         await api.linkStudentIdentity(person.id, {
           identityUserId: created.userId,
         });
-      else
+      } else {
         await api.linkTeacherIdentity(person.id, {
           identityUserId: created.userId,
         });
+      }
       await activate(created);
     } catch (nextError) {
       setError(academicError(nextError));
@@ -150,12 +161,20 @@ export function AccountProvisioning({
 
   async function provision() {
     if (!identity) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!noEmailMode && !normalizedEmail) {
+      setError(
+        'Debes ingresar un correo electrónico para enviar la invitación de acceso.',
+      );
+      return;
+    }
+
     setPhase('provisioning');
     setError('');
     try {
       const created = await identity.provisionMembership({
-        institutionalUsername: username,
-        ...(email ? { email } : {}),
+        institutionalUsername: username.trim(),
+        ...(!noEmailMode && normalizedEmail ? { email: normalizedEmail } : {}),
         role,
       });
       setProvisioned(created);
@@ -166,33 +185,62 @@ export function AccountProvisioning({
     }
   }
 
-  if (person.identityUserId)
-    return <Badge tone="success">Acceso vinculado</Badge>;
+  const isAlreadyLinked = Boolean(person.identityUserId);
 
   return (
     <>
-      <Button
-        disabled={!identity}
-        onClick={() => setOpen(true)}
-        size="sm"
-        variant="secondary"
-      >
-        Crear acceso
-      </Button>
+      {isAlreadyLinked ? (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <Badge tone="success">Acceso vinculado</Badge>
+          <Button
+            disabled={!identity}
+            onClick={() => setOpen(true)}
+            size="sm"
+            variant="secondary"
+          >
+            Reenviar invitación
+          </Button>
+        </div>
+      ) : (
+        <Button
+          disabled={!identity}
+          onClick={() => setOpen(true)}
+          size="sm"
+          variant="secondary"
+        >
+          Crear acceso
+        </Button>
+      )}
       <Dialog
-        description={`Provisiona una membresía ${role} y vincúlala al registro académico de ${personName}.`}
+        description={
+          isAlreadyLinked
+            ? `Envía una nueva invitación o genera un código de activación para ${personName}.`
+            : `Provisiona una membresía ${role} y vincúlala al registro académico de ${personName}.`
+        }
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
           if (!nextOpen) resetVolatileState();
         }}
         open={open}
-        title="Crear acceso a Académico"
+        title={
+          isAlreadyLinked
+            ? 'Gestionar acceso a Académico'
+            : 'Crear acceso a Académico'
+        }
       >
         <div className="provisioning-dialog">
           <div className="provisioning-role">
             <span>Rol fijo por registro académico</span>
             <Badge tone="info">{role}</Badge>
           </div>
+
           {error ? (
             <Alert
               title={
@@ -211,6 +259,7 @@ export function AccountProvisioning({
               {error}
             </Alert>
           ) : null}
+
           {phase === 'form' || phase === 'provisioning' ? (
             <>
               <Input
@@ -222,39 +271,69 @@ export function AccountProvisioning({
                 required
                 value={username}
               />
-              <Input
-                id={`${kind}-${person.id}-access-email`}
-                label="Correo para invitación (opcional)"
-                maxLength={320}
-                onChange={(event) => setEmail(event.target.value)}
-                type="email"
-                value={email}
-                hint="Si lo dejas vacío, Identity generará un código de activación de un solo uso."
-              />
+
+              {!noEmailMode ? (
+                <Input
+                  hint="El correo recibirá la invitación oficial de Identity para que la persona elija su contraseña."
+                  id={`${kind}-${person.id}-access-email`}
+                  label="Correo para invitación"
+                  maxLength={320}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={email}
+                />
+              ) : (
+                <Alert title="Modo excepcional sin correo" tone="warning">
+                  Identity generará un código de activación de un solo uso para
+                  enrolamiento presencial. El código debe entregarse de forma
+                  segura y no podrá recuperarse tras cerrar este diálogo.
+                </Alert>
+              )}
+
+              <div className="no-email-toggle-container">
+                <Checkbox
+                  checked={noEmailMode}
+                  description="Usa esta opción solo si el alumno no cuenta con correo y se enrolará de forma presencial con código de un solo uso."
+                  id={`${kind}-${person.id}-no-email-checkbox`}
+                  label="Activar sin correo (código de un solo uso)"
+                  onChange={(e) => setNoEmailMode(e.target.checked)}
+                />
+              </div>
+
               <p className="provisioning-note">
                 El administrador no define la contraseña. La persona elegirá su
                 contraseña permanente al activar la cuenta.
               </p>
+
               <div className="provisioning-actions">
                 <Button onClick={closeDialog} variant="secondary">
                   Cancelar
                 </Button>
                 <Button
-                  disabled={!username.trim()}
+                  disabled={!username.trim() || (!noEmailMode && !email.trim())}
                   loading={phase === 'provisioning'}
                   onClick={() => void provision()}
                 >
-                  Crear y vincular
+                  {isAlreadyLinked
+                    ? noEmailMode
+                      ? 'Generar código'
+                      : 'Reenviar invitación'
+                    : noEmailMode
+                      ? 'Crear acceso con código'
+                      : 'Crear acceso e invitar'}
                 </Button>
               </div>
             </>
           ) : null}
+
           {phase === 'linking' ? (
             <p aria-live="polite" className="provisioning-progress">
               Identity creó la membresía. Vinculando ahora el usuario con el
               registro académico…
             </p>
           ) : null}
+
           {phase === 'partial' && provisioned ? (
             <div className="provisioning-partial">
               <dl>
@@ -285,12 +364,14 @@ export function AccountProvisioning({
               </div>
             </div>
           ) : null}
+
           {phase === 'activation' ? (
             <p aria-live="polite" className="provisioning-progress">
               Vínculo académico confirmado. Preparando el método de activación
               de Identity…
             </p>
           ) : null}
+
           {phase === 'complete' && invitation ? (
             <div className="provisioning-complete">
               <Alert title="Invitación solicitada" tone="success">
@@ -301,6 +382,7 @@ export function AccountProvisioning({
               <Button onClick={closeDialog}>Terminar</Button>
             </div>
           ) : null}
+
           {phase === 'complete' && challenge ? (
             <div className="provisioning-complete">
               <Alert title="Código de activación creado" tone="warning">
@@ -336,6 +418,7 @@ export function AccountProvisioning({
               </div>
             </div>
           ) : null}
+
           {phase === 'complete' && !invitation && !challenge && provisioned ? (
             <div className="provisioning-complete">
               <p>
@@ -352,8 +435,9 @@ export function AccountProvisioning({
               </div>
             </div>
           ) : null}
+
           {busy ? (
-            <span className="sr-only" aria-live="polite">
+            <span aria-live="polite" className="sr-only">
               Procesando acceso
             </span>
           ) : null}

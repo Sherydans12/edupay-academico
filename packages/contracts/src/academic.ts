@@ -302,26 +302,32 @@ export const courseSubjectRosterItemSchema = z
 export const academicYearPageSchema = z.object({
   items: z.array(academicYearSchema),
   nextCursor: opaqueIdSchema.nullable(),
+  totalCount: z.number().int().nonnegative().optional(),
 });
 export const coursePageSchema = z.object({
   items: z.array(courseSchema),
   nextCursor: opaqueIdSchema.nullable(),
+  totalCount: z.number().int().nonnegative().optional(),
 });
 export const studentPageSchema = z.object({
   items: z.array(studentSchema),
   nextCursor: opaqueIdSchema.nullable(),
+  totalCount: z.number().int().nonnegative().optional(),
 });
 export const teacherPageSchema = z.object({
   items: z.array(teacherSchema),
   nextCursor: opaqueIdSchema.nullable(),
+  totalCount: z.number().int().nonnegative().optional(),
 });
 export const subjectPageSchema = z.object({
   items: z.array(subjectSchema),
   nextCursor: opaqueIdSchema.nullable(),
+  totalCount: z.number().int().nonnegative().optional(),
 });
 export const courseSubjectPageSchema = z.object({
   items: z.array(courseSubjectSchema),
   nextCursor: opaqueIdSchema.nullable(),
+  totalCount: z.number().int().nonnegative().optional(),
 });
 
 export type CursorQuery = z.infer<typeof cursorQuerySchema>;

@@ -1,4 +1,5 @@
 import type {
+  CourseSubject,
   LearningBodyDocument,
   LearningItem,
   LearningUnitWithItems,

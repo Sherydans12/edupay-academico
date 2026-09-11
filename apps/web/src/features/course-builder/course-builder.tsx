@@ -42,7 +42,13 @@ import { CourseOutline } from './course-outline';
 import { ItemEditor } from './item-editor';
 import { MoveItemDialog } from './move-item-dialog';
 import { UnitEditor } from './unit-editor';
-import type { ItemEditorFormValues, UnitEditorFormValues } from './types';
+import type {
+  CreateLearningItemRequest,
+  ItemEditorFormValues,
+  MoveItemRequest,
+  UnitEditorFormValues,
+  UpdateLearningItemRequest,
+} from './types';
 
 function newClientUUID(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto

@@ -11,9 +11,9 @@ import {
   AcademicApiError,
   type AcademicApiClient,
 } from '@/api/academic-client';
-import { BlockBodyEditor } from '@/components/body-document';
 import { ContentHistoryDrawer } from '@/components/content-history-drawer';
 import { MarkdownRenderer } from '@/components/markdown-renderer';
+import { RichTextEditor } from '@/components/rich-text-editor';
 import {
   TeacherAttachmentDialog,
   TeacherAttachmentManager,
@@ -159,51 +159,41 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
     });
   });
 
-  describe('BlockBodyEditor Component', () => {
-    it('edits structured blocks and switches to a safe live preview', () => {
-      const handleChange = vi.fn();
-      const value = {
-        schemaVersion: 1 as const,
-        blocks: [
-          {
-            id: 'text-1',
-            type: 'TEXT' as const,
-            text: '<script>alert(1)</script>',
-          },
-        ],
-      };
+  describe('RichTextEditor Component', () => {
+    it('supports formatting shortcuts, toolbar insertion, and live preview tab switching', () => {
+      let contentValue = 'Texto de prueba';
+      const handleChange = vi.fn((val: string) => {
+        contentValue = val;
+      });
 
-      const { container } = render(
-        <BlockBodyEditor
+      render(
+        <RichTextEditor
           id="test-editor"
           label="Contenido"
           onChange={handleChange}
-          value={value}
+          value={contentValue}
         />,
       );
 
-      const textarea = screen.getByLabelText(
-        'Texto del bloque',
-      ) as HTMLTextAreaElement;
-      expect(textarea.value).toBe('<script>alert(1)</script>');
+      // Verify toolbar buttons
+      expect(screen.getByTitle('Negrita (Ctrl+B)')).toBeTruthy();
+      expect(screen.getByTitle('Cursiva (Ctrl+I)')).toBeTruthy();
+      expect(screen.getByTitle('Insertar enlace')).toBeTruthy();
 
-      fireEvent.change(textarea, {
-        target: { value: 'Texto actualizado' },
-      });
-      expect(handleChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          blocks: [
-            expect.objectContaining({
-              id: 'text-1',
-              text: 'Texto actualizado',
-            }),
-          ],
-        }),
-      );
-
+      // Click Preview tab
       fireEvent.click(screen.getByRole('tab', { name: /vista previa/i }));
-      expect(screen.getByText('<script>alert(1)</script>')).toBeTruthy();
-      expect(container.querySelector('script')).toBeNull();
+      expect(screen.getByText('Texto de prueba')).toBeTruthy();
+
+      // Click Editor tab
+      fireEvent.click(screen.getByRole('tab', { name: /editor/i }));
+      const textarea = screen.getByLabelText(
+        /contenido/i,
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe('Texto de prueba');
+
+      // Format bold via toolbar
+      fireEvent.click(screen.getByTitle('Negrita (Ctrl+B)'));
+      expect(handleChange).toHaveBeenCalled();
     });
   });
 

@@ -1,11 +1,12 @@
 'use client';
 
-import { Badge, Button, DropdownItem, DropdownMenu } from '@edupay/ui';
+import { Badge, Button, DropdownItem, DropdownMenu, Input } from '@edupay/ui';
 import type { LearningItem, LearningUnitWithItems } from '@edupay/contracts';
-import React, { memo } from 'react';
+import React, { memo, useRef } from 'react';
 
 import { Icon } from '@/components/icons';
 import { formatInstant } from '@/features/learning-screen-support';
+import { learningInstantToDateTimeLocal } from '@/features/learning-datetime';
 import { ItemRow } from './item-row';
 
 export interface UnitCardProps {
@@ -85,10 +86,6 @@ export const UnitCard = memo(function UnitCard({
   unitIndex,
 }: UnitCardProps) {
   void _;
-  void onCancelSchedule;
-  void onChangeScheduleDraftValue;
-  void onSaveSchedule;
-  void scheduleDraft;
 
   const handleMoveUp = () => {
     onMoveUnitUp(unitIndex);

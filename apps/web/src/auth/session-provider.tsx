@@ -58,6 +58,7 @@ export interface IdentitySessionContextValue {
 }
 
 const publicRoutes = new Set([
+  '/',
   '/login',
   '/activate',
   '/activate-code',
@@ -125,7 +126,12 @@ function trustedSession(
 }
 
 function isOrdinaryUnauthenticated(error: unknown): boolean {
-  return error instanceof IdentityApiError && error.status === 401;
+  return (
+    error instanceof IdentityApiError &&
+    (error.status === 401 ||
+      error.code === 'TOKEN_INVALID' ||
+      error.code === 'UNAUTHENTICATED')
+  );
 }
 
 export function useIdentitySession(): IdentitySessionContextValue | null {
@@ -212,10 +218,14 @@ export function IdentitySessionProvider({
     setStatus('loading');
     try {
       await refresh();
-    } catch {
-      setStatus('error');
+    } catch (error) {
+      if (isOrdinaryUnauthenticated(error)) {
+        clearMemory();
+      } else {
+        setStatus('error');
+      }
     }
-  }, [refresh]);
+  }, [clearMemory, refresh]);
 
   const adapter = useMemo<IdentitySessionAdapter>(
     () => ({
@@ -241,28 +251,35 @@ export function IdentitySessionProvider({
     return () => window.clearTimeout(timer);
   }, [retryBootstrap]);
 
+  const requiredRole = pathname.startsWith('/administracion')
+    ? 'TENANT_ADMIN'
+    : pathname.startsWith('/docente')
+      ? 'TEACHER'
+      : pathname.startsWith('/estudiante')
+        ? 'STUDENT'
+        : null;
+
   useEffect(() => {
     const isPublic = publicRoutes.has(pathname);
-    if (status === 'unauthenticated' && !isPublic) {
-      const returnTo = pathname.startsWith('/') ? pathname : '/';
-      router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
-    }
-    if (status === 'authenticated' && session && pathname === '/login') {
-      router.replace(destinationForRoles(session.roles));
+    if (status === 'unauthenticated') {
+      if (pathname === '/') {
+        router.replace('/login');
+      } else if (!isPublic) {
+        const returnTo = pathname.startsWith('/') ? pathname : '/';
+        router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      }
     }
     if (status === 'authenticated' && session) {
-      const requiredRole = pathname.startsWith('/administracion')
-        ? 'TENANT_ADMIN'
-        : pathname.startsWith('/docente')
-          ? 'TEACHER'
-          : pathname.startsWith('/estudiante')
-            ? 'STUDENT'
-            : null;
+      if (pathname === '/login' || pathname === '/') {
+        router.replace(destinationForRoles(session.roles));
+      }
+    }
+    if (status === 'authenticated' && session) {
       if (requiredRole && !session.roles.includes(requiredRole)) {
         router.replace(destinationForRoles(session.roles));
       }
     }
-  }, [pathname, router, session, status]);
+  }, [pathname, requiredRole, router, session, status]);
 
   const login = useCallback(
     async (input: {
@@ -406,6 +423,21 @@ export function IdentitySessionProvider({
           Revisa tu conexión. Tu información académica permanece protegida y aún
           no se ha mostrado.
         </Alert>
+      </main>
+    );
+  } else if (
+    !isPublic &&
+    status === 'authenticated' &&
+    requiredRole &&
+    !session?.roles.includes(requiredRole)
+  ) {
+    content = (
+      <main
+        aria-busy="true"
+        aria-label="Abriendo tu espacio"
+        className="session-gate"
+      >
+        <p>Abriendo tu espacio académico…</p>
       </main>
     );
   } else if (!isPublic && status === 'unauthenticated') {

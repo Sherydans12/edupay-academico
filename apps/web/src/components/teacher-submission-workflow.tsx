@@ -215,7 +215,7 @@ export function TeacherSubmissionQueue({
             setError(
               nextError instanceof AcademicApiError
                 ? nextError.message
-                : 'No pudimos cargar el roster.',
+                : 'No pudimos cargar la lista de estudiantes.',
             );
           }
         })
@@ -248,7 +248,7 @@ export function TeacherSubmissionQueue({
     );
   if (error)
     return (
-      <Alert title="No pudimos cargar el roster" tone="error">
+      <Alert title="No pudimos cargar la lista de estudiantes" tone="error">
         {error}
       </Alert>
     );
@@ -541,8 +541,8 @@ export function TeacherSubmissionDetail({
           </div>
           <p className="integration-note">
             <Icon name="layers" />
-            “Marcar revisada” y “Solicitar cambios” cambian el estado del
-            Submission. “Comentar” solo agrega una entrada al historial.
+            “Marcar revisada” y “Solicitar cambios” actualizan el estado de la
+            entrega. “Comentar” solo agrega una entrada al historial.
           </p>
         </aside>
       </div>

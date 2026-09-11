@@ -121,64 +121,6 @@ function courseName(item: {
   return item.course?.label ?? `Curso ${item.courseId.slice(0, 8)}`;
 }
 
-export function StudentAcademicSubjectsScreen({
-  api,
-  session = demoSessions.student,
-}: {
-  api?: AcademicApiClient;
-  session?: TrustedCurrentSession;
-}) {
-  const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
-  const currentSession = useTrustedCurrentSession(session).session;
-  const { error, items, load, loading } = useContextSubjects(client, 'student');
-  return (
-    <AppShell dataMode="real" session={currentSession}>
-      <PageHeading
-        description="Tus espacios efectivos se calculan en Académico a partir de tus inscripciones activas."
-        title="Mis asignaturas"
-      />
-      <ContextState error={error} loading={loading} onRetry={() => void load()}>
-        {items.length ? (
-          <div className="academic-context-grid">
-            {items.map((item) => (
-              <Card className="academic-context-card" key={item.id}>
-                <div className="academic-context-card__mark">
-                  {subjectName(item).slice(0, 3).toUpperCase()}
-                </div>
-                <div>
-                  <h2>{subjectName(item)}</h2>
-                  <p>{courseName(item)}</p>
-                  <Badge tone={item.defaultForCourse ? 'info' : 'creative'}>
-                    {item.defaultForCourse
-                      ? 'Parte de tu curso'
-                      : 'Asignación directa'}
-                  </Badge>
-                </div>
-                <Link
-                  className="button-link button-link--primary"
-                  href={`/estudiante/asignaturas/${item.id}`}
-                >
-                  Abrir ruta <Icon name="chevron-right" />
-                </Link>
-                <div className="academic-context-card__boundary">
-                  <Icon name="layers" />
-                  <span>Aprendizaje conectado al Learning API</span>
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={<Icon name="book" />}
-            title="Aún no tienes asignaturas efectivas"
-            description="Cuando Académico registre una inscripción activa o una asignación directa, aparecerá aquí."
-          />
-        )}
-      </ContextState>
-    </AppShell>
-  );
-}
-
 export function TeacherAcademicSubjectsScreen({
   api,
   session = demoSessions.teacher,
@@ -210,7 +152,7 @@ export function TeacherAcademicSubjectsScreen({
   return (
     <AppShell dataMode="real" session={currentSession}>
       <PageHeading
-        description="Solo aparecen los CourseSubjects donde el servidor reconoce una asignación docente activa."
+        description="Aquí aparecen las asignaturas en las que tienes una asignación docente activa."
         title="Mis espacios de enseñanza"
       />
       <ContextState error={error} loading={loading} onRetry={() => void load()}>
@@ -232,18 +174,20 @@ export function TeacherAcademicSubjectsScreen({
                     variant="secondary"
                   >
                     <Icon name="people" />
-                    Ver roster
+                    Ver estudiantes
                   </Button>
                   <Link
                     className="button-link button-link--primary"
                     href={`/docente/asignaturas/${item.id}`}
                   >
-                    Gestionar ruta <Icon name="chevron-right" />
+                    Abrir espacio <Icon name="chevron-right" />
                   </Link>
                 </div>
                 <div className="academic-context-card__boundary">
                   <Icon name="layers" />
-                  <span>Contenido conectado al Learning API</span>
+                  <span>
+                    Organiza el contenido y las actividades de esta asignatura.
+                  </span>
                 </div>
                 {selectedId === item.id ? (
                   <div aria-live="polite" className="academic-roster">
@@ -265,7 +209,7 @@ export function TeacherAcademicSubjectsScreen({
                         ))}
                       </ul>
                     ) : (
-                      <p>Roster vacío o no disponible.</p>
+                      <p>No hay estudiantes disponibles para mostrar.</p>
                     )}
                   </div>
                 ) : null}
@@ -275,8 +219,8 @@ export function TeacherAcademicSubjectsScreen({
         ) : (
           <EmptyState
             icon={<Icon name="book" />}
-            title="No tienes CourseSubjects asignados"
-            description="Un administrador debe asignarte a un CourseSubject activo para que puedas ver estudiantes autorizados."
+            title="No tienes asignaturas asignadas"
+            description="Cuando tengas una asignación docente activa, aparecerá aquí."
           />
         )}
       </ContextState>

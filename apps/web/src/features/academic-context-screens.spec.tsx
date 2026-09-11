@@ -1,10 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  StudentAcademicSubjectsScreen,
-  TeacherAcademicSubjectsScreen,
-} from '@/features/academic-context-screens';
+import { TeacherAcademicSubjectsScreen } from '@/features/academic-context-screens';
 import type { AcademicApiClient } from '@/api/academic-client';
 
 vi.mock('next/navigation', () => ({
@@ -47,25 +44,6 @@ function client(overrides: Partial<AcademicApiClient>): AcademicApiClient {
 }
 
 describe('Academic context screens', () => {
-  it('renders the student effective-subject view and links to the real Learning API route', async () => {
-    render(
-      <StudentAcademicSubjectsScreen
-        api={client({
-          getStudentContextSubjects: vi.fn(async () => [contextSubject]),
-        })}
-      />,
-    );
-    expect(
-      await screen.findByRole('heading', { name: 'Lenguaje y Comunicación' }),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/aprendizaje conectado al learning api/i),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('link', { name: /abrir ruta/i }).getAttribute('href'),
-    ).toBe(`/estudiante/asignaturas/${id}`);
-  });
-
   it('renders the teacher assigned-subject view and authorized roster', async () => {
     render(
       <TeacherAcademicSubjectsScreen
@@ -95,20 +73,8 @@ describe('Academic context screens', () => {
       await screen.findByRole('heading', { name: 'Lenguaje y Comunicación' }),
     ).toBeTruthy();
     expect(await screen.findByText(/asignado por académico/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /ver roster/i }));
+    expect(screen.queryByText(/learning api|coursesubjects/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /ver estudiantes/i }));
     expect(await screen.findByText('Emilia Vargas')).toBeTruthy();
-  });
-
-  it('shows a real empty state for a student with no effective subjects', async () => {
-    render(
-      <StudentAcademicSubjectsScreen
-        api={client({ getStudentContextSubjects: vi.fn(async () => []) })}
-      />,
-    );
-    expect(
-      await screen.findByRole('heading', {
-        name: 'Aún no tienes asignaturas efectivas',
-      }),
-    ).toBeTruthy();
   });
 });

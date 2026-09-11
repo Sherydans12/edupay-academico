@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Card, EmptyState, Skeleton } from '@edupay/ui';
 import type {
   CourseSubjectLearningRoute,
   LearningItem,
+  Submission,
 } from '@edupay/contracts';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -406,7 +407,7 @@ export function StudentSubjectsScreen({
   return (
     <AppShell dataMode="real" session={currentSession}>
       <PageHeading
-        description="Tus CourseSubjects efectivos se calculan en Académico a partir de tus inscripciones activas."
+        description="Estas son tus asignaturas activas. Abre una para ver su ruta de aprendizaje."
         title="Asignaturas"
       />
       <DataState error={error} loading={loading} onRetry={() => void load()}>
@@ -574,6 +575,31 @@ export function StudentAssignmentScreen({
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const currentSession = useTrustedCurrentSession(session).session;
   const data = useStudentItem(client, courseSubjectId, learningItemId);
+  const [resourceError, setResourceError] = useState('');
+  const [resourceLoading, setResourceLoading] = useState(false);
+
+  const openResource = useCallback(
+    async (fileObjectId: string) => {
+      setResourceError('');
+      setResourceLoading(true);
+      try {
+        const response = await client.downloadFile(fileObjectId);
+        const url = URL.createObjectURL(response.blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = response.filename ?? 'recurso-academico';
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      } catch {
+        setResourceError(
+          'No pudimos abrir este recurso. Inténtalo nuevamente.',
+        );
+      } finally {
+        setResourceLoading(false);
+      }
+    },
+    [client],
+  );
   return (
     <StudentShell session={currentSession}>
       <DataState
@@ -629,6 +655,16 @@ export function StudentAssignmentScreen({
                     ) : null}
                   </div>
                 </div>
+                {resourceError ? (
+                  <Alert title="No se pudo abrir el recurso" tone="error">
+                    {resourceError}
+                  </Alert>
+                ) : null}
+                {resourceLoading ? (
+                  <p aria-live="polite" className="ui-field-hint">
+                    Abriendo recurso…
+                  </p>
+                ) : null}
                 {data.item.bodyDocument ||
                 data.item.instructions ||
                 data.item.content ||
@@ -651,6 +687,7 @@ export function StudentAssignmentScreen({
                               ? data.item.content
                               : data.item.instructions
                         }
+                        onOpenFile={openResource}
                       />
                     </div>
                   </section>
@@ -694,23 +731,407 @@ export function StudentAssignmentScreen({
   );
 }
 
-export function StudentPlaceholderScreen({ title }: { title: string }) {
-  const session = useTrustedCurrentSession(demoSessions.student).session;
+type DeliverableRow = {
+  item: LearningItem;
+  subject: Awaited<
+    ReturnType<AcademicApiClient['getStudentContextSubjects']>
+  >[number];
+  submission: Submission | null;
+};
+
+function getOwnSubmissionSafe(
+  api: AcademicApiClient,
+  learningItemId: string,
+): Promise<Submission | null> {
+  if (typeof api.getOwnSubmission !== 'function') return Promise.resolve(null);
+  return api.getOwnSubmission(learningItemId).catch((error) => {
+    if (error instanceof AcademicApiError && error.status === 404) return null;
+    throw error;
+  });
+}
+
+function useStudentDeliverables(api: AcademicApiClient) {
+  const [rows, setRows] = useState<DeliverableRow[]>([]);
+  const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const subjects = await api.getStudentContextSubjects();
+      const bySubject = await Promise.all(
+        subjects.map(async (subject) => ({
+          subject,
+          items: deliverableItems(
+            visibleStudentUnits((await api.getLearningRoute(subject.id)).units),
+          ),
+        })),
+      );
+      const flat = bySubject.flatMap(({ subject, items }) =>
+        items.map((item) => ({ item, subject })),
+      );
+      const nextRows = await Promise.all(
+        flat.map(async ({ item, subject }) => ({
+          item,
+          subject,
+          submission: await getOwnSubmissionSafe(api, item.id),
+        })),
+      );
+      setRows(nextRows);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+  return { error, load, loading, rows };
+}
+
+function deliverableStatusMeta(row: DeliverableRow) {
+  const status = row.submission?.status ?? 'PENDING';
+  const latest = row.submission?.revisions.at(-1);
+  if (
+    status === 'PENDING' &&
+    row.item.dueAt &&
+    new Date(row.item.dueAt).getTime() < Date.now()
+  ) {
+    return {
+      icon: 'clock' as const,
+      label: 'Atrasada',
+      tone: 'warning' as const,
+    };
+  }
+  if (status === 'CHANGES_REQUESTED')
+    return {
+      icon: 'review' as const,
+      label: 'Cambios solicitados',
+      tone: 'warning' as const,
+    };
+  if (status === 'SUBMITTED')
+    return {
+      icon: 'document' as const,
+      label: latest?.isLate ? 'Enviada con atraso' : 'Enviada',
+      tone: 'info' as const,
+    };
+  if (status === 'REVIEWED')
+    return {
+      icon: 'check' as const,
+      label: 'Revisada',
+      tone: 'success' as const,
+    };
+  return {
+    icon: 'document' as const,
+    label: 'Pendiente',
+    tone: 'neutral' as const,
+  };
+}
+
+function deliverableTimeCopy(row: DeliverableRow) {
+  const status = row.submission?.status ?? 'PENDING';
+  const latest = row.submission?.revisions.at(-1);
+  if (status === 'SUBMITTED' || status === 'REVIEWED')
+    return latest ? `Enviada ${formatInstant(latest.submittedAt)}` : 'Enviada';
+  if (status === 'CHANGES_REQUESTED') {
+    const requestedAt = latest?.reviews
+      .filter((review) => review.action === 'CHANGES_REQUESTED')
+      .at(-1)?.createdAt;
+    return requestedAt
+      ? `Cambios solicitados ${formatInstant(requestedAt)}`
+      : 'Cambios solicitados';
+  }
+  return row.item.dueAt
+    ? `Vence ${formatInstant(row.item.dueAt)}`
+    : 'Sin fecha límite';
+}
+
+function DeliverableRowLink({ row }: { row: DeliverableRow }) {
+  const meta = deliverableStatusMeta(row);
   return (
-    <StudentShell session={session}>
+    <Link
+      className="submission-row"
+      href={`/estudiante/asignaturas/${row.subject.id}/items/${row.item.id}`}
+      key={row.item.id}
+    >
+      <span className="submission-row__icon">
+        <Icon name={meta.icon} />
+      </span>
+      <span>
+        <strong>{row.item.title}</strong>
+        <small>
+          {subjectName(row.subject)} · {courseName(row.subject)}
+        </small>
+      </span>
+      <span className="submission-time">
+        <small>{deliverableTimeCopy(row)}</small>
+      </span>
+      <Badge tone={meta.tone}>{meta.label}</Badge>
+      <Icon name="chevron-right" />
+    </Link>
+  );
+}
+
+export function StudentDeliverablesScreen({
+  api,
+  session = demoSessions.student,
+}: {
+  api?: AcademicApiClient;
+  session?: TrustedCurrentSession;
+}) {
+  const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
+  const currentSession = useTrustedCurrentSession(session).session;
+  const data = useStudentDeliverables(client);
+
+  const attention = data.rows
+    .filter(
+      (row) =>
+        row.submission?.status !== 'SUBMITTED' &&
+        row.submission?.status !== 'REVIEWED',
+    )
+    .sort(
+      (left, right) =>
+        (left.item.dueAt ? new Date(left.item.dueAt).getTime() : Infinity) -
+        (right.item.dueAt ? new Date(right.item.dueAt).getTime() : Infinity),
+    );
+  const inReview = data.rows.filter(
+    (row) => row.submission?.status === 'SUBMITTED',
+  );
+  const reviewed = data.rows.filter(
+    (row) => row.submission?.status === 'REVIEWED',
+  );
+
+  return (
+    <StudentShell session={currentSession}>
       <PageHeading
-        description="Esta navegación está preparada para una fase posterior del MVP."
-        title={title}
+        description="Actividades y evaluaciones de tus asignaturas, organizadas por lo que necesitas hacer."
+        title="Mis entregas"
       />
-      <Card className="placeholder-panel">
-        <Icon name="layers" />
-        <h2>Fundación lista</h2>
-        <p>
-          La ruta existe para validar el shell responsive, pero su flujo aún no
-          está implementado ni conectado a datos académicos.
-        </p>
-        <Button disabled>Disponible más adelante</Button>
-      </Card>
+      <DataState
+        error={data.error}
+        loading={data.loading}
+        onRetry={() => void data.load()}
+      >
+        {data.rows.length ? (
+          <>
+            {attention.length ? (
+              <section
+                aria-labelledby="attention-deliverables-title"
+                className="content-section"
+              >
+                <div className="section-heading">
+                  <div>
+                    <h2 id="attention-deliverables-title">
+                      Requiere tu atención
+                    </h2>
+                    <p>
+                      Trabajos pendientes o con cambios solicitados por tu
+                      docente.
+                    </p>
+                  </div>
+                </div>
+                <div className="submission-list">
+                  {attention.map((row) => (
+                    <DeliverableRowLink key={row.item.id} row={row} />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+            {inReview.length ? (
+              <section
+                aria-labelledby="in-review-deliverables-title"
+                className="content-section"
+              >
+                <div className="section-heading">
+                  <div>
+                    <h2 id="in-review-deliverables-title">En revisión</h2>
+                    <p>
+                      Ya las enviaste; tu docente aún no termina de revisarlas.
+                    </p>
+                  </div>
+                </div>
+                <div className="submission-list">
+                  {inReview.map((row) => (
+                    <DeliverableRowLink key={row.item.id} row={row} />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+            {reviewed.length ? (
+              <section
+                aria-labelledby="reviewed-deliverables-title"
+                className="content-section"
+              >
+                <div className="section-heading">
+                  <div>
+                    <h2 id="reviewed-deliverables-title">Revisadas</h2>
+                    <p>Tu docente ya completó la revisión de estas entregas.</p>
+                  </div>
+                </div>
+                <div className="submission-list">
+                  {reviewed.map((row) => (
+                    <DeliverableRowLink key={row.item.id} row={row} />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </>
+        ) : (
+          <EmptyState
+            icon={<Icon name="clipboard" />}
+            title="Aún no tienes actividades pendientes"
+            description="Cuando tus profesores publiquen contenido nuevo, aparecerá aquí."
+          />
+        )}
+      </DataState>
+    </StudentShell>
+  );
+}
+
+function startOfLocalDay(value: string) {
+  const date = new Date(value);
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  ).getTime();
+}
+
+function dayKey(value: string) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function dayLabel(value: string) {
+  const diffDays = Math.round(
+    (startOfLocalDay(value) - startOfLocalDay(new Date().toISOString())) /
+      86_400_000,
+  );
+  if (diffDays === 0) return 'Hoy';
+  if (diffDays === 1) return 'Mañana';
+  if (diffDays === -1) return 'Ayer';
+  const formatted = new Intl.DateTimeFormat('es-CL', {
+    day: 'numeric',
+    month: 'long',
+    weekday: 'long',
+  }).format(new Date(value));
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function groupDeliverablesByDay(
+  rows: Array<{ item: LearningItem; subject: DeliverableRow['subject'] }>,
+) {
+  const groups: Array<{ key: string; label: string; rows: typeof rows }> = [];
+  for (const row of rows) {
+    const key = dayKey(row.item.dueAt as string);
+    const existing = groups.find((group) => group.key === key);
+    if (existing) existing.rows.push(row);
+    else
+      groups.push({
+        key,
+        label: dayLabel(row.item.dueAt as string),
+        rows: [row],
+      });
+  }
+  return groups;
+}
+
+export function StudentCalendarScreen({
+  api,
+  session = demoSessions.student,
+}: {
+  api?: AcademicApiClient;
+  session?: TrustedCurrentSession;
+}) {
+  const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
+  const currentSession = useTrustedCurrentSession(session).session;
+  const data = useStudentWorkspace(client);
+  const upcoming = data.routes
+    .flatMap(({ route, subject }) =>
+      deliverableItems(visibleStudentUnits(route.units)).map((item) => ({
+        item,
+        subject,
+      })),
+    )
+    .filter(({ item }) => item.dueAt)
+    .sort(
+      (left, right) =>
+        new Date(left.item.dueAt as string).getTime() -
+        new Date(right.item.dueAt as string).getTime(),
+    );
+  const groups = groupDeliverablesByDay(upcoming);
+
+  return (
+    <StudentShell session={currentSession}>
+      <PageHeading
+        description="Fechas de entrega de tus actividades y evaluaciones publicadas."
+        title="Calendario"
+      />
+      <DataState
+        error={data.error}
+        loading={data.loading}
+        onRetry={() => void data.load()}
+      >
+        {groups.length ? (
+          <div className="calendar-agenda">
+            {groups.map((group) => (
+              <section
+                aria-labelledby={`calendar-day-${group.key}`}
+                className="calendar-day"
+                key={group.key}
+              >
+                <h2 id={`calendar-day-${group.key}`}>{group.label}</h2>
+                <div className="learning-items">
+                  {group.rows.map(({ item, subject }) => (
+                    <Link
+                      className="learning-item"
+                      href={`/estudiante/asignaturas/${subject.id}/items/${item.id}`}
+                      key={item.id}
+                    >
+                      <span
+                        className={`learning-item__icon learning-item__icon--${item.type.toLowerCase()}`}
+                      >
+                        <Icon
+                          name={
+                            item.type === 'ASSESSMENT'
+                              ? 'document'
+                              : 'clipboard'
+                          }
+                        />
+                      </span>
+                      <span className="learning-item__copy">
+                        <small>{subjectName(subject)}</small>
+                        <strong>{item.title}</strong>
+                        <span>{courseName(subject)}</span>
+                      </span>
+                      <span className="learning-item__meta">
+                        <small>
+                          <Icon name="clock" />
+                          {formatInstant(item.dueAt as string)}
+                        </small>
+                      </span>
+                      <Icon
+                        className="learning-item__chevron"
+                        name="chevron-right"
+                      />
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Icon name="calendar" />}
+            title="Sin fechas próximas"
+            description="Cuando tus profesores publiquen actividades o evaluaciones con fecha límite, aparecerán aquí."
+          />
+        )}
+      </DataState>
     </StudentShell>
   );
 }

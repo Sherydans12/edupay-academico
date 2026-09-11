@@ -189,6 +189,54 @@ describe('IdentitySessionProvider', () => {
     expect(screen.queryByText('Privado')).toBeNull();
   });
 
+  it('redirects an expired root session to login without a return loop', async () => {
+    navigation.pathname = '/';
+    const client = fakeClient({
+      refresh: vi.fn().mockRejectedValue(
+        new IdentityApiError({
+          code: 'TOKEN_INVALID',
+          message: 'expired',
+          status: 401,
+        }),
+      ),
+    });
+    render(
+      <IdentitySessionProvider client={client}>
+        <Probe />
+      </IdentitySessionProvider>,
+    );
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith('/login'),
+    );
+    expect(client.refresh).toHaveBeenCalledOnce();
+  });
+
+  it('restores a valid root session and redirects to the student dashboard', async () => {
+    navigation.pathname = '/';
+    render(
+      <IdentitySessionProvider client={fakeClient()}>
+        <Probe />
+      </IdentitySessionProvider>,
+    );
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith('/estudiante'),
+    );
+    expect(await screen.findByText('membership-1')).toBeTruthy();
+  });
+
+  it('does not reveal teacher content to a restored student session', async () => {
+    navigation.pathname = '/docente';
+    render(
+      <IdentitySessionProvider client={fakeClient()}>
+        <h1>Teacher private view</h1>
+      </IdentitySessionProvider>,
+    );
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith('/estudiante'),
+    );
+    expect(screen.queryByText('Teacher private view')).toBeNull();
+  });
+
   it('consumes login and context-switch replacement tokens and redirects by role', async () => {
     navigation.pathname = '/login';
     const teacherMembership = {

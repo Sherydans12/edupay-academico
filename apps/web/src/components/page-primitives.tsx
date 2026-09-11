@@ -265,7 +265,7 @@ export function CompactStat({
   label,
   value,
 }: {
-  icon: 'book' | 'people' | 'review' | 'calendar';
+  icon: import('@/components/icons').IconName;
   label: string;
   value: string;
 }) {
