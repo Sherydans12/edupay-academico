@@ -1,5 +1,19 @@
 # EduPay Academico
 
+## Estado operativo vigente
+
+Fase de remediación y limpieza cerrada el **2026-09-11**. Consultar primero:
+
+- [Topología, repositorios, conexiones y recursos Coolify](docs/operations/PRODUCTION.md).
+- [Runbook de despliegue, rollback y entornos aislados](docs/operations/RUNBOOK.md).
+- [Cierre de fase, versiones verificadas y pendientes delimitados](docs/operations/PHASE-CLOSEOUT.md).
+- [Inventario estructurado sin secretos](docs/operations/coolify-inventory.json).
+
+El frontend productivo está en **4f5ad28** y API/workers permanecen pinned a
+**b2f489f**. `main` era anterior al frontend desplegado: para nuevas mejoras
+usar un worktree propio desde `codex/production-stable-baseline`, siguiendo
+el runbook. Las instrucciones locales siguientes no se ejecutan sobre producción.
+
 EduPay Academico is a multi-tenant academic service. This repository contains
 the approved platform bootstrap, Identity-consumer and tenant-authorization
 foundation, and the MVP Academic Structure domain.

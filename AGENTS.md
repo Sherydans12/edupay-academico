@@ -2,6 +2,26 @@
 
 This file governs every future agent working in this repository. It applies to implementation, review, documentation, testing, and operations work.
 
+## Current operational baseline — 2026-09-11
+
+- Read [production topology](docs/operations/PRODUCTION.md),
+  [change runbook](docs/operations/RUNBOOK.md), and
+  [phase closeout](docs/operations/PHASE-CLOSEOUT.md) before operations or new work.
+- Production bootstrap and remediation are complete within that documented scope.
+  The historical documentation-only restriction below must not be interpreted as
+  the current repository state or as permission to re-bootstrap production.
+- Academic FRONT owns only academico.edupay.baselogic.cl. BL-002 FRONT owns only
+  edupay.baselogic.cl. Use verified Coolify UUIDs, not similar resource names.
+- main was older than deployed code at closeout. Start a new isolated feature
+  worktree from codex/production-stable-baseline when extending this release.
+  API and workers remain digest-pinned; a web change must not redeploy the monorepo.
+- No blanket production migration authorization exists. The additive repair is
+  recorded in the closeout; reconcile the existing Prisma ledger on a clone and
+  verify backup before proposing another schema change.
+- Preserve dirty worktrees and independent WIP. Never reset, clean or force-push
+  other work to manufacture a clean release. Update the operational inventory in
+  both repositories when changing a cross-product connection.
+
 ## Authority and scope
 
 - Existing documentation and accepted ADRs are authoritative. The current accepted decisions are indexed in `docs/decisions/README.md`, including storage ADR-0005 and the Identity reconciliation ADR-0009.
@@ -31,17 +51,19 @@ This file governs every future agent working in this repository. It applies to i
 - Destructive Git operations and force pushes are prohibited. Do not reset, discard, rewrite, or overwrite another agent’s work without explicit instruction.
 - Respect the assigned directory/domain scope and coordinate shared contract changes with the contract owner.
 
-## Expected future monorepo boundaries
+## Monorepo boundaries
 
-The repository is intentionally documentation-only until bootstrap is explicitly authorized. These are expected boundaries, not a command to scaffold them now:
+The original documentation-only bootstrap phase is historical. The following
+ownership boundaries remain in force; existing deployment locations are recorded
+in the operational inventory and are not a command to scaffold new services:
 
 - `apps/web/`: Next.js presentation, routing, forms, and tenant-aware UI. It calls the API and never connects directly to databases, object storage, Identity tables, or the existing EduPay system.
 - `apps/api/`: NestJS academic API, Identity adapter, request-scoped tenant context, academic authorization, domain services, migrations, and academic persistence. It owns no Identity persistence.
-- `apps/worker/`: retryable Académico notification, file, or integration work when the relevant queue/worker decisions are accepted. Jobs must carry server-created tenant context.
+- Worker responsibility: retryable Académico notification, file, or integration work under accepted decisions. The current notification and sync workers use the API image and entrypoints in `apps/api`; do not create `apps/worker/` merely because it appeared in the original expected layout. Jobs must carry server-created tenant context.
 - `packages/contracts/`: reviewed OpenAPI, Identity JWT/JWKS, event, and integration contract definitions. Contract changes require documentation/ADR review.
 - `packages/ui/`: reusable, tenant-neutral design-system components and semantic theme tokens.
 - `packages/config/`: shared non-secret tooling and environment-schema conventions approved during bootstrap.
 - `infra/`: future deployment, environment, backup, and operational definitions; no infrastructure is created by this documentation baseline.
 - `docs/`: product, architecture, governance, testing, and ADR source of truth.
 
-EduPay Identity remains a separate repository/service. Do not create a shared Identity database package, cross-repository Prisma schema, or direct table integration. No monorepo directories, application code, schema, package, database, or infrastructure should be created until implementation bootstrap is explicitly authorized.
+EduPay Identity remains a separate repository/service. Do not create a shared Identity database package, cross-repository Prisma schema, or direct table integration. New code, schema or infrastructure still requires an explicit task scope and the applicable accepted architecture; the completed bootstrap is not blanket authorization for future changes.

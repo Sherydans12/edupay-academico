@@ -1,3 +1,5 @@
+> Registro histórico o plantilla. Para estado actual, dominios, UUIDs, versiones y gates usar [PRODUCTION.md](../operations/PRODUCTION.md) y [PHASE-CLOSEOUT.md](../operations/PHASE-CLOSEOUT.md), verificados el 2026-09-11. Estados, nombres y comandos antiguos de este archivo no autorizan recrear recursos eliminados ni ejecutar migraciones.
+
 # Native Coolify pilot preparation evidence
 
 Status: **HOLD_PENDING_REVIEWED_IDENTITY_EMAIL_VERIFICATION_GATE**
