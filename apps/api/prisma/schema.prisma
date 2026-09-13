@@ -183,6 +183,14 @@ enum NotificationDeliveryStatus {
   SKIPPED
 }
 
+enum FinancialProjectionOutboxStatus {
+  PENDING
+  PUBLISHING
+  PUBLISHED
+  RETRY
+  FAILED
+}
+
 enum SyncEntity {
   COURSE
   STUDENT
@@ -248,6 +256,8 @@ model Tenant {
   contentRevisions           ContentRevision[]
   learningItemDrafts         LearningItemDraft[]
   commandReceipts            CommandReceipt[]
+  financialProjectionOutboxEvents FinancialProjectionOutboxEvent[]
+  financialProjectionSnapshots    FinancialProjectionSnapshot[]
 
   @@map("tenants")
 }
@@ -410,6 +420,9 @@ model CourseEnrollment {
   externalReference String?    @map("external_reference") @db.VarChar(420)
   status    RelationshipStatus @default(ACTIVE)
   lastSyncedAt DateTime?       @map("last_synced_at") @db.Timestamptz(3)
+  financialProjectionVersion BigInt @default(1) @map("financial_projection_version")
+  financialProjectionEffectiveFrom DateTime @default(now()) @map("financial_projection_effective_from") @db.Timestamptz(3)
+  financialProjectionEffectiveTo DateTime? @map("financial_projection_effective_to") @db.Timestamptz(3)
   createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -422,6 +435,71 @@ model CourseEnrollment {
   @@index([tenantId, courseId, status, studentId])
   @@index([tenantId, studentId, status, courseId])
   @@map("course_enrollments")
+}
+
+/// Transactional outbound-event log for Academic Financial Projection v1.
+/// It intentionally carries only the reviewed financial projection payload.
+model FinancialProjectionOutboxEvent {
+  id                String                         @id @default(uuid()) @db.Uuid
+  sequence          BigInt                         @unique @default(autoincrement())
+  tenantId          String                         @map("tenant_id") @db.VarChar(128)
+  eventType         String                         @map("event_type") @db.VarChar(120)
+  schemaVersion     String                         @map("schema_version") @db.VarChar(16)
+  aggregateId       String                         @map("aggregate_id") @db.Uuid
+  entityVersion     BigInt                         @map("entity_version")
+  occurredAt        DateTime                       @map("occurred_at") @db.Timestamptz(3)
+  correlationId     String?                        @map("correlation_id") @db.VarChar(128)
+  payload           Json
+  status            FinancialProjectionOutboxStatus @default(PENDING)
+  attemptCount      Int                            @default(0) @map("attempt_count")
+  nextAttemptAt     DateTime                       @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  publishingAt      DateTime?                      @map("publishing_at") @db.Timestamptz(3)
+  publishedAt       DateTime?                      @map("published_at") @db.Timestamptz(3)
+  lastErrorCode     String?                        @map("last_error_code") @db.VarChar(80)
+  createdAt         DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, aggregateId, entityVersion])
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([tenantId, aggregateId, entityVersion])
+  @@map("financial_projection_outbox_events")
+}
+
+/// A materialized, tenant-bound snapshot boundary. Items are copied at start so
+/// pages remain consistent even when later academic mutations occur.
+model FinancialProjectionSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.VarChar(128)
+  token             String   @unique @default(uuid()) @db.Uuid
+  capturedAt        DateTime @map("captured_at") @db.Timestamptz(3)
+  watermark         String   @db.VarChar(256)
+  itemCount         Int      @default(0) @map("item_count")
+  completedAt       DateTime? @map("completed_at") @db.Timestamptz(3)
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  items  FinancialProjectionSnapshotItem[]
+
+  @@index([tenantId, expiresAt])
+  @@map("financial_projection_snapshots")
+}
+
+model FinancialProjectionSnapshotItem {
+  snapshotId     String   @map("snapshot_id") @db.Uuid
+  ordinal        Int
+  enrollmentId   String   @map("enrollment_id") @db.Uuid
+  entityVersion  BigInt   @map("entity_version")
+  payload        Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  snapshot FinancialProjectionSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@id([snapshotId, ordinal])
+  @@unique([snapshotId, enrollmentId])
+  @@map("financial_projection_snapshot_items")
 }
 
 model SyncConfiguration {

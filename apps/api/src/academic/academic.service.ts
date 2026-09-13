@@ -59,6 +59,7 @@ import {
   type AcademicIdentityLinkVerifier,
 } from './identity-link.port';
 import { EDUPAY_SOURCE, MANUAL_SOURCE } from '../sync/sync.constants';
+import { FinancialProjectionOutboxService } from '../financial-projection/financial-projection-outbox.service';
 
 const academicYearTransitions: Readonly<
   Record<AcademicYearStatus, readonly AcademicYearStatus[]>
@@ -86,6 +87,7 @@ export class AcademicService {
     private readonly audit: AcademicAuditPort,
     @Inject(ACADEMIC_IDENTITY_LINK_VERIFIER)
     private readonly identityLinks: AcademicIdentityLinkVerifier,
+    private readonly financialProjectionOutbox: FinancialProjectionOutboxService,
   ) {}
 
   async currentTenant(context: AcademicRequestContext): Promise<object> {
@@ -788,8 +790,17 @@ export class AcademicService {
     });
     if (sourceEnrollment) this.sourceManagedEnrollmentConflict();
     const record = await this.write(() =>
-      this.prisma.courseEnrollment.create({
-        data: { tenantId: scope.tenantId, source: MANUAL_SOURCE, ...input },
+      this.prisma.$transaction(async (tx) => {
+        const enrollment = await tx.courseEnrollment.create({
+          data: { tenantId: scope.tenantId, source: MANUAL_SOURCE, ...input },
+          include: { course: { select: { academicYearId: true } } },
+        });
+        await this.financialProjectionOutbox.enqueueEnrollment(
+          tx,
+          enrollment,
+          context.requestId,
+        );
+        return enrollment;
       }),
     );
     await this.recordAudit(
@@ -818,10 +829,26 @@ export class AcademicService {
       current.course.status,
       current.course.academicYear.status,
     );
-    const record = await this.prisma.courseEnrollment.update({
-      where: { tenantId_id: { tenantId: scope.tenantId, id } },
-      data: { status: 'INACTIVE' },
-    });
+    if (current.status === 'INACTIVE') return mapCourseEnrollment(current);
+    const record = await this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const enrollment = await tx.courseEnrollment.update({
+          where: { tenantId_id: { tenantId: scope.tenantId, id } },
+          data: {
+            status: 'INACTIVE',
+            financialProjectionVersion: { increment: 1 },
+            financialProjectionEffectiveTo: new Date(),
+          },
+          include: { course: { select: { academicYearId: true } } },
+        });
+        await this.financialProjectionOutbox.enqueueEnrollment(
+          tx,
+          enrollment,
+          context.requestId,
+        );
+        return enrollment;
+      }),
+    );
     await this.recordAudit(
       context,
       'COURSE_ENROLLMENT_DEACTIVATED',

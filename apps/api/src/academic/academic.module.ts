@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { SecurityFoundationModule } from '../security/security-foundation.module';
+import { FinancialProjectionContractModule } from '../financial-projection/financial-projection-contract.module';
 import {
   ACADEMIC_AUDIT_PORT,
   CorrelatedAcademicAuditLogger,
@@ -12,7 +13,7 @@ import {
 import { AcademicService } from './academic.service';
 
 @Module({
-  imports: [SecurityFoundationModule],
+  imports: [SecurityFoundationModule, FinancialProjectionContractModule],
   controllers: [AcademicAdminController, AcademicContextController],
   providers: [
     AcademicService,
