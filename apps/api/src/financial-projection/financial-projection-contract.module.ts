@@ -19,6 +19,7 @@ import { FinancialProjectionServiceAuthGuard } from './financial-projection-serv
     FinancialProjectionServiceAuthGuard,
   ],
   exports: [
+    FinancialProjectionConfigService,
     FinancialProjectionOutboxService,
     FinancialProjectionPublisherService,
   ],

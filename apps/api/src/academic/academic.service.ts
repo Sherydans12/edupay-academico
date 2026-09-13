@@ -59,6 +59,7 @@ import {
   type AcademicIdentityLinkVerifier,
 } from './identity-link.port';
 import { EDUPAY_SOURCE, MANUAL_SOURCE } from '../sync/sync.constants';
+import { FinancialProjectionConfigService } from '../financial-projection/financial-projection-config.service';
 import { FinancialProjectionOutboxService } from '../financial-projection/financial-projection-outbox.service';
 
 const academicYearTransitions: Readonly<
@@ -87,6 +88,7 @@ export class AcademicService {
     private readonly audit: AcademicAuditPort,
     @Inject(ACADEMIC_IDENTITY_LINK_VERIFIER)
     private readonly identityLinks: AcademicIdentityLinkVerifier,
+    private readonly financialProjectionConfig: FinancialProjectionConfigService,
     private readonly financialProjectionOutbox: FinancialProjectionOutboxService,
   ) {}
 
@@ -795,11 +797,13 @@ export class AcademicService {
           data: { tenantId: scope.tenantId, source: MANUAL_SOURCE, ...input },
           include: { course: { select: { academicYearId: true } } },
         });
-        await this.financialProjectionOutbox.enqueueEnrollment(
-          tx,
-          enrollment,
-          context.requestId,
-        );
+        if (this.financialProjectionConfig.enabled()) {
+          await this.financialProjectionOutbox.enqueueEnrollment(
+            tx,
+            enrollment,
+            context.requestId,
+          );
+        }
         return enrollment;
       }),
     );
@@ -841,11 +845,13 @@ export class AcademicService {
           },
           include: { course: { select: { academicYearId: true } } },
         });
-        await this.financialProjectionOutbox.enqueueEnrollment(
-          tx,
-          enrollment,
-          context.requestId,
-        );
+        if (this.financialProjectionConfig.enabled()) {
+          await this.financialProjectionOutbox.enqueueEnrollment(
+            tx,
+            enrollment,
+            context.requestId,
+          );
+        }
         return enrollment;
       }),
     );
