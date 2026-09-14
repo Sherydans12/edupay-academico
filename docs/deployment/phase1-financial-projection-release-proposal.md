@@ -359,6 +359,10 @@ anterior, BL unitarias previas, typechecks de ambos repositorios, rehearsal
 Prisma, restore PG18 aislado y migraciones sintéticas. No se reabren auditorías
 no relacionadas.
 
+La propuesta y el ajuste mínimo del fixture quedan en commits locales limpios;
+no se publican ni fusionan como parte de esta preparación. El worktree BL-002
+conserva el SHA solicitado y queda sin cambios.
+
 ## Autorización propuesta — no ejecutar todavía
 
 A. Cambios de datos y ledger:
