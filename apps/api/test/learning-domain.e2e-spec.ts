@@ -83,6 +83,8 @@ describe.runIf(testDatabaseUrl)(
       identityStatus.active = true;
       audit.events.length = 0;
       await prisma.commandReceipt.deleteMany();
+      await prisma.financialProjectionSnapshot.deleteMany();
+      await prisma.financialProjectionOutboxEvent.deleteMany();
       await prisma.inAppNotification.deleteMany();
       await prisma.notificationDelivery.deleteMany();
       await prisma.notificationEvent.deleteMany();
