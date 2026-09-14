@@ -158,6 +158,7 @@ flag separado y URL/credencial de BL. El valor por defecto de ambos es
 
 No se implementaron pagos, obligaciones, reportes, login BL, feed v1/v2,
 backfill real, `PromotionRun` ni rollover.
+
 # HTTP integration gate (isolated only)
 
 The cross-repository HTTP gate is `apps/api/test/financial-projection.integrated-http.e2e-spec.ts`. It starts the real BL Nest application on loopback, creates the real Academic Nest application, and uses synthetic tenants and PostgreSQL databases supplied by the runner. It must never receive a production URL.
@@ -199,3 +200,40 @@ the legacy single `BL_FINANCIAL_PROJECTION_SERVICE_KEY_ID` and
 is absent. A future activation must supply dedicated non-production-managed
 secrets for every enabled tenant; secrets and their values are never documented
 or logged.
+
+## HTTP_INTEGRATION_GATE_PASS
+
+The isolated HTTP gate now covers the original four event scenarios plus the
+pending closeout cases:
+
+- Snapshot A creates more than one page through Academic HTTP, starts through
+  the real BL `SUPER_ADMIN` endpoint, interrupts the second page through a
+  loopback fault proxy, persists `INCOMPLETE` with its cursor, resumes, confirms
+  the terminal watermark, and reconciles with one shadow row per source
+  enrollment. A partial snapshot cannot reconcile or cause absence-based
+  tombstones; charges and payments remain unchanged.
+- Flag B covers producer, publisher, and consumer independently. The producer
+  keeps normal enrollment writes available while suppressing outbox effects;
+  the publisher leaves a `PENDING` event untouched; and the BL consumer fails
+  closed without shadow, ledger, or financial writes. Each path is re-enabled
+  and exercised again over HTTP.
+
+The runner uses only loopback ports `4101` (BL), `4102` (Academic), and `4103`
+(the in-process synthetic fault proxy), PostgreSQL 15/18 test databases, and
+ephemeral credentials. The administrative token is a synthetic HS256 token
+bound to a test-only `SUPER_ADMIN` row; it is never a production credential.
+
+Reproducible command from this candidate:
+
+```powershell
+$env:TEST_ACADEMIC_DATABASE_URL='postgresql://gate:gate@127.0.0.1:55415/academic?schema=public'
+$env:TEST_BL_DATABASE_URL='postgresql://gate:gate@127.0.0.1:55418/bl?schema=public'
+$env:BL002_BACKEND_ROOT='C:\path\to\BL-002\backend'
+corepack pnpm@10.19.0 --filter @edupay/api exec vitest run test/financial-projection.integrated-http.e2e-spec.ts --reporter=verbose --pool=forks --maxWorkers=1
+```
+
+Evidence from candidate validation on 2026-09-14: `1` test file passed,
+`8` tests passed, exit code `0`, duration `70.36 s`. The suite's `afterAll`
+teardown closes the proxy and Academic app, stops the complete BL process tree
+with `taskkill /T /F` on Windows, and the validation left no listeners on
+`4101`, `4102`, or `4103`.
