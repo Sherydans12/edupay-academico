@@ -84,8 +84,12 @@ Comprobar el contenedor y la conectividad privada antes de cambiarlo.
 - Cobertura verificada en esta fase: PostgreSQL Académico e Identity. Punto
   previo a reparación `20260911T130031Z`; posterior `20260911T130501Z`.
   Se verificaron checksums locales y objetos remotos R2.
-- **No extender esa evidencia a PostgreSQL BL-002 ni a todos los archivos
-  subidos.** No quedó probado un backup/restauración BL-002 en esta fase.
+- Se verificó la restauración del backup real protegido de PostgreSQL BL-002.
+  La evidencia no demuestra por sí sola consistencia completa de la base viva
+  ni cobertura/restauración íntegra de todos los uploads.
+- Antes de cualquier cambio de esquema o datos se exige un recovery point
+  vigente de PostgreSQL BL-002 y del volumen de uploads, con checksum y
+  restauración aislada verificable.
   Antes de su próximo cambio con riesgo de datos, demostrar cobertura de su
   PostgreSQL 18 y uploads con herramientas compatibles y restauración aislada.
 - Existe un backup administrativo Coolify separado; tampoco reemplaza un

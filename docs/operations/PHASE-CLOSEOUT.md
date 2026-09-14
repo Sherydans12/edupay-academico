@@ -2,8 +2,10 @@
 
 **Cerrada la fase de remediación funcional, recuperación de versiones y limpieza
 de recursos.** Estado: PRODUCTION_TOPOLOGY_CORRECTED / COOLIFY_CLEANUP_COMPLETED.
-El cierre no declara terminadas las mejoras locales posteriores ni certifica
-una cobertura de backup que no se comprobó.
+El cierre no declara terminadas las mejoras locales posteriores. La restauración
+del backup real protegido de PostgreSQL BL-002 está verificada; no se certifica
+por ello la consistencia completa de la base viva ni la cobertura íntegra de
+uploads.
 
 ## Resultado y evidencia
 
@@ -103,8 +105,10 @@ documentación no cambian el SHA/digest que está ejecutando Coolify.
 
 ## Límites que deben permanecer visibles
 
-1. No quedó verificado un backup/restauración de PostgreSQL BL-002 ni cobertura
-   completa de uploads; el backup Académico/Identity no los sustituye.
+1. La restauración del backup real protegido de PostgreSQL BL-002 está
+   verificada. Sigue sin certificarse la consistencia completa de la base viva
+   ni la cobertura/restauración íntegra de uploads; el backup
+   Académico/Identity no los sustituye.
 2. Ledger de migraciones Académico requiere reconciliación antes del próximo
    cambio de esquema. No quedan autorizaciones permanentes de migración.
 3. Staging BL-002/Académico no fue certificado en este cierre. Admission

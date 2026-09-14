@@ -3,12 +3,21 @@
 Estado: PROPUESTA NO AUTORIZADA. No ejecuta cambios productivos, no publica,
 no fusiona y no activa funcionalidades.
 
-## Bases y estado deseado
+## Bases, código de build y estado deseado
 
-| Producto  | SHA candidato                            |
-| --------- | ---------------------------------------- |
-| Académico | 802a8158455558f43090ddf5b980ec3cb15a1660 |
-| BL-002    | 16e208af6a50e5703bc8f6edd51d7ff11b9c6381 |
+| Producto  | Baseline funcional                       | SHA exacto de build                      |
+| --------- | ---------------------------------------- | ---------------------------------------- |
+| Académico | 802a8158455558f43090ddf5b980ec3cb15a1660 | e5bd78a3c0588df540878b130d7d22cd039cf7d1 |
+| BL-002    | 16e208af6a50e5703bc8f6edd51d7ff11b9c6381 | 16e208af6a50e5703bc8f6edd51d7ff11b9c6381 |
+
+El baseline funcional Académico 802a815 contiene el runtime y la cadena de
+migraciones reconciliada. El SHA final de build es e5bd78a3c0588df540878b130d7d22cd039cf7d1:
+es el árbol exacto que se debe congelar si se autoriza el release. La
+comparación 802a815..e5bd78a sólo contiene el cleanup del fixture de learning
+y documentación; no cambia apps/api/src, apps/api/prisma, apps/web, packages,
+deploy ni el runtime funcional. Por tanto, la evidencia de HTTP final, typecheck
+y regresión valida inequívocamente el árbol e5bd78a, mientras que 802a815 sigue
+siendo la referencia de funcionalidad implementada.
 
 Durante todo el release:
 
@@ -101,6 +110,55 @@ fuera incorrecto después del commit, se conserva el esquema, se detiene la
 promoción y se recupera desde un punto de recuperación verificado en un clon.
 No se borra body_document ni se hace downgrade destructivo.
 
+### Pausa y reanudación de escrituras
+
+Los escritores de `learning_items`, `learning_item_drafts`,
+`learning_units` y `content_revisions` son los comandos de learning del API
+Académico (`edupay-academico-pinned`), invocados por el frontend. El frontend no
+escribe PostgreSQL directamente. El notification worker lee learning para
+crear notificaciones, y el sync worker escribe sus propias tablas de sync; no
+son escritores de estas cuatro relaciones. Identity, BL y el publisher
+desactivado tampoco escriben esas relaciones.
+
+La ventana autorizada seguirá este procedimiento reversible:
+
+1. Anunciar mantenimiento y bloquear temporalmente todas las rutas de escritura
+   de learning deteniendo/pausando todas las réplicas del API Académico en
+   Coolify. El frontend puede permanecer publicado, pero no se deben aceptar
+   escrituras mientras el API esté pausado. Se detienen también los dos workers
+   Académico por simplicidad operativa; no se modifica Identity ni BL.
+2. Confirmar en Coolify el estado pausado de `iobfkpujjoa2kj5urbpnjvzi`,
+   `nn8yrhitex2r6squev0auwrs` y `r8mtn1xqtex96j4a8wu5hae6`, y comprobar que no
+   hay réplicas reiniciando. Contra la DB, ejecutar una consulta agregada de
+   `pg_stat_activity` para confirmar cero transacciones no idle cuyo query
+   contenga INSERT/UPDATE/DELETE sobre las relaciones de learning. La consulta
+   agregada es:
+
+   ```sql
+   SELECT count(*) AS active_learning_writers
+   FROM pg_stat_activity
+   WHERE datname = current_database()
+     AND state <> 'idle'
+     AND query ~* '(insert|update|delete).*(learning_items|learning_item_drafts|learning_units|content_revisions)';
+   ```
+
+   Debe devolver 0. Repetir la
+   observación tras un intervalo de quietud y registrar sólo counts, pid y
+   estado, no SQL completo ni secretos.
+
+3. Ejecutar el backfill y su verificación dentro de la transacción. Si falla
+   antes de COMMIT, confirmar rollback y que los counts de `body_document` no
+   cambiaron.
+4. Repetir el preflight y el postflight read-only. Sólo entonces reanudar API,
+   notification worker y sync worker en su configuración anterior, comprobar
+   live/ready y confirmar que las rutas de learning vuelven a responder. Si la
+   operación aborta después de COMMIT, se mantienen las adiciones, se inicia
+   el binario compatible anterior y se trata el contenido mediante restore
+   verificado; no se reanudan escrituras hasta cerrar ese diagnóstico.
+
+La pausa es una precondición de operación, no una propiedad que el SQL pueda
+garantizar por sí solo.
+
 La reparación estructural anterior no se vuelve a ejecutar. Su copia local,
 academic-additive-repair.sql, conserva SHA256
 299f85545b9803ede933a425715bb67e8817d260327d2289049fcd533b3295d5.
@@ -140,11 +198,18 @@ Para cada otro entorno mantenido:
 - Si 8/25 no está aplicada, se usa esta versión y se ejecuta el backfill antes
   de resolverla.
 - Si 8/25 figura aplicada con el SHA anterior, se conserva checksum e historia.
-  No se cambia el archivo para hacer coincidir el ledger. Se compara catálogo
-  y backfill; si todos los efectos ya están presentes, ese entorno queda
-  reconciliado para 8/25 y sólo se planifica el siguiente cambio.
-- Si falta cualquier efecto, el entorno queda fuera del release y requiere una
-  reconciliación propia. Nunca se resuelve por conveniencia.
+  No se cambia el archivo para hacer coincidir el ledger ni se declara el
+  entorno reconciliado sólo porque sus tablas o columnas existan. Hay que
+  comparar ledger, SQL aplicado, columnas, constraints, índices, enums y
+  counts del backfill; hasta completar esa evidencia el entorno queda fuera de
+  este release.
+- Si la evidencia demuestra que la versión anterior ya produjo todos sus
+  efectos, se usa para ese entorno un artefacto que conserve byte a byte su
+  migración aplicada y sólo se planifica el siguiente cambio. El checksum
+  aplicado nunca se altera.
+- Si falta cualquier efecto o no se puede probar la equivalencia, el entorno
+  queda fuera del release y requiere una reconciliación propia. Nunca se
+  resuelve por conveniencia.
 
 ### Migraciones Académico
 
@@ -192,70 +257,46 @@ detiene la operación.
 Recurso real: PostgreSQL BL-002 dms5i3e0i5t4kyh7h683mi7v, imagen
 postgres:18-alpine. BACK: km0aljzabdiqtaixj9dsequu.
 
-El preflight es read-only y guarda sólo salida agregada/redactada:
+El preflight ejecutable, read-only y con soporte de esquema anterior es
+`BL-002/scripts/academic-financial-projection-preflight.sql`.
+SHA256 del archivo:
+`560c19179c2c0b4290340e13f9f098bbd195f29e2b51e217daa881e1d65f4e2d`.
+Se ejecuta
+con `ON_ERROR_STOP`; no imprime secretos ni payloads:
 
-```sql
-SELECT current_database(), current_user, version();
-
-SELECT migration_name, checksum, finished_at, rolled_back_at,
-       applied_steps_count
-FROM "_prisma_migrations"
-ORDER BY started_at, migration_name;
-
-SELECT table_name
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name IN (
-    'tenant_canonical_mappings',
-    'academic_financial_projections',
-    'academic_financial_projection_consumed_events',
-    'academic_financial_projection_quarantine',
-    'academic_financial_projection_snapshots'
-  )
-ORDER BY table_name;
-
-SELECT typname
-FROM pg_type
-WHERE typname IN (
-  'AcademicFinancialProjectionOperation',
-  'AcademicFinancialProjectionEventOutcome',
-  'AcademicFinancialProjectionSnapshotStatus'
-)
-ORDER BY typname;
-
-SELECT table_name, indexname
-FROM pg_indexes
-WHERE schemaname = 'public'
-  AND (table_name = 'tenant_canonical_mappings'
-       OR table_name LIKE 'academic_financial_projection%')
-ORDER BY table_name, indexname;
-
-SELECT 'tenant_canonical_mappings' AS relation, count(*)
-FROM tenant_canonical_mappings
-UNION ALL
-SELECT 'academic_financial_projections', count(*)
-FROM academic_financial_projections
-UNION ALL
-SELECT 'academic_financial_projection_consumed_events', count(*)
-FROM academic_financial_projection_consumed_events
-UNION ALL
-SELECT 'academic_financial_projection_quarantine', count(*)
-FROM academic_financial_projection_quarantine
-UNION ALL
-SELECT 'academic_financial_projection_snapshots', count(*)
-FROM academic_financial_projection_snapshots;
+```powershell
+Get-Content scripts/academic-financial-projection-preflight.sql -Raw |
+  psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f -
 ```
 
-Debe confirmar el ledger real, ausencia de fallidas/rollback, catálogo y
-conteos. No se asumen filas ni checksums antes de la lectura.
+La consulta de índices usa `pg_indexes.tablename`. Los counts son condicionales
+mediante `to_regclass` y un bloque dinámico, por lo que no falla si las tablas
+candidatas todavía no existen. El mismo script sirve como preflight y
+postflight; `ABSENT` es esperado antes de las migraciones y `PRESENT` después.
 
-Se referencia el restore aprobado de PostgreSQL 18 aislado sin errores como
-evidencia del motor y de la cadena sintética. Sus límites siguen vigentes: no
-certifica consistencia de la base productiva ni de uploads. El inventario
-actual marca bl002RecoveryVerified=false; por tanto, antes de intervenir se
-exige un punto vigente de PostgreSQL BL-002 y del volumen
-/edupay-backend-uploads, con checksum, custodia fuera del volumen vivo y
-restauración aislada verificable.
+Resultado reproducible en PostgreSQL 18 aislado, usando los nombres sintéticos
+`bl_preflight_old` y `bl_preflight_updated`:
+
+- Esquema anterior: exit 0, 26 migraciones, cero fallidas/incompletas, cinco
+  tablas y tres enums `ABSENT`, cero índices/constraints candidatos y notices
+  de counts `ABSENT`.
+- Esquema actualizado: exit 0, 28 migraciones, cero fallidas/incompletas,
+  cinco tablas y tres enums `PRESENT`, 18 índices, 50 constraints y counts 0
+  para mappings y todas las tablas shadow.
+- Ambos resultados terminaron con
+  `BL_FINANCIAL_PROJECTION_PREFLIGHT_COMPLETE`.
+
+No se ejecutó este script contra producción; su ejecución productiva queda como
+gate read-only obligatorio antes de autorizar la intervención.
+
+La evidencia disponible incluye restauración verificada del backup real
+protegido de BL-002 y el restore aislado de PostgreSQL 18 sin errores. La
+restauración comprobada no equivale a certificar consistencia completa de la
+base productiva ni cobertura íntegra de uploads. El inventario se reconcilió a
+`bl002RecoveryVerified=true`, con fecha 2026-09-14 y ese alcance explícito.
+Antes de intervenir se exige además un recovery point vigente de PostgreSQL
+BL-002 y del volumen `/edupay-backend-uploads`, con checksum, custodia fuera del
+volumen vivo y restauración aislada verificable.
 
 BL BACK conserva RUN_MIGRATIONS=false. Las dos migraciones se ejecutan sólo
 desde un runner one-shot controlado contra el artefacto congelado. Un redeploy
@@ -277,7 +318,7 @@ Pins actuales de rollback:
 
 Artefactos candidatos a construir, sin publicar todavía:
 
-- Académico API: deploy/Dockerfile.api desde 802a815...; builder/runtime
+- Académico API: deploy/Dockerfile.api desde e5bd78a3c0588df540878b130d7d22cd039cf7d1; builder/runtime
   node:22-bookworm@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d.
   El digest OCI final se registra antes de desplegar.
 - BL-002 BACK: backend/Dockerfile desde 16e208a...; base node:20-alpine.
@@ -379,9 +420,11 @@ BL 20260903090000_add_tenant_canonical_mapping seguido de
 preflight real confirma que están pendientes.
 
 C. Publicación/merge y despliegues:
-construir y registrar digests inmutables desde ambos SHAs; pausar auto
-deploy; publicar/fusionar sólo tras aprobación explícita; desplegar sólo
-Académico API y BL BACK con sus gates.
+construir y registrar digests inmutables desde Académico
+e5bd78a3c0588df540878b130d7d22cd039cf7d1 y BL-002
+16e208af6a50e5703bc8f6edd51d7ff11b9c6381; pausar auto deploy;
+publicar/fusionar sólo tras aprobación explícita; desplegar sólo Académico
+API y BL BACK con sus gates.
 
 D. Acciones expresamente excluidas:
 activar producer, publisher, consumer/shadow, mappings o secretos S2S;

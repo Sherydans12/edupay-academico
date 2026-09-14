@@ -211,7 +211,9 @@
     "preRepairPoint": "20260911T130031Z",
     "postRepairPoint": "20260911T130501Z",
     "remoteVerified": true,
-    "bl002RecoveryVerified": false
+    "bl002RecoveryVerified": true,
+    "bl002RecoveryVerifiedDate": "2026-09-14",
+    "bl002RecoveryScope": "Protected real backup restore verified; live database consistency and uploads coverage remain limited"
   },
   "nextSchemaChangeRequiresReconciliation": true
 }
