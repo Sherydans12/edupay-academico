@@ -130,21 +130,43 @@ La ventana autorizada seguirá este procedimiento reversible:
 2. Confirmar en Coolify el estado pausado de `iobfkpujjoa2kj5urbpnjvzi`,
    `nn8yrhitex2r6squev0auwrs` y `r8mtn1xqtex96j4a8wu5hae6`, y comprobar que no
    hay réplicas reiniciando. Contra la DB, ejecutar una consulta agregada de
-   `pg_stat_activity` para confirmar cero transacciones no idle cuyo query
-   contenga INSERT/UPDATE/DELETE sobre las relaciones de learning. La consulta
-   agregada es:
+   `pg_stat_activity` y `pg_locks` para confirmar cero escritores activos,
+   transacciones abiertas externas y locks de escritura sobre las relaciones de
+   learning. La consulta canónica, que excluye explícitamente su propio
+   `pg_backend_pid()`, es
+   `scripts/prisma-reconciliation/check-learning-quiescence.sql` (SHA256
+   `2bf250ad51497959bd687f4ef7bf33340fd5772b29dadfde1b1ace0bf9c156bf`):
 
    ```sql
-   SELECT count(*) AS active_learning_writers
-   FROM pg_stat_activity
-   WHERE datname = current_database()
-     AND state <> 'idle'
-     AND query ~* '(insert|update|delete).*(learning_items|learning_item_drafts|learning_units|content_revisions)';
+   -- resumen que debe ser 0, 0, 0; el script completo también aborta con
+   -- ON_ERROR_STOP si cualquiera de los tres contadores es distinto de cero.
+   SELECT
+     (SELECT count(*) FROM pg_stat_activity
+       WHERE datname = current_database()
+         AND pid <> pg_backend_pid()
+         AND state <> 'idle'
+         AND query ~* '(insert|update|delete|merge|copy).*(learning_items|learning_item_drafts|learning_units|content_revisions)')
+       AS active_learning_writers,
+     (SELECT count(*) FROM pg_stat_activity
+       WHERE datname = current_database()
+         AND pid <> pg_backend_pid()
+         AND xact_start IS NOT NULL)
+       AS external_open_transactions,
+     (SELECT count(DISTINCT l.pid) FROM pg_locks l
+       JOIN pg_class c ON c.oid = l.relation
+       WHERE l.pid <> pg_backend_pid()
+         AND l.granted
+         AND c.relnamespace = 'public'::regnamespace
+         AND c.relname IN ('learning_items','learning_item_drafts','learning_units','content_revisions')
+         AND l.mode IN ('RowExclusiveLock','ShareRowExclusiveLock','ShareUpdateExclusiveLock','ExclusiveLock','AccessExclusiveLock'))
+       AS external_writer_lock_holders;
    ```
 
-   Debe devolver 0. Repetir la
-   observación tras un intervalo de quietud y registrar sólo counts, pid y
-   estado, no SQL completo ni secretos.
+   Debe devolver `0, 0, 0`. Ejecutar el script completo dos veces, separadas por
+   el intervalo de quietud acordado; registrar sólo los counts y el PID del
+   observador, nunca SQL completo ni secretos. Si falla, mantener pausados los
+   escritores, diagnosticar y recuperar el servicio de forma segura antes de
+   reanudar.
 
 3. Ejecutar el backfill y su verificación dentro de la transacción. Si falla
    antes de COMMIT, confirmar rollback y que los counts de `body_document` no
@@ -346,8 +368,8 @@ r8mtn1xqtex96j4a8wu5hae6.
 
 1. Congelar SHAs, artefactos de rollback, variables por nombre/presencia,
    imágenes actuales y digests candidatos. No copiar secretos.
-2. Pausar o bloquear auto deploy antes de publicar o fusionar. El inventario
-   marca auto deploy activo en BL FRONT y BACK; Academic FRONT está desactivado.
+2. Pausar o bloquear auto deploy antes de publicar o fusionar. BL FRONT y BACK
+   quedan en `Manual deployments only`; Academic FRONT ya está desactivado.
    Verificar Coolify, webhooks y rama antes de cualquier merge.
 3. Confirmar recovery points vigentes de ambas bases y, para BL, uploads.
 4. Ejecutar preflights read-only; abortar ante ledger, checksum, objeto o
