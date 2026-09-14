@@ -160,6 +160,6 @@ export class FinancialProjectionPublisherService {
 
   private safeErrorCode(error: unknown): string {
     const raw = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
-    return raw.replace(/[^A-Z0-9_:-]/gi, '_').slice(0, 80) || 'UNKNOWN_ERROR';
+    return /^HTTP_\d{3}$/.test(raw) ? raw : 'PUBLISH_REQUEST_FAILED';
   }
 }

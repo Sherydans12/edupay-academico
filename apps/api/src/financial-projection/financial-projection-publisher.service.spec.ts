@@ -109,4 +109,24 @@ describe('FinancialProjectionPublisherService', () => {
       }),
     );
   });
+
+  it('fails closed for a tenant without a credential without making an HTTP request', async () => {
+    const updateMany = vi.fn()
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 });
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const config = {
+      publisherEnabled: () => true,
+      publisherConfiguration: vi.fn()
+        .mockReturnValueOnce({ baseUrl: 'https://bl.invalid', token: 'legacy-token', keyId: 'legacy', timeoutMs: 1_000, maxAttempts: 3, retryScheduleSeconds: [1] })
+        .mockImplementation(() => { throw new Error('credential missing: synthetic-secret-must-not-leak'); }),
+    };
+    const prisma = { financialProjectionOutboxEvent: { updateMany, findMany: vi.fn().mockResolvedValue([{ id: event.id }]), findUniqueOrThrow: vi.fn().mockResolvedValue(event) } };
+    await expect(new FinancialProjectionPublisherService(prisma as never, config as never).publishPending()).resolves.toEqual({ attempted: 1, published: 0 });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'RETRY', lastErrorCode: expect.not.stringContaining('synthetic-secret') }) }));
+    expect(config.publisherConfiguration).toHaveBeenLastCalledWith(event.tenantId);
+  });
 });

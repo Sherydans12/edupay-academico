@@ -119,9 +119,19 @@ export class FinancialProjectionConfigService {
         'Academic Financial Projection publisher is not configured.',
       );
     }
-    const dedicated = canonicalTenantId
-      ? this.parseCredentials(this.config.getOrThrow('ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS')).find((credential) => credential.canonicalTenantId === canonicalTenantId)
+    const credentialsRaw = this.config.getOrThrow(
+      'ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS',
+    );
+    const dedicated = canonicalTenantId && credentialsRaw
+      ? this.parseCredentials(credentialsRaw).find(
+          (credential) => credential.canonicalTenantId === canonicalTenantId,
+        )
       : undefined;
+    if (canonicalTenantId && credentialsRaw && !dedicated) {
+      throw new ServiceUnavailableException(
+        'Financial Projection publisher credential is not configured for this tenant.',
+      );
+    }
     return {
       baseUrl,
       keyId: dedicated?.keyId ?? keyId,

@@ -187,3 +187,15 @@ The HTTP gate configures two synthetic, explicit tenant mappings and dedicated
 publisher credentials. It drains each tenant's outbox through BL, rejects both
 cross-credential directions, and confirms an A enrollment change leaves B's
 shadow record and financial tables unchanged.
+
+## Credenciales del publisher
+
+The existing `ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS` JSON array may
+contain one `{ keyId, token, canonicalTenantId }` entry per tenant. When it is
+present, the publisher requires an exact `canonicalTenantId` match and refuses
+the event before making an HTTP request if none exists. This is compatible with
+the legacy single `BL_FINANCIAL_PROJECTION_SERVICE_KEY_ID` and
+`BL_FINANCIAL_PROJECTION_SERVICE_TOKEN` configuration only when the S2S array
+is absent. A future activation must supply dedicated non-production-managed
+secrets for every enabled tenant; secrets and their values are never documented
+or logged.

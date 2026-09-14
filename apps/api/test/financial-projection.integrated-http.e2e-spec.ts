@@ -138,7 +138,7 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
 
     afterAll(async () => {
       await academic?.close();
-      blProcess?.kill();
+      await stopBl();
       await blPrisma?.$disconnect();
       await blPool?.end();
       await internal.close();
@@ -203,6 +203,9 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
       const enrollment = await post(admin, '/api/v1/course-enrollments', { studentId: student.id, courseId: course.id });
       await post(admin, `/api/v1/course-enrollments/${enrollment.id}/deactivate`, {});
       const [older, newer] = await academicPrisma.financialProjectionOutboxEvent.findMany({ where: { aggregateId: enrollment.id }, orderBy: { entityVersion: 'asc' } });
+      expect(older).toBeDefined();
+      expect(newer).toBeDefined();
+      if (!older || !newer) throw new Error('Expected two enrollment outbox versions.');
       expect(older.entityVersion).toBeLessThan(newer.entityVersion);
 
       expect((await deliver(newer)).data.outcome).toBe('APPLIED');
