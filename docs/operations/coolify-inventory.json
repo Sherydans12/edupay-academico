@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "verifiedDate": "2026-09-14",
   "scope": "EduPay production only; not a full inventory of unrelated VPS projects",
-  "status": "PRODUCTION_TOPOLOGY_CORRECTED_PHASE1_FLAGS_OFF",
+  "status": "RELEASE_DEPLOYED_FLAGS_OFF",
   "project": {
     "name": "My first project",
     "uuid": "p5gswqrr8ot1oaoxwytrpsho"
@@ -41,7 +41,8 @@
       "name": "EDUPAY BACK",
       "type": "application",
       "repository": "Sherydans12/BL-002-EduPay",
-      "sha": "502e6463464de0a54b440362a64da0c31450818f",
+      "sha": "16e208af6a50e5703bc8f6edd51d7ff11b9c6381",
+      "image": "km0aljzabdiqtaixj9dsequu@sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f",
       "branch": "main",
       "domain": "api-edupay.baselogic.cl",
       "port": 3001,

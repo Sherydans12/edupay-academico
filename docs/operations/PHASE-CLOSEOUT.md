@@ -1,14 +1,33 @@
 # Cierre de fase — actualización de release 2026-09-14
 
 **Cerrada la fase de remediación funcional, recuperación de versiones y limpieza
-de recursos.** Estado: PRODUCTION_TOPOLOGY_CORRECTED_PHASE1_FLAGS_OFF / COOLIFY_CLEANUP_COMPLETED.
-El release Académico pasó; BL-002 quedó bloqueado por su preflight real.
+de recursos.** Estado: RELEASE_DEPLOYED_FLAGS_OFF / COOLIFY_CLEANUP_COMPLETED.
+El release Académico y el tramo BL-002 quedaron desplegados con las
+funcionalidades de proyección apagadas.
 El cierre no declara terminadas las mejoras locales posteriores. La restauración
 del backup real protegido de PostgreSQL BL-002 está verificada; no se certifica
 por ello la consistencia completa de la base viva ni la cobertura íntegra de
 uploads.
 
 ## Resultado y evidencia
+
+## Estado final del release flags-off
+
+- BL BACK ejecuta `16e208af6a50e5703bc8f6edd51d7ff11b9c6381`, deployment
+  `nhwca59ptvsocugghdh0uiwv`, imagen/manifiesto local
+  `sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f`;
+  BL FRONT conserva `502e6463464de0a54b440362a64da0c31450818f`.
+- Se aplicaron sólo `20260903090000_add_tenant_canonical_mapping` y
+  `20260903113000_add_academic_financial_projection_shadow`. El ledger BL final
+  contiene 36 intentos: 28 aplicaciones efectivas, 8 reversiones históricas
+  resueltas y 0 fallos/no resueltos. `prisma migrate status` quedó al día.
+- `RUN_MIGRATIONS=false`; producer, publisher y shadow apagados; no hay nuevos
+  mappings ni credenciales S2S productivas. BL FRONT/BACK permanecen en
+  `Manual deployments only`.
+- No se ejecutó rollback. La imagen anterior conservada para BL BACK es
+  `sha256:0b15f903be869ac7467b4d23f6ca25f11c9689575291310e90c42d5be0cc3dab`.
+- El candidato GHCR `c19015…` no fue desplegado por autorización pendiente del
+  registry; no se expusieron credenciales.
 
 | Comprobación | Evidencia al cierre |
 |---|---|
@@ -89,9 +108,9 @@ Ambos repositorios publican `codex/production-stable-baseline`, con el código
 funcional descrito en PRODUCTION.md y documentación de cierre. Los commits de
 documentación no cambian el SHA/digest que está ejecutando Coolify.
 
-- BL-002: base de aplicación 502e646.
-- Académico: base del frontend 4f5ad28; API/workers productivos siguen pinned a
-  b2f489f. La rama estable no autoriza redeployar todo el monorepo.
+- BL-002: FRONT `502e646`; BACK `16e208af6a50e5703bc8f6edd51d7ff11b9c6381`.
+- Académico: frontend `4f5ad28`; API `e5bd78a3c0588df540878b130d7d22cd039cf7d1`;
+  workers `b2f489f`. La rama estable no autoriza redeployar todo el monorepo.
 - Con autorización explícita del usuario, main integra la base productiva y
   esta documentación mediante una fusión que conserva el historial. El árbol
   de aplicación BL-002 coincide con 502e646; el de Académico con 4f5ad28,
@@ -118,8 +137,8 @@ documentación no cambian el SHA/digest que está ejecutando Coolify.
    conflictos. No se ejecutó una reconciliación de negocio para esta documentación.
 5. main quedó reconciliado con el código aprobado y la documentación. Los
    SHAs/digests de Coolify siguen identificando los artefactos en ejecución, no
-   los commits documentales. BL FRONT/BACK tienen auto deploy bloqueado hasta
-   resolver el gate de ledger; no cambiar pins implícitamente.
+   los commits documentales. BL FRONT/BACK tienen auto deploy manual; no
+   cambiar pins implícitamente ni activar la proyección financiera.
 
 Estos límites no invalidan las pruebas funcionales confirmadas; delimitan qué
 se cerró y qué debe resolverse en el siguiente cambio afectado.

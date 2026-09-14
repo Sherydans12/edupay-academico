@@ -2,7 +2,7 @@
 
 Verificado: **2026-09-14**, después de remediación, recuperación del frontend y
 validación del release con flags apagados. Estado funcional:
-**PRODUCTION_TOPOLOGY_CORRECTED_PHASE1_FLAGS_OFF**.
+**RELEASE_DEPLOYED_FLAGS_OFF**.
 Esta es la referencia operativa vigente. Los ADR aceptados conservan autoridad
 sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica.
 
@@ -11,11 +11,21 @@ sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica
 Académico API ejecuta el build funcional
 `e5bd78a3c0588df540878b130d7d22cd039cf7d1` desde
 `ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`.
-Los workers conservan el digest anterior verificado. BL-002 no fue promovido:
-su BACK continúa en `502e6463464de0a54b440362a64da0c31450818f` con
-`RUN_MIGRATIONS=false`, porque el preflight real detectó ocho filas históricas
-incompletas en el ledger. BL FRONT/BACK tienen auto deploy desactivado
-(`Manual deployments only`) hasta resolver ese gate.
+Los workers conservan el digest anterior verificado. BL FRONT continúa en
+`502e6463464de0a54b440362a64da0c31450818f`; BL BACK está desplegado desde
+`16e208af6a50e5703bc8f6edd51d7ff11b9c6381`, con imagen/manifiesto local
+`sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f`.
+El deployment BL BACK es `nhwca59ptvsocugghdh0uiwv`. Su ledger quedó con 36
+intentos, 28 aplicaciones efectivas, 8 reversiones históricas resueltas y 0
+no resueltas; las únicas migraciones nuevas fueron
+`20260903090000_add_tenant_canonical_mapping` y
+`20260903113000_add_academic_financial_projection_shadow`. `RUN_MIGRATIONS=false`.
+BL FRONT/BACK tienen auto deploy desactivado (`Manual deployments only`).
+Producer, publisher y shadow permanecen apagados; no se agregaron mappings ni
+credenciales S2S productivas nuevas. El candidato GHCR
+`sha256:c19015e02821bcb5ede62b837ab33eba542d947f0de9a70d93bde89f5c5e1cf4`
+fue validado localmente pero no se desplegó; su acceso desde la VPS sigue
+pendiente por autorización del registry.
 
 Este archivo y `coolify-inventory.json` se mantienen iguales en BL-002 y
 Académico. Ante cualquier diferencia futura entre esta fotografía y Coolify,
@@ -26,8 +36,8 @@ o un contenedor healthy por sí solos no identifican al producto correcto.
 
 | Repositorio | Responsabilidad | Código productivo al cierre |
 |---|---|---|
-| [Sherydans12/BL-002-EduPay](https://github.com/Sherydans12/BL-002-EduPay) | Administración de pagos, alumnos/cursos de origen, autenticación administrativa y API de integración | FRONT y BACK: `502e6463464de0a54b440362a64da0c31450818f` |
-| [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | FRONT: `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; API/workers: OCI `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` |
+| [Sherydans12/BL-002-EduPay](https://github.com/Sherydans12/BL-002-EduPay) | Administración de pagos, alumnos/cursos de origen, autenticación administrativa y API de integración | FRONT: `502e6463464de0a54b440362a64da0c31450818f`; BACK: `16e208af6a50e5703bc8f6edd51d7ff11b9c6381` |
+| [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | FRONT: `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; API: `e5bd78a3c0588df540878b130d7d22cd039cf7d1`; workers: `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` |
 | [Sherydans12/edupay-identity](https://github.com/Sherydans12/edupay-identity) | Credenciales, sesiones, membresías, roles, activación, recuperación y auditoría de autenticación | OCI `b38849be78fee492f68f2d0e99cff3b69a08415a` |
 
 BL-002 conserva su dominio de autenticación propio. No valida sesiones
@@ -71,9 +81,21 @@ host para resolver fallos de comunicación privada.
 
 ## Imágenes y build
 
-API Académico y ambos workers conservan exactamente:
+La API Académico ejecuta exactamente:
+
+`ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`
+
+Ambos workers conservan exactamente:
 
 `ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a`
+
+BL BACK fue construido por Coolify desde `16e208af6a50e5703bc8f6edd51d7ff11b9c6381`
+con `/backend/Dockerfile`; el digest `85b202…` aparece como digest de
+manifiesto/repositorio y también como ID de la imagen local inspeccionada. La
+imagen de rollback conservada es `sha256:0b15f903be869ac7467b4d23f6ca25f11c9689575291310e90c42d5be0cc3dab`,
+etiquetada con `502e6463464de0a54b440362a64da0c31450818f`. El acceso al
+artefacto GHCR `c19015…` queda como pendiente operativo y no se registran
+credenciales.
 
 Identity conserva exactamente:
 

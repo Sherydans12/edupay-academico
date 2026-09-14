@@ -4,6 +4,22 @@ Aplica a ambos repositorios. Leer primero [topología vigente](PRODUCTION.md).
 Este runbook documenta la operación existente; no autoriza una migración,
 un nuevo contrato ni cambios fuera del alcance aprobado.
 
+## Estado publicado — 2026-09-14
+
+El release flags-off está completo en ambos backends. BL BACK ejecuta
+`16e208af6a50e5703bc8f6edd51d7ff11b9c6381`, deployment
+`nhwca59ptvsocugghdh0uiwv`, con imagen/manifiesto local
+`sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f`;
+BL FRONT conserva `502e6463464de0a54b440362a64da0c31450818f`. Se aplicaron sólo
+`20260903090000_add_tenant_canonical_mapping` y
+`20260903113000_add_academic_financial_projection_shadow`; el ledger final es
+28 aplicadas, 8 reversiones históricas resueltas y 0 no resueltas. Mantener
+`RUN_MIGRATIONS=false`, producer/publisher/shadow apagados y auto deploy manual
+en BL FRONT/BACK. No hay mappings ni credenciales S2S productivas nuevas.
+La API Académico ejecuta `e5bd78a3c0588df540878b130d7d22cd039cf7d1` con digest
+`sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`;
+workers e Identity conservan sus digests documentados.
+
 ## Inicio de una mejora
 
 1. Obtener refs remotas y revisar git status, rama y worktrees. No usar un
