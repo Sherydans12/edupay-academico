@@ -172,3 +172,8 @@ corepack pnpm@10.19.0 --filter @edupay/api exec vitest run test/financial-projec
 ```
 
 The gate is skipped when its three isolated-environment variables are absent; skipped is not a passing release result.
+
+The harness also stops the real BL test process during a newly-created outbox
+delivery, verifies the durable `RETRY` state, then starts BL again and drains
+the same event. This exercises the production publisher retry path over HTTP;
+it does not mock either side of the integration.

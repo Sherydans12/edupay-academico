@@ -34,6 +34,7 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
     const internal = new IdentityInternalFixture();
     let academic: INestApplication;
     let blProcess: ChildProcess;
+    let blProcessEnv: NodeJS.ProcessEnv;
     let academicPrisma: PrismaService;
     let blPrisma: any;
     let blPool: { end(): Promise<void> } | undefined;
@@ -61,12 +62,13 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
       });
       const port = 4101;
       blBaseUrl = `http://127.0.0.1:${port}`;
+      blProcessEnv = { ...process.env, PORT: String(port) };
       blProcess = spawn(
         process.platform === 'win32' ? 'cmd.exe' : 'npm',
         process.platform === 'win32' ? ['/d', '/s', '/c', 'npm run start:dev'] : ['run', 'start:dev'],
         {
         cwd: blRoot,
-        env: { ...process.env, PORT: String(port) },
+        env: blProcessEnv,
         stdio: 'pipe',
         },
       );
@@ -167,6 +169,30 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
       expect(crossTenant.status).toBe(403);
     });
 
+    it('retries a temporarily unavailable real HTTP destination without duplicate shadow effects', async () => {
+      const admin = await accessToken(tenantA, 'retry-admin');
+      const year = await post(admin, '/api/v1/academic-years', { label: '2027', startDate: '2027-03-01', endDate: '2027-12-20' });
+      await patch(admin, `/api/v1/academic-years/${year.id}`, { status: 'ACTIVE' });
+      const course = await post(admin, '/api/v1/courses', { academicYearId: year.id, label: 'Retry', status: 'ACTIVE' });
+      const student = await post(admin, '/api/v1/students', { firstName: 'Retry', lastName: 'Synthetic' });
+      const financialBefore = await financialCounts();
+      const enrollment = await post(admin, '/api/v1/course-enrollments', { studentId: student.id, courseId: course.id });
+      const event = await academicPrisma.financialProjectionOutboxEvent.findFirstOrThrow({ where: { aggregateId: enrollment.id } });
+
+      await stopBl();
+      await waitForUnavailable(`${blBaseUrl}/api/v1/health`);
+      expect(await publisher.publishPending()).toEqual({ attempted: 1, published: 0 });
+      expect((await academicPrisma.financialProjectionOutboxEvent.findUniqueOrThrow({ where: { id: event.id } })).status).toBe('RETRY');
+
+      blProcess = spawn(process.platform === 'win32' ? 'cmd.exe' : 'npm', process.platform === 'win32' ? ['/d', '/s', '/c', 'npm run start:dev'] : ['run', 'start:dev'], { cwd: blRoot, env: blProcessEnv, stdio: 'pipe' });
+      await waitForHealth(`${blBaseUrl}/api/v1/health`);
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      expect(await publisher.publishPending()).toEqual({ attempted: 1, published: 1 });
+      expect((await academicPrisma.financialProjectionOutboxEvent.findUniqueOrThrow({ where: { id: event.id } })).status).toBe('PUBLISHED');
+      expect(await blPrisma.academicFinancialProjection.count({ where: { academicEnrollmentId: enrollment.id } })).toBe(1);
+      expect(await financialCounts()).toEqual(financialBefore);
+    }, 30_000);
+
     async function post(accessToken: string, url: string, body: object) {
       const response = await request(academic.getHttpServer()).post(url).auth(accessToken, { type: 'bearer' }).send(body).expect(201);
       return response.body;
@@ -196,6 +222,25 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       throw new Error(`BL did not become healthy: ${String(lastError)}`);
+    }
+    async function waitForUnavailable(url: string) {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        try { await fetch(url); } catch { return; }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      throw new Error('BL remained reachable after its controlled test shutdown.');
+    }
+    async function stopBl() {
+      if (!blProcess?.pid) return;
+      if (process.platform !== 'win32') {
+        blProcess.kill();
+        return;
+      }
+      await new Promise<void>((resolve, reject) => {
+        const taskkill = spawn('taskkill.exe', ['/pid', String(blProcess.pid), '/T', '/F']);
+        taskkill.once('error', reject);
+        taskkill.once('close', (code) => code === 0 ? resolve() : reject(new Error(`taskkill exited ${code}`)));
+      });
     }
   },
 );
