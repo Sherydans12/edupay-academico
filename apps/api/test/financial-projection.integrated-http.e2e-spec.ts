@@ -193,6 +193,32 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
       expect(await financialCounts()).toEqual(financialBefore);
     }, 30_000);
 
+    it('classifies an older delivered enrollment version as STALE without overwriting shadow state', async () => {
+      const admin = await accessToken(tenantA, 'late-event-admin');
+      const year = await post(admin, '/api/v1/academic-years', { label: '2028', startDate: '2028-03-01', endDate: '2028-12-20' });
+      await patch(admin, `/api/v1/academic-years/${year.id}`, { status: 'ACTIVE' });
+      const course = await post(admin, '/api/v1/courses', { academicYearId: year.id, label: 'Late event', status: 'ACTIVE' });
+      const student = await post(admin, '/api/v1/students', { firstName: 'Late', lastName: 'Version' });
+      const financialBefore = await financialCounts();
+      const enrollment = await post(admin, '/api/v1/course-enrollments', { studentId: student.id, courseId: course.id });
+      await post(admin, `/api/v1/course-enrollments/${enrollment.id}/deactivate`, {});
+      const [older, newer] = await academicPrisma.financialProjectionOutboxEvent.findMany({ where: { aggregateId: enrollment.id }, orderBy: { entityVersion: 'asc' } });
+      expect(older.entityVersion).toBeLessThan(newer.entityVersion);
+
+      expect((await deliver(newer)).data.outcome).toBe('APPLIED');
+      const afterNewer = await blPrisma.academicFinancialProjection.findFirstOrThrow({ where: { academicEnrollmentId: enrollment.id } });
+      expect(Number(afterNewer.version)).toBe(Number(newer.entityVersion));
+      expect(afterNewer.enrollmentStatus).toBe('INACTIVE');
+
+      expect((await deliver(older)).data.outcome).toBe('STALE');
+      const afterOlder = await blPrisma.academicFinancialProjection.findFirstOrThrow({ where: { academicEnrollmentId: enrollment.id } });
+      expect(Number(afterOlder.version)).toBe(Number(newer.entityVersion));
+      expect(afterOlder.enrollmentStatus).toBe('INACTIVE');
+      expect((await deliver(older)).data.outcome).toBe('DUPLICATE');
+      expect(await blPrisma.academicFinancialProjection.count({ where: { academicEnrollmentId: enrollment.id } })).toBe(1);
+      expect(await financialCounts()).toEqual(financialBefore);
+    });
+
     async function post(accessToken: string, url: string, body: object) {
       const response = await request(academic.getHttpServer()).post(url).auth(accessToken, { type: 'bearer' }).send(body).expect(201);
       return response.body;
@@ -209,6 +235,14 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
     }
     async function financialCounts() {
       return { charges: await blPrisma.charge.count(), payments: await blPrisma.payment.count() };
+    }
+    async function deliver(outbox: any) {
+      const response = await fetch(`${blBaseUrl}/api/integrations/academic-financial-projection/events`, {
+        method: 'POST', headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json', 'X-EduPay-Service': 'ACADEMIC_PRODUCER', 'X-EduPay-Service-Key-Id': 'academic-a' },
+        body: JSON.stringify({ eventId: outbox.id, eventType: outbox.eventType, schemaVersion: outbox.schemaVersion, canonicalTenantId: outbox.tenantId, aggregateType: 'ACADEMIC_ENROLLMENT', aggregateId: outbox.aggregateId, entityVersion: Number(outbox.entityVersion), occurredAt: outbox.occurredAt.toISOString(), correlationId: outbox.correlationId, payload: outbox.payload }),
+      });
+      expect(response.status).toBe(201);
+      return response.json();
     }
     async function waitForHealth(url: string) {
       let lastError: unknown;

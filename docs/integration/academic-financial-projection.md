@@ -177,3 +177,8 @@ The harness also stops the real BL test process during a newly-created outbox
 delivery, verifies the durable `RETRY` state, then starts BL again and drains
 the same event. This exercises the production publisher retry path over HTTP;
 it does not mock either side of the integration.
+
+It also creates and deactivates one synthetic enrollment through Academic HTTP,
+then deliberately posts the newer outbox event before the older one to BL's
+real S2S consumer. The older event must return `STALE`; replaying it returns
+`DUPLICATE` and cannot overwrite the newer shadow row.
