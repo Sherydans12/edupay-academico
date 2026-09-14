@@ -94,7 +94,7 @@ export class FinancialProjectionConfigService {
     );
   }
 
-  publisherConfiguration(): {
+  publisherConfiguration(canonicalTenantId?: string): {
     readonly baseUrl: string;
     readonly keyId: string;
     readonly token: string;
@@ -119,10 +119,13 @@ export class FinancialProjectionConfigService {
         'Academic Financial Projection publisher is not configured.',
       );
     }
+    const dedicated = canonicalTenantId
+      ? this.parseCredentials(this.config.getOrThrow('ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS')).find((credential) => credential.canonicalTenantId === canonicalTenantId)
+      : undefined;
     return {
       baseUrl,
-      keyId,
-      token,
+      keyId: dedicated?.keyId ?? keyId,
+      token: dedicated?.token ?? token,
       timeoutMs: this.config.getOrThrow('BL_FINANCIAL_PROJECTION_TIMEOUT_MS'),
       maxAttempts: this.config.getOrThrow(
         'BL_FINANCIAL_PROJECTION_MAX_ATTEMPTS',

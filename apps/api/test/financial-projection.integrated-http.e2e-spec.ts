@@ -55,8 +55,8 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
           { keyId: 'academic-b', token: tokenB, canonicalTenantId: tenantB },
         ]),
         ACADEMIC_FINANCIAL_PROJECTION_SNAPSHOT_CREDENTIALS: JSON.stringify([
-          { keyId: 'bl-a', token: tokenA, canonicalTenantId: tenantA },
-          { keyId: 'bl-b', token: tokenB, canonicalTenantId: tenantB },
+          { keyId: 'academic-a', token: tokenA, canonicalTenantId: tenantA },
+          { keyId: 'academic-b', token: tokenB, canonicalTenantId: tenantB },
         ]),
         ACADEMIC_FINANCIAL_PROJECTION_BASE_URL: 'http://127.0.0.1:4102',
       });
@@ -89,8 +89,8 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
         ACADEMIC_MALWARE_SCANNER: 'fake',
         ACADEMIC_FINANCIAL_PROJECTION_ENABLED: 'true',
         ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS: JSON.stringify([
-          { keyId: 'bl-a', token: tokenA, canonicalTenantId: tenantA },
-          { keyId: 'bl-b', token: tokenB, canonicalTenantId: tenantB },
+          { keyId: 'academic-a', token: tokenA, canonicalTenantId: tenantA },
+          { keyId: 'academic-b', token: tokenB, canonicalTenantId: tenantB },
         ]),
         ACADEMIC_FINANCIAL_PROJECTION_CURSOR_SECRET:
           'synthetic-financial-projection-cursor-secret-0001',
@@ -219,6 +219,34 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
       expect(await financialCounts()).toEqual(financialBefore);
     });
 
+    it('projects a second tenant through its dedicated real publisher credential and isolates both tenants', async () => {
+      const admin = await accessToken(tenantB, 'tenant-b-admin');
+      const year = await post(admin, '/api/v1/academic-years', { label: '2029', startDate: '2029-03-01', endDate: '2029-12-20' });
+      await patch(admin, `/api/v1/academic-years/${year.id}`, { status: 'ACTIVE' });
+      const course = await post(admin, '/api/v1/courses', { academicYearId: year.id, label: 'Tenant B', status: 'ACTIVE' });
+      const student = await post(admin, '/api/v1/students', { firstName: 'Tenant', lastName: 'B' });
+      const financialBefore = await financialCounts();
+      const enrollment = await post(admin, '/api/v1/course-enrollments', { studentId: student.id, courseId: course.id });
+      const eventB = await academicPrisma.financialProjectionOutboxEvent.findFirstOrThrow({ where: { aggregateId: enrollment.id } });
+
+      expect((await publisher.publishPending()).published).toBeGreaterThan(0);
+      expect((await academicPrisma.financialProjectionOutboxEvent.findUniqueOrThrow({ where: { id: eventB.id } })).status).toBe('PUBLISHED');
+      expect(await blPrisma.academicFinancialProjection.count({ where: { tenantId: tenantB, academicEnrollmentId: enrollment.id } })).toBe(1);
+      expect(await blPrisma.academicFinancialProjection.count({ where: { tenantId: tenantA } })).toBeGreaterThan(0);
+
+      const eventA = await academicPrisma.financialProjectionOutboxEvent.findFirstOrThrow({ where: { tenantId: tenantA } });
+      expect((await deliverWith(tokenA, 'academic-a', eventB)).status).toBe(403);
+      expect((await deliverWith(tokenB, 'academic-b', eventA)).status).toBe(403);
+      expect(await blPrisma.academicFinancialProjection.count({ where: { tenantId: tenantB, academicEnrollmentId: enrollment.id } })).toBe(1);
+      const bProjection = await blPrisma.academicFinancialProjection.findFirstOrThrow({ where: { tenantId: tenantB, academicEnrollmentId: enrollment.id } });
+      const aAdmin = await accessToken(tenantA, 'tenant-a-isolation-admin');
+      await post(aAdmin, `/api/v1/course-enrollments/${eventA.aggregateId}/deactivate`, {});
+      await publisher.publishPending();
+      const bAfterAChange = await blPrisma.academicFinancialProjection.findFirstOrThrow({ where: { tenantId: tenantB, academicEnrollmentId: enrollment.id } });
+      expect(bAfterAChange).toMatchObject({ version: bProjection.version, enrollmentStatus: bProjection.enrollmentStatus, academicCourseId: bProjection.academicCourseId });
+      expect(await financialCounts()).toEqual(financialBefore);
+    });
+
     async function post(accessToken: string, url: string, body: object) {
       const response = await request(academic.getHttpServer()).post(url).auth(accessToken, { type: 'bearer' }).send(body).expect(201);
       return response.body;
@@ -237,12 +265,15 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
       return { charges: await blPrisma.charge.count(), payments: await blPrisma.payment.count() };
     }
     async function deliver(outbox: any) {
-      const response = await fetch(`${blBaseUrl}/api/integrations/academic-financial-projection/events`, {
-        method: 'POST', headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json', 'X-EduPay-Service': 'ACADEMIC_PRODUCER', 'X-EduPay-Service-Key-Id': 'academic-a' },
-        body: JSON.stringify({ eventId: outbox.id, eventType: outbox.eventType, schemaVersion: outbox.schemaVersion, canonicalTenantId: outbox.tenantId, aggregateType: 'ACADEMIC_ENROLLMENT', aggregateId: outbox.aggregateId, entityVersion: Number(outbox.entityVersion), occurredAt: outbox.occurredAt.toISOString(), correlationId: outbox.correlationId, payload: outbox.payload }),
-      });
+      const response = await deliverWith(tokenA, 'academic-a', outbox);
       expect(response.status).toBe(201);
       return response.json();
+    }
+    async function deliverWith(token: string, keyId: string, outbox: any) {
+      return fetch(`${blBaseUrl}/api/integrations/academic-financial-projection/events`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-EduPay-Service': 'ACADEMIC_PRODUCER', 'X-EduPay-Service-Key-Id': keyId },
+        body: JSON.stringify({ eventId: outbox.id, eventType: outbox.eventType, schemaVersion: outbox.schemaVersion, canonicalTenantId: outbox.tenantId, aggregateType: 'ACADEMIC_ENROLLMENT', aggregateId: outbox.aggregateId, entityVersion: Number(outbox.entityVersion), occurredAt: outbox.occurredAt.toISOString(), correlationId: outbox.correlationId, payload: outbox.payload }),
+      });
     }
     async function waitForHealth(url: string) {
       let lastError: unknown;

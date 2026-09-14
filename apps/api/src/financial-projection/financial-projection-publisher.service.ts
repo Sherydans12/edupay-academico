@@ -86,7 +86,7 @@ export class FinancialProjectionPublisherService {
           correlationId: event.correlationId,
           payload: event.payload,
         });
-        const response = await this.post(settings, body);
+        const response = await this.post(this.config.publisherConfiguration(event.tenantId), body);
         if (!response.ok) throw new Error(`HTTP_${response.status}`);
         await this.prisma.financialProjectionOutboxEvent.updateMany({
           where: { id: event.id, status: 'PUBLISHING' },

@@ -182,3 +182,8 @@ It also creates and deactivates one synthetic enrollment through Academic HTTP,
 then deliberately posts the newer outbox event before the older one to BL's
 real S2S consumer. The older event must return `STALE`; replaying it returns
 `DUPLICATE` and cannot overwrite the newer shadow row.
+
+The HTTP gate configures two synthetic, explicit tenant mappings and dedicated
+publisher credentials. It drains each tenant's outbox through BL, rejects both
+cross-credential directions, and confirms an A enrollment change leaves B's
+shadow record and financial tables unchanged.
