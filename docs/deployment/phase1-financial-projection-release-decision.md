@@ -1,8 +1,31 @@
 # Decisión de release — Fase 1 Academic Financial Projection
 
-Estado: **NO-GO para producción**
+Estado: **PARCIAL — ACADÉMICO DESPLEGADO CON FLAGS OFF; BL-002 NO-GO**
 
 Fecha de validación: 2026-09-13
+
+## Actualización de ejecución — 2026-09-14
+
+La autorización posterior se ejecutó de forma acotada. Académico pasó la
+reconciliación real: backfill de 21 items y 0 drafts, resolución verificada de
+8/24 y 8/25, ejecución de 9/3, ledger final completo y API publicada desde el
+build funcional `e5bd78a3c0588df540878b130d7d22cd039cf7d1` con digest
+`sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`.
+El main documental final Académico es
+`59f434c8cb41547b042d6e7283d11a7a88bce110`.
+
+BL-002 quedó bloqueado por el preflight real: 34 filas de ledger, 8
+incompletas por registros históricos con `rolled_back_at` y sin `finished_at`.
+No se marcaron migraciones como aplicadas, no se ejecutaron las migraciones de
+mapping/shadow y no se desplegó el artefacto candidato. El BACK sigue en
+`502e6463464de0a54b440362a64da0c31450818f` con `RUN_MIGRATIONS=false`.
+La restauración del backup real protegido sigue comprobada, con las
+limitaciones documentadas de consistencia viva y uploads.
+
+Las funcionalidades producer, publisher y shadow siguen apagadas; no se
+crearon mappings ni credenciales S2S productivas nuevas. La decisión no
+autoriza activar funcionalidades ni reintentar BL sin reconciliar primero esas
+8 filas sin alterar checksums ni historia.
 
 ## Candidatos evaluados
 

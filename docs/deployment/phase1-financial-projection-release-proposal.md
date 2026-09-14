@@ -1,7 +1,8 @@
 # Propuesta de release — proyección financiera con funcionalidades desactivadas
 
-Estado: PROPUESTA NO AUTORIZADA. No ejecuta cambios productivos, no publica,
-no fusiona y no activa funcionalidades.
+Estado: EJECUTADO PARCIALMENTE — Académico PASS; BL-002 BLOQUEADO por
+preflight real. Las funcionalidades siguen desactivadas. No se reintenta el
+alcance BL ni se hacen cambios productivos adicionales sin una nueva revisión.
 
 ## Bases, código de build y estado deseado
 
@@ -308,8 +309,15 @@ Resultado reproducible en PostgreSQL 18 aislado, usando los nombres sintéticos
 - Ambos resultados terminaron con
   `BL_FINANCIAL_PROJECTION_PREFLIGHT_COMPLETE`.
 
-No se ejecutó este script contra producción; su ejecución productiva queda como
-gate read-only obligatorio antes de autorizar la intervención.
+Se ejecutó este script contra la base real BL-002 con `ON_ERROR_STOP=1`. El
+catálogo no tenía ninguna de las cinco tablas ni los tres enums candidatos; la
+consulta de `pg_indexes` devolvió cero filas. El ledger tenía 34 filas, de las
+cuales 8 quedaron incompletas bajo la definición estricta
+`finished_at IS NULL OR rolled_back_at IS NOT NULL`; son registros históricos
+con `rolled_back_at` y `applied_steps_count=0`. Por tanto el gate BL es FAIL:
+no se resolvió ninguna fila, no se ejecutó ninguna migración BL y no se
+desplegó BL BACK. Esta discrepancia no se corrige alterando checksums ni
+ignorando filas históricas.
 
 La evidencia disponible incluye restauración verificada del backup real
 protegido de BL-002 y el restore aislado de PostgreSQL 18 sin errores. La
@@ -338,13 +346,15 @@ Pins actuales de rollback:
   configuración actualmente desplegadas como rollback; no se inventa un digest
   no registrado.
 
-Artefactos candidatos a construir, sin publicar todavía:
+Artefactos construidos y verificados antes de la intervención:
 
 - Académico API: deploy/Dockerfile.api desde e5bd78a3c0588df540878b130d7d22cd039cf7d1; builder/runtime
   node:22-bookworm@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d.
-  El digest OCI final se registra antes de desplegar.
+  Digest desplegado: `sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`.
 - BL-002 BACK: backend/Dockerfile desde 16e208a...; base node:20-alpine.
-  El digest OCI final se registra antes de desplegar. No se usa latest.
+  Digest construido y publicado para promoción controlada:
+  `sha256:c19015e02821bcb5ede62b837ab33eba542d947f0de9a70d93bde89f5c5e1cf4`.
+  No se desplegó por el gate de ledger BL. No se usa latest.
 - No se construyen ni publican Academic FRONT, BL FRONT, Identity,
   notification worker ni sync worker: no hay cambios necesarios en UI, Identity
   o esos workers. Sus versiones actuales siguen pinned y son compatibles con
@@ -422,13 +432,57 @@ anterior, BL unitarias previas, typechecks de ambos repositorios, rehearsal
 Prisma, restore PG18 aislado y migraciones sintéticas. No se reabren auditorías
 no relacionadas.
 
-La propuesta, el ajuste mínimo del fixture y la corrección operativa quedan en
-commits locales limpios; no se publican ni fusionan como parte de esta
-preparación. El código de build BL-002 conserva el SHA solicitado
-16e208af6a50e5703bc8f6edd51d7ff11b9c6381; el commit local adicional de BL sólo
-contiene el preflight y la documentación operativa.
+La evidencia de ejecución queda registrada debajo. El código de build BL-002
+conserva el SHA solicitado `16e208af6a50e5703bc8f6edd51d7ff11b9c6381`; su
+imagen no se promovió por el gate real del ledger.
 
-## Autorización propuesta — no ejecutar todavía
+## 6. Resultado de la ejecución autorizada — 2026-09-14
+
+### Académico: PASS
+
+- Main documental final: `59f434c8cb41547b042d6e7283d11a7a88bce110`.
+  El código funcional construido permanece inequívocamente fijado en
+  `e5bd78a3c0588df540878b130d7d22cd039cf7d1`; los commits posteriores son
+  documentación/operación.
+- API desplegada: `ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`.
+  Notification y sync workers conservaron el rollback pinned
+  `sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a`.
+- Backfill: 21 filas de `learning_items`, 0 de `learning_item_drafts`; no se
+  sobrescribieron documentos existentes. La comprobación posterior dejó cero
+  candidatos y 21 documentos legacy de item.
+- Ledger: se resolvieron 8/24 y 8/25 sólo después de verificar sus efectos;
+  se ejecutó estructuralmente 9/3. Quedaron 10 filas de ledger, 0 incompletas,
+  checksums exactos y cero filas en outbox/snapshots de proyección.
+- Health público: 200 en live/ready Académico, `/login` Académico, health BL
+  y `/login` BL. API y ambos workers Académico quedaron `running:healthy`.
+
+Los nombres `ACADEMIC_FINANCIAL_PROJECTION_ENABLED` y
+`ACADEMIC_FINANCIAL_PROJECTION_PUBLISHER_ENABLED` están ausentes en el
+contenedor desplegado; el esquema de configuración de este build los resuelve
+al valor seguro `false`. No hay credenciales S2S nuevas ni mappings. Esto es
+equivalente a flags apagados y no constituye activación funcional.
+
+### BL-002: BLOQUEADO, sin cambios
+
+- Main documental/código candidato: `7006afc6b6d7931777b2f0c9927a33d2c0c2556c`;
+  artefacto candidato disponible, no desplegado:
+  `sha256:c19015e02821bcb5ede62b837ab33eba542d947f0de9a70d93bde89f5c5e1cf4`.
+- Preflight real con `ON_ERROR_STOP=1`: 34 filas de ledger, 8 incompletas por
+  registros históricos `rolled_back_at` sin `finished_at`; tablas/enums
+  candidatos ausentes y cero índices/constraints candidatos.
+- No se ejecutaron mapping ni shadow, no se resolvieron filas, no se afectaron
+  datos y no se desplegó BL BACK. El recurso sigue en el código desplegado
+  `502e6463464de0a54b440362a64da0c31450818f`, con `RUN_MIGRATIONS=false`.
+- El restore real protegido BL está comprobado; siguen vigentes las
+  limitaciones de consistencia de la base viva y cobertura de uploads, y el
+  recovery point vigente seguirá siendo precondición de cualquier reintento.
+
+No se ejecutó rollback de aplicación: sólo se pausaron y reanudaron API/workers
+Académico para la ventana de mantenimiento. No se hizo rollback destructivo de
+esquema, no se modificaron checksums y el auto deploy BL FRONT/BACK quedó en
+`Manual deployments only`.
+
+## Alcance autorizado consumido — no repetir sin nueva autorización
 
 A. Cambios de datos y ledger:
 backfill Académico de 21 items + 0 drafts, pausa de escrituras, resolve de

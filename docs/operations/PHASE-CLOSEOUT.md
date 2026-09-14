@@ -1,7 +1,8 @@
-# Cierre de fase — 2026-09-11
+# Cierre de fase — actualización de release 2026-09-14
 
 **Cerrada la fase de remediación funcional, recuperación de versiones y limpieza
-de recursos.** Estado: PRODUCTION_TOPOLOGY_CORRECTED / COOLIFY_CLEANUP_COMPLETED.
+de recursos.** Estado: PRODUCTION_TOPOLOGY_CORRECTED_PHASE1_FLAGS_OFF / COOLIFY_CLEANUP_COMPLETED.
+El release Académico pasó; BL-002 quedó bloqueado por su preflight real.
 El cierre no declara terminadas las mejoras locales posteriores. La restauración
 del backup real protegido de PostgreSQL BL-002 está verificada; no se certifica
 por ello la consistencia completa de la base viva ni la cobertura íntegra de
@@ -115,10 +116,10 @@ documentación no cambian el SHA/digest que está ejecutando Coolify.
    preprod no es su entorno de pruebas.
 4. La salud de workers no certifica que todos los tenants hayan sincronizado sin
    conflictos. No se ejecutó una reconciliación de negocio para esta documentación.
-5. main quedó reconciliado con el código desplegado y la documentación.
-   Los SHAs/digests de Coolify siguen identificando los artefactos en ejecución,
-   no los commits documentales. BL mantiene auto deploy en main: revisar
-   automatismos antes de futuras fusiones y no cambiar pins implícitamente.
+5. main quedó reconciliado con el código aprobado y la documentación. Los
+   SHAs/digests de Coolify siguen identificando los artefactos en ejecución, no
+   los commits documentales. BL FRONT/BACK tienen auto deploy bloqueado hasta
+   resolver el gate de ledger; no cambiar pins implícitamente.
 
 Estos límites no invalidan las pruebas funcionales confirmadas; delimitan qué
 se cerró y qué debe resolverse en el siguiente cambio afectado.

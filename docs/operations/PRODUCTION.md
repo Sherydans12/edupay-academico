@@ -1,9 +1,21 @@
 # Topología productiva EduPay
 
-Verificado: **2026-09-11**, después de remediación, recuperación del frontend y
-limpieza de Coolify. Estado funcional: **PRODUCTION_TOPOLOGY_CORRECTED**.
+Verificado: **2026-09-14**, después de remediación, recuperación del frontend y
+validación del release con flags apagados. Estado funcional:
+**PRODUCTION_TOPOLOGY_CORRECTED_PHASE1_FLAGS_OFF**.
 Esta es la referencia operativa vigente. Los ADR aceptados conservan autoridad
 sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica.
+
+## Observación de release — 2026-09-14
+
+Académico API ejecuta el build funcional
+`e5bd78a3c0588df540878b130d7d22cd039cf7d1` desde
+`ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`.
+Los workers conservan el digest anterior verificado. BL-002 no fue promovido:
+su BACK continúa en `502e6463464de0a54b440362a64da0c31450818f` con
+`RUN_MIGRATIONS=false`, porque el preflight real detectó ocho filas históricas
+incompletas en el ledger. BL FRONT/BACK tienen auto deploy desactivado
+(`Manual deployments only`) hasta resolver ese gate.
 
 Este archivo y `coolify-inventory.json` se mantienen iguales en BL-002 y
 Académico. Ante cualquier diferencia futura entre esta fotografía y Coolify,

@@ -11,8 +11,8 @@ un nuevo contrato ni cambios fuera del alcance aprobado.
 2. Partir de `origin/main` actualizado, que integra el código productivo y esta
    documentación. Crear una rama `codex/<mejora>` y otro worktree limpio.
    `codex/production-stable-baseline` conserva la referencia de cierre.
-3. En Académico, main contiene el frontend 4f5ad28 y el código API de b2f489f.
-   API y workers permanecen pinned a su digest: actualizar main no implica
+3. En Académico, main contiene el frontend 4f5ad28 y el API release funcional
+   e5bd78a. Los workers permanecen pinned a su digest anterior: actualizar main no implica
    redeployar todos los recursos ni ejecutar migraciones.
 4. Registrar alcance, recurso UUID afectado, contrato/esquema afectado y pruebas.
    Los pendientes locales de v2, rollover y almacenamiento son trabajo futuro,
@@ -36,9 +36,10 @@ un nuevo contrato ni cambios fuera del alcance aprobado.
   reconstruir y sobrescribir tags, por lo que no basta el historial.
 - Identificar hooks y entrypoints. BL BACK debe conservar RUN_MIGRATIONS
   desactivado. No lanzar migration runners como efecto lateral de un redeploy.
-- Revisar automatismos antes de publicar en main: al cierre, auto deploy está
-  activo en BL FRONT y BACK, y desactivado en Academic FRONT. Los SHAs están
-  fijados, pero no asumir que publicar documentación no genera un webhook.
+- Revisar automatismos antes de publicar en main: desde el release 2026-09-14,
+  auto deploy está desactivado en BL FRONT y BACK (`Manual deployments only`) y
+  Academic FRONT también permanece desactivado. Los SHAs están fijados, pero
+  no asumir que publicar documentación no genera un webhook.
   Las ramas documentales y baselines no sustituyen la configuración de release.
 
 ## Gates por recurso
