@@ -158,3 +158,17 @@ flag separado y URL/credencial de BL. El valor por defecto de ambos es
 
 No se implementaron pagos, obligaciones, reportes, login BL, feed v1/v2,
 backfill real, `PromotionRun` ni rollover.
+# HTTP integration gate (isolated only)
+
+The cross-repository HTTP gate is `apps/api/test/financial-projection.integrated-http.e2e-spec.ts`. It starts the real BL Nest application on loopback, creates the real Academic Nest application, and uses synthetic tenants and PostgreSQL databases supplied by the runner. It must never receive a production URL.
+
+From the Academic candidate, run:
+
+```powershell
+$env:TEST_ACADEMIC_DATABASE_URL='postgresql://gate:gate@127.0.0.1:55415/academic?schema=public'
+$env:TEST_BL_DATABASE_URL='postgresql://gate:gate@127.0.0.1:55418/bl?schema=public'
+$env:BL002_BACKEND_ROOT='C:\path\to\BL-002\backend'
+corepack pnpm@10.19.0 --filter @edupay/api exec vitest run test/financial-projection.integrated-http.e2e-spec.ts --reporter=verbose
+```
+
+The gate is skipped when its three isolated-environment variables are absent; skipped is not a passing release result.
