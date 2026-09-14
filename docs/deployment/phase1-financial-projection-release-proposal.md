@@ -400,9 +400,11 @@ anterior, BL unitarias previas, typechecks de ambos repositorios, rehearsal
 Prisma, restore PG18 aislado y migraciones sintéticas. No se reabren auditorías
 no relacionadas.
 
-La propuesta y el ajuste mínimo del fixture quedan en commits locales limpios;
-no se publican ni fusionan como parte de esta preparación. El worktree BL-002
-conserva el SHA solicitado y queda sin cambios.
+La propuesta, el ajuste mínimo del fixture y la corrección operativa quedan en
+commits locales limpios; no se publican ni fusionan como parte de esta
+preparación. El código de build BL-002 conserva el SHA solicitado
+16e208af6a50e5703bc8f6edd51d7ff11b9c6381; el commit local adicional de BL sólo
+contiene el preflight y la documentación operativa.
 
 ## Autorización propuesta — no ejecutar todavía
 
