@@ -28,6 +28,7 @@
     "db:validate": "pnpm --filter @edupay/api db:validate",
     "db:generate": "pnpm --filter @edupay/api db:generate",
     "db:migrate:status": "pnpm --filter @edupay/api db:migrate:status",
+    "prisma:reconciliation:rehearsal": "node scripts/prisma-reconciliation-rehearsal.mjs",
     "release:check": "node scripts/release-check.mjs"
   },
   "devDependencies": {
