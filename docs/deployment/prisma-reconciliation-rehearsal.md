@@ -75,7 +75,7 @@ historia histórica se conserva literalmente, no se oculta.
 ## Ensayo reproducible
 
 Precondiciones: Docker activo, Node 22+, pnpm 10.19.0 y dependencias del
-worktree instaladas. El script crea únicamente un contenedor `postgres:15`
+worktree instaladas. El script crea únicamente un contenedor `postgres:15-alpine`
 efímero en loopback, dos bases sintéticas y credenciales `rehearsal`; elimina
 el contenedor al terminar.
 
@@ -178,7 +178,9 @@ automáticamente a una ventana posterior.
 - `scripts/prisma-reconciliation/academic-additive-repair.sql` — copia exacta
   del SQL autorizado, SHA `299f8554…`.
 - `scripts/prisma-reconciliation/reconcile-body-documents.sql` — backfill
-  separado para demostrar antes de resolver.
-- `scripts/prisma-reconciliation/production-preflight.sql` — sólo lectura.
+  separado para demostrar antes de resolver, SHA
+  `54bf07f324ab2a130eeeb73440463a28c153223395d6f460cb5248a6dd4fb8b8`.
+- `scripts/prisma-reconciliation/production-preflight.sql` — sólo lectura,
+  SHA `cf14235b4a5d7d1b3c5e08c1871adf4632f1b2823ce99b787e0c62cb359c5372`.
 - `scripts/prisma-reconciliation-rehearsal.mjs` — reconstrucción, ensayo y
   limpieza disposable.
