@@ -20,6 +20,22 @@ La API Académico ejecuta `e5bd78a3c0588df540878b130d7d22cd039cf7d1` con digest
 `sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`;
 workers e Identity conservan sus digests documentados.
 
+### Proveniencia de bytes de las migraciones BL
+
+La diferencia entre los hashes propuestos y el ledger quedó explicada por
+finales de línea, no por contenido SQL: el checkout autorizado de Windows
+tenía CRLF, mientras que el blob del commit `16e208…`, el staging del runner y
+los archivos inspeccionados en el contenedor desplegado tenían LF.
+
+| Archivo | Checkout autorizado | Blob `16e208…` | Runner/contenedor |
+|---|---|---|---|
+| Mapping | 1385 / CRLF 29 / `8650645e…` | 1356 / LF 29 / `031f6e0e…` | `031f6e0e…` |
+| Shadow | 5540 / CRLF 88 / `6aee6fd2…` | 5452 / LF 88 / `fee0f6cc…` | `fee0f6cc…` |
+
+`sha256sum` del staging y una comprobación read-only con `docker exec`
+coincidieron con los hashes canónicos del ledger. No hubo diferencia semántica
+ni se normalizaron o alteraron checksums aplicados.
+
 ## Inicio de una mejora
 
 1. Obtener refs remotas y revisar git status, rama y worktrees. No usar un
