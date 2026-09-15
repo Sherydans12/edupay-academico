@@ -1,6 +1,6 @@
 # Propuesta implementable: primer corte del onboarding académico
 
-**Estado:** borrador para aprobación; no es un ADR aceptado.
+**Estado:** aprobado para implementar este corte; no es un ADR aceptado.
 
 **Alcance:** Académico, únicamente estructura base del colegio: año académico, cursos y estado de preparación. La vinculación de tenants en BL queda fuera de este diseño y fuera de sus prerrequisitos.
 
@@ -13,6 +13,19 @@ El primer corte debe reutilizar la administración académica que ya existe y li
 No se propone crear `OnboardingRun`, otra entidad de progreso, una migración, un flag ni un flujo de aprobación en este corte. El estado se calcula en tiempo real a partir de los registros existentes y se muestra dentro de `/administracion`.
 
 La preparación de este corte significa solamente «existe exactamente un año activo y al menos un curso activo dentro de él». No significa que el colegio esté listo para operar todo el ciclo académico: asignaturas, profesores, alumnos, matrículas y asignaciones son etapas posteriores.
+
+## Decisiones aprobadas para implementación — 2026-09-15
+
+- El alcance es únicamente `año académico → cursos → validación de estructura base`.
+- El estado es derivado, sin `OnboardingRun`, persistencia adicional ni migraciones.
+- Se implementa `GET /api/v1/academic-preparation/status` con la autorización tenant-scoped existente.
+- `READY` significa sólo un año activo y al menos un curso activo asociado a ese año.
+- Más de un año activo produce `BLOCKED` para este indicador; no se cambian las reglas de escritura ni se cierran años automáticamente.
+- No hay dependencia de BL, mappings ni sincronización, ni acceso implícito de `SYSTEM_ADMIN`.
+- No se reintentan automáticamente mutaciones inciertas; antes de repetir se consulta el estado actual.
+- No se implementa el resto de ADR-0022 en este corte.
+- Con cero años, `ACADEMIC_YEAR` es `ACTION_REQUIRED` con la acción «Crear año académico».
+- Si `selectedActiveYearId` es `null`, `COURSES` es `ACTION_REQUIRED`, `activeInSelectedYear` y `draftInSelectedYear` son `null`, y ningún curso draft se presenta como perteneciente al año seleccionado.
 
 ## Evidencia reutilizable
 
@@ -111,8 +124,8 @@ Debe usar la misma capacidad `academic-structure:administer`, el mismo `TrustedT
     "selectedActiveYearId": null
   },
   "courses": {
-    "activeInSelectedYear": 0,
-    "draftInSelectedYear": 2
+    "activeInSelectedYear": null,
+    "draftInSelectedYear": null
   },
   "checks": [
     {
@@ -133,8 +146,10 @@ Debe usar la misma capacidad `academic-structure:administer`, el mismo `TrustedT
 
 Reglas recomendadas:
 
-- `ACADEMIC_YEAR` es `READY` con exactamente un `ACTIVE`; `ACTION_REQUIRED` con cero y al menos un año existente; `BLOCKED` con más de uno activo.
-- `COURSES` es `READY` con al menos un curso `ACTIVE` en el único año activo; es `ACTION_REQUIRED` si sólo hay cursos `DRAFT` o no hay cursos.
+- `ACADEMIC_YEAR` es `READY` con exactamente un `ACTIVE`; `ACTION_REQUIRED` con cero activos y al menos un año existente; `BLOCKED` con más de uno activo.
+- `ACADEMIC_YEAR` es `ACTION_REQUIRED` con cero años, con acción «Crear año académico»; con años sólo `DRAFT`, la acción es «Activar un año académico».
+- Si no hay exactamente un año activo, `selectedActiveYearId` es `null`, `COURSES` es `ACTION_REQUIRED` y ambos conteos `*InSelectedYear` son `null`. No se cuentan ni se muestran como seleccionados cursos de años draft, cerrados o archivados.
+- Con exactamente un año activo, `COURSES` es `READY` con al menos un curso `ACTIVE` en ese año; es `ACTION_REQUIRED` si no hay cursos activos, aunque existan cursos `DRAFT`.
 - El estado general es `READY` sólo si ambos checks son `READY`; es `BLOCKED` si algún check es `BLOCKED`; en otro caso es `ACTION_REQUIRED`.
 - No se evalúan asignaturas, personas, matrículas, asignaciones, sincronización BL, credenciales ni estado operativo del servicio.
 
@@ -197,14 +212,11 @@ El estado de preparación no tiene historia propia en este corte: cada lectura s
 - Regresión de las pestañas actuales de asignaturas, personas, roster y asignaciones; no deben cambiar sus permisos ni sus reglas.
 - Verificación estática de que la implementación no agrega migraciones, flags, llamadas BL ni una entidad `OnboardingRun`.
 
-## 6. Decisiones nuevas que necesitan aprobación
+## 6. Decisiones futuras fuera de este corte
 
-1. Aceptar el alcance «estructura académica base» y que `READY` no represente onboarding completo.
-2. Aprobar el nombre y contrato de `GET /api/v1/academic-preparation/status`, incluidos `READY`, `ACTION_REQUIRED` y `BLOCKED` como valores efímeros de respuesta.
-3. Resolver si el producto exige exactamente un año activo por tenant. La recomendación para este corte es detectar múltiples activos como `BLOCKED`, sin corregirlos automáticamente ni cambiar aún las reglas de escritura.
-4. Confirmar que cursos y años se preparan manualmente en Académico sin depender de la vinculación BL. La integración/sincronización BL podrá tener una validación separada en otro corte.
-5. Decidir si las mutaciones de años/cursos necesitan idempotencia de servidor ahora o si el comportamiento seguro inicial será no reintentar automáticamente y pedir recarga/revisión.
-6. Si se requiere aprobación de plataforma, historial durable o evidencia de validación, aprobar primero la gobernanza de ADR-0022 y el contrato de elevación de soporte; no inferir acceso de `SYSTEM_ADMIN`.
+1. Si se requiere una regla de escritura que impida crear un segundo año `ACTIVE`.
+2. Si las mutaciones de años/cursos necesitan idempotencia de servidor para una fase posterior.
+3. Si se requiere aprobación de plataforma, historial durable o evidencia de validación; en ese caso se debe retomar ADR-0022 y el contrato de elevación de soporte.
 
 ## Límites de entrega
 
