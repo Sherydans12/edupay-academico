@@ -221,6 +221,216 @@ describe.runIf(testDatabaseUrl)(
       ).toBe(2);
     });
 
+    it('derives the academic base preparation status without attributing draft courses prematurely', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+
+      const empty = await api(admin)
+        .get('/api/v1/academic-preparation/status')
+        .expect(200);
+      expect(empty.body).toMatchObject({
+        status: 'ACTION_REQUIRED',
+        ready: false,
+        academicYears: {
+          total: 0,
+          active: 0,
+          draft: 0,
+          selectedActiveYearId: null,
+        },
+        courses: {
+          activeInSelectedYear: null,
+          draftInSelectedYear: null,
+        },
+      });
+      expect(empty.body.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'ACADEMIC_YEAR',
+            action: 'Crear año académico',
+          }),
+        ]),
+      );
+
+      const year = await post(admin, '/api/v1/academic-years', {
+        label: '2026',
+        startDate: '2026-03-01',
+        endDate: '2026-12-20',
+      });
+      const draftCourse = await post(admin, '/api/v1/courses', {
+        academicYearId: year.id,
+        label: '5° A',
+        status: 'DRAFT',
+      });
+
+      const beforeActivation = await api(admin)
+        .get('/api/v1/academic-preparation/status')
+        .expect(200);
+      expect(beforeActivation.body).toMatchObject({
+        status: 'ACTION_REQUIRED',
+        academicYears: {
+          total: 1,
+          active: 0,
+          draft: 1,
+          selectedActiveYearId: null,
+        },
+        courses: {
+          activeInSelectedYear: null,
+          draftInSelectedYear: null,
+        },
+      });
+
+      await patch(admin, `/api/v1/academic-years/${year.id}`, {
+        status: 'ACTIVE',
+      });
+      const beforeCourseActivation = await api(admin)
+        .get('/api/v1/academic-preparation/status')
+        .expect(200);
+      expect(beforeCourseActivation.body).toMatchObject({
+        status: 'ACTION_REQUIRED',
+        academicYears: { selectedActiveYearId: year.id },
+        courses: { activeInSelectedYear: 0, draftInSelectedYear: 1 },
+      });
+
+      await patch(admin, `/api/v1/courses/${draftCourse.id}`, {
+        status: 'ACTIVE',
+      });
+      const ready = await api(admin)
+        .get('/api/v1/academic-preparation/status')
+        .expect(200);
+      expect(ready.body).toMatchObject({
+        status: 'READY',
+        ready: true,
+        academicYears: { selectedActiveYearId: year.id },
+        courses: { activeInSelectedYear: 1, draftInSelectedYear: 0 },
+      });
+
+      const secondYear = await post(admin, '/api/v1/academic-years', {
+        label: '2027',
+        startDate: '2027-03-01',
+        endDate: '2027-12-20',
+      });
+      await patch(admin, `/api/v1/academic-years/${secondYear.id}`, {
+        status: 'ACTIVE',
+      });
+      const ambiguous = await api(admin)
+        .get('/api/v1/academic-preparation/status')
+        .expect(200);
+      expect(ambiguous.body).toMatchObject({
+        status: 'BLOCKED',
+        ready: false,
+        academicYears: { active: 2, selectedActiveYearId: null },
+        courses: { activeInSelectedYear: null, draftInSelectedYear: null },
+      });
+    });
+
+    it('requires the current active membership and preserves tenant isolation for preparation status', async () => {
+      const adminA = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      const structureB = await createStructure(
+        adminB,
+        '2026',
+        '6° Básico A',
+        'Matemáticas',
+      );
+
+      const statusA = await api(adminA)
+        .get('/api/v1/academic-preparation/status')
+        .expect(200);
+      expect(statusA.body.academicYears.total).toBe(0);
+
+      const statusB = await api(adminB)
+        .get('/api/v1/academic-preparation/status')
+        .expect(200);
+      expect(statusB.body).toMatchObject({
+        status: 'READY',
+        academicYears: {
+          total: 1,
+          selectedActiveYearId: structureB.year.id,
+        },
+        courses: { activeInSelectedYear: 1 },
+      });
+
+      await api(adminA)
+        .get('/api/v1/academic-preparation/status?tenantId=tenant-b')
+        .expect(403);
+
+      const teacher = await token('tenant-a', 'teacher-user', ['TEACHER']);
+      await api(teacher).get('/api/v1/academic-preparation/status').expect(403);
+
+      const systemAdmin = await token('tenant-a', 'system-user', [
+        'SYSTEM_ADMIN',
+      ]);
+      await api(systemAdmin)
+        .get('/api/v1/academic-preparation/status')
+        .expect(403);
+
+      identityInternal.sessionResponse = {
+        active: false,
+        identityUserId: 'admin-b',
+        membershipActive: false,
+        membershipId: 'membership-tenant-b-admin-b',
+        sessionActive: false,
+        sessionId: 'session-tenant-b-admin-b',
+        tenantId: 'tenant-b',
+      };
+      await api(adminB).get('/api/v1/academic-preparation/status').expect(403);
+    });
+
+    it('enforces manual course label uniqueness without assuming global uniqueness across sources', async () => {
+      const adminA = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      const yearA = await post(adminA, '/api/v1/academic-years', {
+        label: '2026',
+        startDate: '2026-03-01',
+        endDate: '2026-12-20',
+      });
+      await patch(adminA, `/api/v1/academic-years/${yearA.id}`, {
+        status: 'ACTIVE',
+      });
+      await post(adminA, '/api/v1/courses', {
+        academicYearId: yearA.id,
+        label: '5° A',
+        status: 'ACTIVE',
+      });
+      await api(adminA)
+        .post('/api/v1/courses')
+        .send({ academicYearId: yearA.id, label: '5° A', status: 'DRAFT' })
+        .expect(409);
+
+      const yearB = await post(adminB, '/api/v1/academic-years', {
+        label: '2026',
+        startDate: '2026-03-01',
+        endDate: '2026-12-20',
+      });
+      await patch(adminB, `/api/v1/academic-years/${yearB.id}`, {
+        status: 'ACTIVE',
+      });
+      await post(adminB, '/api/v1/courses', {
+        academicYearId: yearB.id,
+        label: '5° A',
+        status: 'ACTIVE',
+      });
+
+      await prisma.course.create({
+        data: {
+          tenantId: 'tenant-a',
+          academicYearId: yearA.id,
+          source: 'EDUPAY',
+          externalReference: 'edupay-5-a',
+          label: '5° A',
+          status: 'ACTIVE',
+        },
+      });
+      expect(
+        await prisma.course.count({
+          where: {
+            tenantId: 'tenant-a',
+            academicYearId: yearA.id,
+            label: '5° A',
+          },
+        }),
+      ).toBe(2);
+    });
+
     it('enforces coherent dates and forward-only/read-only year and course lifecycles', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
       await api(admin)

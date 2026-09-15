@@ -19,6 +19,45 @@ export const subjectStatusSchema = z.enum(['ACTIVE', 'ARCHIVED']);
 export const courseSubjectStatusSchema = z.enum(['ACTIVE', 'ARCHIVED']);
 export const relationshipStatusSchema = z.enum(['ACTIVE', 'INACTIVE']);
 
+export const academicPreparationCheckStatusSchema = z.enum([
+  'READY',
+  'ACTION_REQUIRED',
+  'BLOCKED',
+]);
+
+export const academicPreparationCheckSchema = z
+  .object({
+    code: z.enum(['ACADEMIC_YEAR', 'COURSES']),
+    status: academicPreparationCheckStatusSchema,
+    action: z.string().min(1).nullable(),
+    message: z.string().min(1),
+  })
+  .strict();
+
+export const academicPreparationStatusSchema = z
+  .object({
+    scope: z.literal('ACADEMIC_BASE'),
+    status: academicPreparationCheckStatusSchema,
+    ready: z.boolean(),
+    evaluatedAt: timestampSchema,
+    academicYears: z
+      .object({
+        total: z.number().int().nonnegative(),
+        active: z.number().int().nonnegative(),
+        draft: z.number().int().nonnegative(),
+        selectedActiveYearId: opaqueIdSchema.nullable(),
+      })
+      .strict(),
+    courses: z
+      .object({
+        activeInSelectedYear: z.number().int().nonnegative().nullable(),
+        draftInSelectedYear: z.number().int().nonnegative().nullable(),
+      })
+      .strict(),
+    checks: z.array(academicPreparationCheckSchema).length(2),
+  })
+  .strict();
+
 export const cursorQuerySchema = z
   .object({
     cursor: opaqueIdSchema.optional(),
@@ -331,6 +370,9 @@ export const courseSubjectPageSchema = z.object({
 });
 
 export type CursorQuery = z.infer<typeof cursorQuerySchema>;
+export type AcademicPreparationStatus = z.infer<
+  typeof academicPreparationStatusSchema
+>;
 export type PersonListQuery = z.infer<typeof personListQuerySchema>;
 export type CourseListQuery = z.infer<typeof courseListQuerySchema>;
 export type SubjectListQuery = z.infer<typeof subjectListQuerySchema>;

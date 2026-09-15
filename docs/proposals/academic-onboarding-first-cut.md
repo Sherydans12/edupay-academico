@@ -29,15 +29,15 @@ La preparación de este corte significa solamente «existe exactamente un año a
 
 ## Evidencia reutilizable
 
-| Área | Existente | Consecuencia para el corte |
-| --- | --- | --- |
-| API académica | `AcademicAdminController` ya expone `GET/POST/PATCH /api/v1/academic-years` y `GET/POST/PATCH /api/v1/courses`. | No se requiere una nueva entidad para años o cursos. |
-| Reglas de dominio | `AcademicService` ya valida fechas, transiciones, año mutable y que un curso activo pertenezca a un año activo. | El flujo debe guiar las transiciones existentes, no duplicarlas en la UI. |
-| Pantallas | `/administracion` muestra resumen; `/administracion/estructura` contiene las pestañas «Años y Cursos», asignaturas y roster. | El panel de preparación puede incorporarse al resumen y a la primera pestaña. |
-| Contexto de tenant | Académico obtiene el tenant confiable del JWT de Identity y del `membership_id`; los selectores enviados por el cliente no son fuente de autorización. | Todas las lecturas y mutaciones siguen siendo tenant-scoped. |
-| Roles | `academic-structure:administer` está concedido a `TENANT_ADMIN`; `SYSTEM_ADMIN` sin contexto aprobado falla cerrado. | No se agrega acceso implícito de plataforma. |
-| Salud existente | `/api/v1/health/ready` verifica base de datos, storage y scanner. | Es readiness operativo del servicio, no preparación académica del colegio. |
-| Integración BL | `GET /api/v1/sync/status` informa sincronización/configuración heredada. | Se conserva como información separada; no bloquea este corte. |
+| Área               | Existente                                                                                                                                              | Consecuencia para el corte                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| API académica      | `AcademicAdminController` ya expone `GET/POST/PATCH /api/v1/academic-years` y `GET/POST/PATCH /api/v1/courses`.                                        | No se requiere una nueva entidad para años o cursos.                          |
+| Reglas de dominio  | `AcademicService` ya valida fechas, transiciones, año mutable y que un curso activo pertenezca a un año activo.                                        | El flujo debe guiar las transiciones existentes, no duplicarlas en la UI.     |
+| Pantallas          | `/administracion` muestra resumen; `/administracion/estructura` contiene las pestañas «Años y Cursos», asignaturas y roster.                           | El panel de preparación puede incorporarse al resumen y a la primera pestaña. |
+| Contexto de tenant | Académico obtiene el tenant confiable del JWT de Identity y del `membership_id`; los selectores enviados por el cliente no son fuente de autorización. | Todas las lecturas y mutaciones siguen siendo tenant-scoped.                  |
+| Roles              | `academic-structure:administer` está concedido a `TENANT_ADMIN`; `SYSTEM_ADMIN` sin contexto aprobado falla cerrado.                                   | No se agrega acceso implícito de plataforma.                                  |
+| Salud existente    | `/api/v1/health/ready` verifica base de datos, storage y scanner.                                                                                      | Es readiness operativo del servicio, no preparación académica del colegio.    |
+| Integración BL     | `GET /api/v1/sync/status` informa sincronización/configuración heredada.                                                                               | Se conserva como información separada; no bloquea este corte.                 |
 
 Referencias revisadas: [AGENTS.md](../../AGENTS.md), [ADR-0021](../decisions/ADR-0021-ecosystem-domain-ownership-transition.md), [ADR-0022](../decisions/ADR-0022-academic-onboarding-governance-proposal.md), [RUNBOOK](../operations/RUNBOOK.md), [PRODUCTION](../operations/PRODUCTION.md), [AcademicService](../../apps/api/src/academic/academic.service.ts), [AcademicAdminScreen](../../apps/web/src/features/academic-admin.tsx) y [cliente académico](../../apps/web/src/api/academic-client.ts).
 
@@ -90,26 +90,26 @@ La vinculación BL, aun cuando exista un operador autorizado, sigue siendo un pr
 
 ### Endpoints existentes a conservar
 
-| Uso | Endpoint | Permiso/contexto |
-| --- | --- | --- |
-| Contexto local | `GET /api/v1/tenant` | `academic-structure:administer`; tenant confiable |
-| Listar años | `GET /api/v1/academic-years` | `academic-structure:administer` |
-| Crear año | `POST /api/v1/academic-years` | `academic-structure:administer` |
-| Editar/activar año | `PATCH /api/v1/academic-years/:id` | `academic-structure:administer` |
-| Listar cursos | `GET /api/v1/courses?academicYearId=&status=` | `academic-structure:administer` |
-| Crear curso | `POST /api/v1/courses` | `academic-structure:administer` |
-| Editar/activar curso | `PATCH /api/v1/courses/:id` | `academic-structure:administer` |
-| Estado de integración informativo | `GET /api/v1/sync/status` | separado; no es preparación académica |
+| Uso                               | Endpoint                                      | Permiso/contexto                                  |
+| --------------------------------- | --------------------------------------------- | ------------------------------------------------- |
+| Contexto local                    | `GET /api/v1/tenant`                          | `academic-structure:administer`; tenant confiable |
+| Listar años                       | `GET /api/v1/academic-years`                  | `academic-structure:administer`                   |
+| Crear año                         | `POST /api/v1/academic-years`                 | `academic-structure:administer`                   |
+| Editar/activar año                | `PATCH /api/v1/academic-years/:id`            | `academic-structure:administer`                   |
+| Listar cursos                     | `GET /api/v1/courses?academicYearId=&status=` | `academic-structure:administer`                   |
+| Crear curso                       | `POST /api/v1/courses`                        | `academic-structure:administer`                   |
+| Editar/activar curso              | `PATCH /api/v1/courses/:id`                   | `academic-structure:administer`                   |
+| Estado de integración informativo | `GET /api/v1/sync/status`                     | separado; no es preparación académica             |
 
 Identity continúa siendo la fuente de autenticación, membresías, roles y cambio de contexto. Los registros académicos permanecen en la base de Académico y se identifican por el mismo tenant lógico opaco, sin FK entre servicios.
 
-### Endpoint nuevo mínimo propuesto
+### Endpoint nuevo mínimo implementado
 
 Agregar un endpoint de sólo lectura, sin persistencia adicional:
 
 `GET /api/v1/academic-preparation/status`
 
-Debe usar la misma capacidad `academic-structure:administer`, el mismo `TrustedTenantContext` y el mismo patrón de `X-Request-Id`. Un contrato inicial posible es:
+Usa la misma capacidad `academic-structure:administer`, el mismo `TrustedTenantContext`, el mismo patrón de `X-Request-Id` y `@RequireCurrentIdentityStatus()` para que una membresía revocada falle cerrado en tiempo real. Un contrato implementado es:
 
 ```json
 {
@@ -131,11 +131,13 @@ Debe usar la misma capacidad `academic-structure:administer`, el mismo `TrustedT
     {
       "code": "ACADEMIC_YEAR",
       "status": "ACTION_REQUIRED",
+      "action": "Activar un año académico",
       "message": "Activa un año académico."
     },
     {
       "code": "COURSES",
       "status": "ACTION_REQUIRED",
+      "action": "Activar un curso",
       "message": "Activa al menos un curso dentro del año activo."
     }
   ]
@@ -155,15 +157,15 @@ Reglas recomendadas:
 
 ### Faltantes que sí deben resolverse para implementar este corte
 
-| Prioridad | Faltante | Tratamiento propuesto |
-| --- | --- | --- |
-| P0 | Contrato Zod, handler, cliente web y tarjeta UI para el status. | Agregar sólo la lectura derivada anterior, con pruebas de aislamiento tenant. |
-| P0 | Guía de secuencia en el formulario de cursos. | Default `DRAFT`, mensajes de transición y CTA para activar el año antes del curso. |
-| P1 | Política para múltiples años `ACTIVE`. | No cambiar escrituras en este corte; reportar `BLOCKED` y pedir decisión explícita. |
-| P1 | Idempotencia uniforme de creación de años/cursos. | No reintentar automáticamente mutaciones inciertas. Antes de habilitar reintento, revisar si el `CommandReceipt` existente puede reutilizarse fuera de Learning y acordar su contrato. |
-| P1 | Concurrencia de edición. | Hoy no hay versión/ETag; documentar último guardado gana y refrescar tras error. Si se requiere bloqueo optimista, aprobarlo aparte. |
-| P1 | Garantía de unicidad de etiqueta de curso. | La migración inicial registra el índice por `(tenant, academic_year_id, label)`, pero una migración posterior lo reemplaza por un índice parcial para cursos `MANUAL`, y el `schema.prisma` visible no declara ninguno junto a `Course`; reconciliar ledger/schema antes de depender de esa garantía. No crear ni ejecutar migraciones en este corte. |
-| P2 | Historial consultable de validaciones. | Fuera del corte: el status es actual y la auditoría existente registra cambios como logs correlacionados, no una ejecución de onboarding durable. |
+| Prioridad | Faltante                                                        | Tratamiento propuesto                                                                                                                                                                                                                                                                                                                                                  |
+| --------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0        | Contrato Zod, handler, cliente web y tarjeta UI para el status. | Implementado sólo como lectura derivada, con pruebas de aislamiento tenant.                                                                                                                                                                                                                                                                                            |
+| P0        | Guía de secuencia en el formulario de cursos.                   | Implementado con default `DRAFT`, mensajes de transición y CTA para activar el año antes del curso.                                                                                                                                                                                                                                                                    |
+| P1        | Política para múltiples años `ACTIVE`.                          | No cambiar escrituras en este corte; reportar `BLOCKED` y pedir decisión explícita.                                                                                                                                                                                                                                                                                    |
+| P1        | Idempotencia uniforme de creación de años/cursos.               | No reintentar automáticamente mutaciones inciertas. Antes de habilitar reintento, revisar si el `CommandReceipt` existente puede reutilizarse fuera de Learning y acordar su contrato.                                                                                                                                                                                 |
+| P1        | Concurrencia de edición.                                        | Hoy no hay versión/ETag; documentar último guardado gana y refrescar tras error. Si se requiere bloqueo optimista, aprobarlo aparte.                                                                                                                                                                                                                                   |
+| P1        | Garantía de unicidad de etiqueta de curso.                      | Verificada en PostgreSQL 15 aislado aplicando las 10 migraciones: `courses_manual_label_key` es único sólo para `(tenant_id, academic_year_id, label)` cuando `source = MANUAL`. Por eso la carrera MANUAL/MANUAL del mismo tenant/año entrega `409`; no se promete unicidad global entre MANUAL y EDUPAY ni entre tenants. No se creó ni ejecutó una migración nueva. |
+| P2        | Historial consultable de validaciones.                          | Fuera del corte: el status es actual y la auditoría existente registra cambios como logs correlacionados, no una ejecución de onboarding durable.                                                                                                                                                                                                                      |
 
 La respuesta no debe reutilizar `/health/ready`, porque mezclaría una condición del proceso con la preparación del colegio.
 
@@ -177,7 +179,7 @@ El status consulta sólo filas del tenant confiable. Una etiqueta igual en dos t
 
 ### Duplicados y reintentos
 
-Las carreras concurrentes de creación manual deben continuar devolviendo `409` por la restricción parcial de unicidad existente, con un código de error estable para que la UI ofrezca «recargar y revisar». La diferencia entre cursos `MANUAL` y cursos sincronizados debe quedar explícita; no se debe inferir una unicidad global de etiqueta. El cliente no debe repetir un `POST` o `PATCH` después de un `401` renovado ni después de una respuesta de red incierta: primero debe volver a consultar la lista y el status.
+Las carreras concurrentes de creación manual deben continuar devolviendo `409` por la restricción parcial de unicidad existente, con un código de error estable para que la UI ofrezca «recargar y revisar». La diferencia entre cursos `MANUAL` y cursos sincronizados debe quedar explícita; no se debe inferir una unicidad global de etiqueta. Esta semántica fue comprobada en PostgreSQL 15 desechable con todas las migraciones: duplicar MANUAL en el mismo tenant/año falla, mientras que el mismo label en otro tenant y el mismo label EDUPAY en el mismo tenant/año coexisten. El cliente no debe repetir un `POST` o `PATCH` después de un `401` renovado ni después de una respuesta de red incierta: primero debe volver a consultar la lista y el status.
 
 Para una fase posterior de reintentos seguros, se debe evaluar la reutilización de `CommandReceipt`, que ya contiene tenant, actor, comando y clave. No se agrega `OnboardingRun` ni otra tabla sólo para deduplicar comandos. La revisión debe confirmar que el recibo puede cubrir la semántica y retención de estas mutaciones; la implementación actual no demuestra deduplicación completa de años/cursos.
 

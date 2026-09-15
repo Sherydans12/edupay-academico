@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type {
+  AcademicPreparationStatus,
   AssignCourseSubjectTeachers,
   CourseListQuery,
   CourseSubjectListQuery,
@@ -61,6 +62,10 @@ import {
 import { EDUPAY_SOURCE, MANUAL_SOURCE } from '../sync/sync.constants';
 import { FinancialProjectionConfigService } from '../financial-projection/financial-projection-config.service';
 import { FinancialProjectionOutboxService } from '../financial-projection/financial-projection-outbox.service';
+import {
+  evaluateAcademicPreparation,
+  type AcademicPreparationCourseCounts,
+} from './academic-preparation';
 
 const academicYearTransitions: Readonly<
   Record<AcademicYearStatus, readonly AcademicYearStatus[]>
@@ -103,6 +108,45 @@ export class AcademicService {
       createdAt: tenant.createdAt.toISOString(),
       updatedAt: tenant.updatedAt.toISOString(),
     };
+  }
+
+  async academicPreparationStatus(
+    context: AcademicRequestContext,
+  ): Promise<AcademicPreparationStatus> {
+    const scope = this.adminScope(context);
+    const years = await this.prisma.academicYear.findMany({
+      where: { tenantId: scope.tenantId },
+      select: { id: true, status: true },
+    });
+    const activeYears = years.filter((year) => year.status === 'ACTIVE');
+    let courses: AcademicPreparationCourseCounts | null = null;
+
+    if (activeYears.length === 1 && activeYears[0]) {
+      const academicYearId = activeYears[0].id;
+      const [active, draft] = await Promise.all([
+        this.prisma.course.count({
+          where: {
+            tenantId: scope.tenantId,
+            academicYearId,
+            status: 'ACTIVE',
+          },
+        }),
+        this.prisma.course.count({
+          where: {
+            tenantId: scope.tenantId,
+            academicYearId,
+            status: 'DRAFT',
+          },
+        }),
+      ]);
+      courses = { active, draft };
+    }
+
+    return evaluateAcademicPreparation({
+      evaluatedAt: new Date().toISOString(),
+      years,
+      courses,
+    });
   }
 
   async createAcademicYear(
