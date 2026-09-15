@@ -12,7 +12,7 @@ import {
   Select,
   Skeleton,
 } from '@edupay/ui';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 
 import {
@@ -51,6 +51,10 @@ interface AdminData {
   subjectsNextCursor?: string | null;
   studentsTotalCount?: number;
   teachersTotalCount?: number;
+  academicPreparation: Awaited<
+    ReturnType<AcademicApiClient['getAcademicPreparationStatus']>
+  > | null;
+  academicPreparationError: unknown | null;
 }
 
 const emptyData: AdminData = {
@@ -65,6 +69,8 @@ const emptyData: AdminData = {
   subjectsNextCursor: null,
   studentsTotalCount: 0,
   teachersTotalCount: 0,
+  academicPreparation: null,
+  academicPreparationError: null,
 };
 
 function errorMessage(error: unknown): { title: string; message: string } {
@@ -93,54 +99,78 @@ function errorMessage(error: unknown): { title: string; message: string } {
   };
 }
 
-function useAdminData(api: AcademicApiClient) {
+function useAdminData(api: AcademicApiClient, contextKey: string) {
   const [data, setData] = useState<AdminData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const requestSequence = useRef(0);
 
   const reload = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     setLoading(true);
     setError(null);
-    try {
-      const [
-        academicYears,
-        courses,
-        students,
-        teachers,
-        subjects,
-        courseSubjects,
-      ] = await Promise.all([
+    setData((current) => ({
+      ...current,
+      academicPreparation: null,
+      academicPreparationError: null,
+    }));
+
+    const [coreResult, preparationResult] = await Promise.allSettled([
+      Promise.all([
         api.listAcademicYears(),
         api.listCourses(),
         api.listStudents(),
         api.listTeachers(),
         api.listSubjects(),
         api.listCourseSubjects(),
-      ]);
-      setData({
-        academicYears: academicYears.items,
-        courses: courses.items,
-        students: students.items,
-        teachers: teachers.items,
-        subjects: subjects.items,
-        courseSubjects: courseSubjects.items,
-        studentsNextCursor: students.nextCursor,
-        teachersNextCursor: teachers.nextCursor,
-        subjectsNextCursor: subjects.nextCursor,
-        studentsTotalCount: students.totalCount ?? students.items.length,
-        teachersTotalCount: teachers.totalCount ?? teachers.items.length,
-      });
-    } catch (nextError) {
-      setError(nextError);
-    } finally {
+      ]),
+      api.getAcademicPreparationStatus(),
+    ]);
+
+    if (sequence !== requestSequence.current) return;
+
+    if (coreResult.status === 'rejected') {
+      setError(coreResult.reason);
       setLoading(false);
+      return;
     }
+
+    const [
+      academicYears,
+      courses,
+      students,
+      teachers,
+      subjects,
+      courseSubjects,
+    ] = coreResult.value;
+    setData({
+      academicYears: academicYears.items,
+      courses: courses.items,
+      students: students.items,
+      teachers: teachers.items,
+      subjects: subjects.items,
+      courseSubjects: courseSubjects.items,
+      studentsNextCursor: students.nextCursor,
+      teachersNextCursor: teachers.nextCursor,
+      subjectsNextCursor: subjects.nextCursor,
+      studentsTotalCount: students.totalCount ?? students.items.length,
+      teachersTotalCount: teachers.totalCount ?? teachers.items.length,
+      academicPreparation:
+        preparationResult.status === 'fulfilled'
+          ? preparationResult.value
+          : null,
+      academicPreparationError:
+        preparationResult.status === 'rejected'
+          ? preparationResult.reason
+          : null,
+    });
+    setLoading(false);
   }, [api]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void reload(), 0);
     return () => window.clearTimeout(timer);
-  }, [reload]);
+  }, [contextKey, reload]);
 
   return { data, error, loading, reload, setData };
 }
@@ -362,18 +392,238 @@ function SyncStatusOverview({ api }: { api: AcademicApiClient }) {
   );
 }
 
+type PreparationStatus = Awaited<
+  ReturnType<AcademicApiClient['getAcademicPreparationStatus']>
+>['status'];
+
+function preparationStatusLabel(status: PreparationStatus): string {
+  return status === 'READY'
+    ? 'Preparada'
+    : status === 'BLOCKED'
+      ? 'Requiere revisión'
+      : 'Pendiente';
+}
+
+function preparationTone(
+  status: PreparationStatus,
+): 'neutral' | 'success' | 'warning' {
+  return status === 'READY'
+    ? 'success'
+    : status === 'BLOCKED'
+      ? 'warning'
+      : 'neutral';
+}
+
+function AcademicPreparationPanel({
+  data,
+  onRetry,
+  showStructureLink = false,
+}: {
+  data: AdminData;
+  onRetry: () => void;
+  showStructureLink?: boolean;
+}) {
+  const preparation = data.academicPreparation;
+  const preparationError = data.academicPreparationError;
+
+  if (preparationError) {
+    const copy = errorMessage(preparationError);
+    return (
+      <section
+        aria-labelledby="academic-preparation-title"
+        className="academic-panel academic-preparation-panel"
+      >
+        <div className="academic-preparation-panel__header">
+          <div>
+            <h2 id="academic-preparation-title">Preparación académica base</h2>
+            <p>
+              Indicador derivado para año académico y cursos. No representa la
+              preparación completa del colegio.
+            </p>
+          </div>
+          <Badge tone="error">No disponible</Badge>
+        </div>
+        <div className="academic-preparation-panel__error" role="alert">
+          <Icon name="alert-triangle" />
+          <div>
+            <strong>No pudimos validar la estructura base</strong>
+            <p>
+              {copy.message} No mostramos un estado listo hasta obtener una
+              respuesta válida.
+            </p>
+          </div>
+          <Button onClick={onRetry} size="sm" variant="secondary">
+            Reintentar validación
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  if (!preparation) return null;
+
+  const yearCheck = preparation.checks.find(
+    (check) => check.code === 'ACADEMIC_YEAR',
+  );
+  const courseCheck = preparation.checks.find(
+    (check) => check.code === 'COURSES',
+  );
+  const selectedYear = preparation.academicYears.selectedActiveYearId
+    ? data.academicYears.find(
+        (year) => year.id === preparation.academicYears.selectedActiveYearId,
+      )
+    : null;
+  const overallMessage =
+    preparation.status === 'READY'
+      ? `La estructura base está lista para continuar con asignaturas y personas${selectedYear ? ` en ${selectedYear.label}` : ''}.`
+      : preparation.status === 'BLOCKED'
+        ? 'Resuelve la revisión indicada antes de considerar lista la estructura base.'
+        : (yearCheck?.message ??
+          courseCheck?.message ??
+          'Completa los pasos pendientes.');
+  const steps = [
+    {
+      label: 'Año académico',
+      status: yearCheck?.status ?? 'ACTION_REQUIRED',
+      detail:
+        preparation.academicYears.active === 1
+          ? 'Un año activo'
+          : `${preparation.academicYears.active} activos`,
+    },
+    {
+      label: 'Cursos',
+      status: courseCheck?.status ?? 'ACTION_REQUIRED',
+      detail:
+        preparation.courses.activeInSelectedYear === null
+          ? 'Espera el año activo'
+          : `${preparation.courses.activeInSelectedYear} activos${
+              preparation.courses.draftInSelectedYear
+                ? ` · ${preparation.courses.draftInSelectedYear} borrador${
+                    preparation.courses.draftInSelectedYear === 1 ? '' : 'es'
+                  }`
+                : ''
+            }`,
+    },
+    {
+      label: 'Validación',
+      status: preparation.status,
+      detail: preparationStatusLabel(preparation.status),
+    },
+  ];
+
+  return (
+    <section
+      aria-labelledby="academic-preparation-title"
+      className="academic-panel academic-preparation-panel"
+    >
+      <div className="academic-preparation-panel__header">
+        <div>
+          <h2 id="academic-preparation-title">Preparación académica base</h2>
+          <p>
+            Sigue la ruta mínima para dejar listo el año y sus cursos. Este
+            indicador no evalúa asignaturas, personas ni matrículas.
+          </p>
+        </div>
+        <Badge tone={preparationTone(preparation.status)}>
+          {preparationStatusLabel(preparation.status)}
+        </Badge>
+      </div>
+
+      <div
+        aria-label="Ruta de preparación: año, cursos y validación"
+        className="academic-preparation-route"
+        role="list"
+      >
+        {steps.map((step, index) => (
+          <div
+            className={`academic-preparation-step academic-preparation-step--${step.status.toLowerCase()}`}
+            key={step.label}
+            role="listitem"
+          >
+            <span className="academic-preparation-step__marker">
+              {step.status === 'READY' ? <Icon name="check" /> : index + 1}
+            </span>
+            <span>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div
+        className="academic-preparation-summary"
+        aria-label="Resumen de preparación"
+      >
+        <div>
+          <strong>{preparation.academicYears.total}</strong>
+          <span>años académicos</span>
+        </div>
+        <div>
+          <strong>
+            {preparation.courses.activeInSelectedYear === null
+              ? '—'
+              : preparation.courses.activeInSelectedYear}
+          </strong>
+          <span>cursos activos en el año seleccionado</span>
+        </div>
+      </div>
+
+      <div
+        className={`academic-preparation-next academic-preparation-next--${preparation.status.toLowerCase()}`}
+        role="status"
+      >
+        <Icon
+          name={preparation.status === 'READY' ? 'check' : 'alert-triangle'}
+        />
+        <div>
+          <strong>
+            {preparation.status === 'READY'
+              ? 'Estructura base preparada'
+              : (yearCheck?.action ??
+                courseCheck?.action ??
+                'Revisar estructura')}
+          </strong>
+          <p>{overallMessage}</p>
+        </div>
+        {showStructureLink && preparation.status !== 'READY' ? (
+          <a
+            className="academic-preparation-panel__link"
+            href="/administracion/estructura"
+          >
+            Abrir estructura <Icon name="chevron-right" />
+          </a>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function AdminOverview({
   api,
   data,
+  onRetryPreparation,
 }: {
   api: AcademicApiClient;
   data: AdminData;
+  onRetryPreparation: () => void;
 }) {
-  const currentYear =
-    data.academicYears.find((year) => year.status === 'ACTIVE') ??
-    data.academicYears[0];
+  const activeYears = data.academicYears.filter(
+    (year) => year.status === 'ACTIVE',
+  );
+  const currentYearLabel =
+    activeYears.length === 1
+      ? activeYears[0]?.label
+      : activeYears.length > 1
+        ? 'Varios activos'
+        : '—';
   return (
     <>
+      <AcademicPreparationPanel
+        data={data}
+        onRetry={onRetryPreparation}
+        showStructureLink
+      />
       <Alert title="Datos académicos reales" tone="success">
         Esta vista usa registros del Academic Structure API. Credenciales,
         membresías y sesiones pertenecen a EduPay Identity.
@@ -402,8 +652,12 @@ function AdminOverview({
             <Icon name="calendar" />
           </span>
           <div>
-            <strong>{currentYear?.label ?? '—'}</strong>
-            <small>año académico activo</small>
+            <strong>{currentYearLabel}</strong>
+            <small>
+              {activeYears.length > 1
+                ? 'años académicos activos'
+                : 'año académico activo'}
+            </small>
           </div>
         </Card>
       </div>
@@ -533,9 +787,13 @@ function CourseForm({
     data.academicYears[0]?.id ?? '',
   );
   const [label, setLabel] = useState('');
-  const [status, setStatus] = useState<'DRAFT' | 'ACTIVE'>('ACTIVE');
+  const [status, setStatus] = useState<'DRAFT' | 'ACTIVE'>('DRAFT');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const selectedYear = data.academicYears.find(
+    (year) => year.id === academicYearId,
+  );
+  const canCreateActive = selectedYear?.status === 'ACTIVE';
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -561,8 +819,18 @@ function CourseForm({
           id="new-course-year"
           label="Año académico"
           value={academicYearId}
-          onChange={(e) => setAcademicYearId(e.target.value)}
+          onChange={(e) => {
+            const nextYearId = e.target.value;
+            setAcademicYearId(nextYearId);
+            if (
+              data.academicYears.find((year) => year.id === nextYearId)
+                ?.status !== 'ACTIVE'
+            ) {
+              setStatus('DRAFT');
+            }
+          }}
         >
+          <option value="">Selecciona un año</option>
           {data.academicYears.map((year) => (
             <option key={year.id} value={year.id}>
               {year.label}
@@ -580,10 +848,17 @@ function CourseForm({
         <Select
           id="new-course-status"
           label="Estado"
+          hint={
+            canCreateActive
+              ? 'Puedes activar el curso ahora o dejarlo en borrador.'
+              : 'Los cursos se activan después de activar su año académico.'
+          }
           value={status}
           onChange={(e) => setStatus(e.target.value as 'DRAFT' | 'ACTIVE')}
         >
-          <option value="ACTIVE">Activo</option>
+          <option disabled={!canCreateActive} value="ACTIVE">
+            Activo
+          </option>
           <option value="DRAFT">Borrador</option>
         </Select>
       </div>
@@ -600,6 +875,50 @@ function CourseForm({
         Crear curso
       </Button>
     </form>
+  );
+}
+
+function ActivateAcademicRecord({
+  label,
+  onActivate,
+  onSaved,
+}: {
+  label: string;
+  onActivate: () => Promise<unknown>;
+  onSaved: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  async function activate() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onActivate();
+      onSaved();
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="academic-lifecycle-action">
+      <Button
+        loading={saving}
+        onClick={() => void activate()}
+        size="sm"
+        variant="secondary"
+      >
+        {label}
+      </Button>
+      {error ? (
+        <span className="form-error" role="alert">
+          {errorMessage(error).message}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -1270,10 +1589,12 @@ function StructureView({
   api,
   data,
   onSaved,
+  onRetryPreparation,
 }: {
   api: AcademicApiClient;
   data: AdminData;
   onSaved: () => void;
+  onRetryPreparation: () => void;
 }) {
   const [selectedCourseId, setSelectedCourseId] = useState(
     data.courses[0]?.id ?? '',
@@ -1287,6 +1608,7 @@ function StructureView({
 
   return (
     <div className="academic-stack">
+      <AcademicPreparationPanel data={data} onRetry={onRetryPreparation} />
       <div className="admin-tabs-nav" role="tablist">
         <button
           aria-selected={activeTab === 'years-courses'}
@@ -1338,6 +1660,7 @@ function StructureView({
                     <th>Nombre</th>
                     <th>Periodo</th>
                     <th>Estado</th>
+                    <th>Acción</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1357,6 +1680,21 @@ function StructureView({
                         >
                           {statusLabel(year.status)}
                         </Badge>
+                      </td>
+                      <td data-label="Acción">
+                        {year.status === 'DRAFT' ? (
+                          <ActivateAcademicRecord
+                            label="Activar año"
+                            onActivate={() =>
+                              api.updateAcademicYear(year.id, {
+                                status: 'ACTIVE',
+                              })
+                            }
+                            onSaved={onSaved}
+                          />
+                        ) : (
+                          <span className="table-muted">Sin acción</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1382,6 +1720,54 @@ function StructureView({
               </div>
             </div>
             <CourseForm api={api} data={data} onSaved={onSaved} />
+            {data.courses.length ? (
+              <div className="course-readiness-list">
+                <div className="course-readiness-list__heading">
+                  <div>
+                    <h3>Cursos creados</h3>
+                    <p>
+                      Activa los cursos después de activar su año académico.
+                    </p>
+                  </div>
+                  <span>{data.courses.length} total</span>
+                </div>
+                {data.courses.map((course) => {
+                  const courseYear = data.academicYears.find(
+                    (year) => year.id === course.academicYearId,
+                  );
+                  return (
+                    <div className="course-readiness-row" key={course.id}>
+                      <div>
+                        <strong>{course.label}</strong>
+                        <span>
+                          {courseYear?.label ?? 'Año no disponible'}
+                          {course.source === 'EDUPAY' ? ' · EduPay' : ''}
+                        </span>
+                      </div>
+                      <Badge
+                        tone={
+                          course.status === 'ACTIVE' ? 'success' : 'neutral'
+                        }
+                      >
+                        {statusLabel(course.status)}
+                      </Badge>
+                      {course.status === 'DRAFT' &&
+                      course.source !== 'EDUPAY' ? (
+                        <ActivateAcademicRecord
+                          label="Activar curso"
+                          onActivate={() =>
+                            api.updateCourse(course.id, { status: 'ACTIVE' })
+                          }
+                          onSaved={onSaved}
+                        />
+                      ) : (
+                        <span className="table-muted">Sin acción</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             <div className="course-select-bar">
               <Select
                 id="structure-course"
@@ -2401,7 +2787,8 @@ export function AcademicAdminScreen({
 }) {
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const currentSession = useTrustedCurrentSession(session).session;
-  const { data, error, loading, reload } = useAdminData(client);
+  const contextKey = `${currentSession.tenantId}:${currentSession.membershipId}`;
+  const { data, error, loading, reload } = useAdminData(client, contextKey);
 
   return (
     <AppShell dataMode="real" session={currentSession}>
@@ -2423,12 +2810,17 @@ export function AcademicAdminScreen({
       />
       <DataState error={error} loading={loading} onRetry={() => void reload()}>
         {view === 'overview' ? (
-          <AdminOverview api={client} data={data} />
+          <AdminOverview
+            api={client}
+            data={data}
+            onRetryPreparation={() => void reload()}
+          />
         ) : view === 'structure' ? (
           <StructureView
             api={client}
             data={data}
             onSaved={() => void reload()}
+            onRetryPreparation={() => void reload()}
           />
         ) : (
           <PeopleView

@@ -1,6 +1,7 @@
 import {
   academicYearPageSchema,
   academicYearSchema,
+  academicPreparationStatusSchema,
   courseEnrollmentSchema,
   coursePageSchema,
   courseRosterItemSchema,
@@ -89,6 +90,7 @@ import {
   type StorageReconciliationOptions,
   type StorageReconciliationReport,
   type CreateAcademicYear,
+  type AcademicPreparationStatus,
   type CreateCourse,
   type CreateCourseEnrollment,
   type CreateCourseSubject,
@@ -410,6 +412,12 @@ export class AcademicApiClient {
 
   getTenant() {
     return this.request('tenant', tenantSchema);
+  }
+  getAcademicPreparationStatus(): Promise<AcademicPreparationStatus> {
+    return this.request(
+      'academic-preparation/status',
+      academicPreparationStatusSchema,
+    );
   }
   getSyncStatus(): Promise<SyncStatus> {
     return this.request('sync/status', syncStatusSchema);

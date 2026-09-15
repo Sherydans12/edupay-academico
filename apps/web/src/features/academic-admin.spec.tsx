@@ -48,6 +48,37 @@ const course = {
   updatedAt: timestamp,
 };
 
+const academicPreparation = {
+  scope: 'ACADEMIC_BASE' as const,
+  status: 'READY' as const,
+  ready: true,
+  evaluatedAt: timestamp,
+  academicYears: {
+    total: 1,
+    active: 1,
+    draft: 0,
+    selectedActiveYearId: id,
+  },
+  courses: {
+    activeInSelectedYear: 1,
+    draftInSelectedYear: 0,
+  },
+  checks: [
+    {
+      code: 'ACADEMIC_YEAR' as const,
+      status: 'READY' as const,
+      action: null,
+      message: 'Hay un único año académico activo.',
+    },
+    {
+      code: 'COURSES' as const,
+      status: 'READY' as const,
+      action: null,
+      message: 'Hay cursos activos en el año académico seleccionado.',
+    },
+  ],
+};
+
 const subject1 = {
   id,
   name: 'Lenguaje y Comunicación',
@@ -122,6 +153,7 @@ function adminClient(
   return {
     listAcademicYears: vi.fn(async () => ({ items: [year], nextCursor: null })),
     listCourses: vi.fn(async () => ({ items: [course], nextCursor: null })),
+    getAcademicPreparationStatus: vi.fn(async () => academicPreparation),
     listStudents: vi.fn(async () => ({
       items: [studentEduPay, studentManual],
       nextCursor: null,
@@ -289,6 +321,12 @@ describe('Academic admin screens', () => {
       await screen.findByRole('heading', { name: 'Administración académica' }),
     ).toBeTruthy();
     expect(
+      await screen.findByRole('heading', {
+        name: 'Preparación académica base',
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText('Estructura base preparada')).toBeTruthy();
+    expect(
       await screen.findByRole('heading', { name: 'Sincronización EduPay' }),
     ).toBeTruthy();
     expect(screen.getByText(/colegio-conquistadores/)).toBeTruthy();
@@ -296,6 +334,29 @@ describe('Academic admin screens', () => {
       await screen.findByRole('heading', { name: 'Almacenamiento del tenant' }),
     ).toBeTruthy();
     expect(screen.getByText('12%')).toBeTruthy();
+  });
+
+  it('does not show READY when preparation status cannot be queried', async () => {
+    const client = adminClient({
+      getAcademicPreparationStatus: vi.fn(async () => {
+        throw new AcademicApiError({
+          code: 'REQUEST_FAILED',
+          details: [],
+          message: 'status unavailable',
+          requestId: 'req-preparation',
+          status: 503,
+        });
+      }),
+    });
+    render(<AcademicAdminScreen api={client} view="overview" />);
+
+    expect(
+      await screen.findByText('No pudimos validar la estructura base'),
+    ).toBeTruthy();
+    expect(screen.queryByText('Estructura base preparada')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Reintentar validación' }),
+    ).toBeTruthy();
   });
 
   it('renders structure view with years, courses and switches between tabs', async () => {
