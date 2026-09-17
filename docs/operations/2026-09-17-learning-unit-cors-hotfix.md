@@ -11,6 +11,8 @@ Estado: **HOTFIX ACTIVO; CONFIRMACIÓN DE USUARIO PENDIENTE**.
 - Base del hotfix: `origin/main` en `a7b0f79d2313ce7883a2e46375b3c4092fd6b448`.
 - Commit del hotfix: `ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7` (rama
   `codex/hotfix-cors-learning-unit`, publicada en `origin`).
+- Integración en `main`: merge `ff66abc`; inventario actualizado en
+  `73957e1`.
 
 ## Causa demostrada
 
