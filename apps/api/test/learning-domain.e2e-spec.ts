@@ -62,6 +62,7 @@ describe.runIf(testDatabaseUrl)(
         vi.stubEnv(key, value);
       }
       vi.stubEnv('DATABASE_URL', testDatabaseUrl as string);
+      vi.stubEnv('ACADEMIC_TRUSTED_WEB_ORIGINS', 'http://localhost:3000');
 
       const { AppModule } = await import('../src/app.module');
       const testingModule = await Test.createTestingModule({
@@ -118,6 +119,75 @@ describe.runIf(testDatabaseUrl)(
       await prisma.syncConfiguration.deleteMany();
       await prisma.academicYear.deleteMany();
       await prisma.tenant.deleteMany();
+    });
+
+    it('supports the real browser preflight and preserves teacher auth and idempotency', async () => {
+      const admin = await token('cors-unit', 'admin-cors', ['TENANT_ADMIN']);
+      const structure = await createStructure(admin, '8° A', 'Química');
+      const teacher = await createTeacher(admin, 'Elena', 'Preflight');
+      await linkTeacher(teacher.id, 'teacher-cors', admin);
+      await post(admin, '/api/v1/course-subject-teachers', {
+        courseSubjectId: structure.courseSubject.id,
+        teacherIds: [teacher.id],
+      });
+      const teacherToken = await token('cors-unit', 'teacher-cors', [
+        'TEACHER',
+      ]);
+      const idempotencyKey = 'cors-unit-create-1';
+      const payload = {
+        courseSubjectId: structure.courseSubject.id,
+        title: 'Reacciones sintéticas',
+      };
+      const requestedHeaders =
+        'authorization,content-type,idempotency-key,x-request-id';
+
+      const preflight = await request(application.getHttpServer())
+        .options('/api/v1/learning-units')
+        .set('Origin', 'http://localhost:3000')
+        .set('Access-Control-Request-Method', 'POST')
+        .set('Access-Control-Request-Headers', requestedHeaders)
+        .expect(204);
+      expect(preflight.headers['access-control-allow-origin']).toBe(
+        'http://localhost:3000',
+      );
+      expect(preflight.headers['access-control-allow-headers']).toContain(
+        'Idempotency-Key',
+      );
+
+      await request(application.getHttpServer())
+        .post('/api/v1/learning-units')
+        .set('Origin', 'http://localhost:3000')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(401);
+
+      const created = await api(teacherToken)
+        .post('/api/v1/learning-units')
+        .set('Origin', 'http://localhost:3000')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(201);
+      expect(created.headers['access-control-allow-origin']).toBe(
+        'http://localhost:3000',
+      );
+
+      const replay = await api(teacherToken)
+        .post('/api/v1/learning-units')
+        .set('Origin', 'http://localhost:3000')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(201);
+      expect(replay.body.id).toBe(created.body.id);
+
+      const changedPayload = await api(teacherToken)
+        .post('/api/v1/learning-units')
+        .set('Origin', 'http://localhost:3000')
+        .set('Idempotency-Key', idempotencyKey)
+        .send({ ...payload, title: 'Payload alterado' })
+        .expect(409);
+      expect(apiErrorEnvelopeSchema.parse(changedPayload.body).error.code).toBe(
+        'IDEMPOTENCY_KEY_REUSED',
+      );
     });
 
     afterAll(async () => {
