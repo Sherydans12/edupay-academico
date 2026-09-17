@@ -1,6 +1,6 @@
 # Hotfix CORS para creación de unidades — 2026-09-17
 
-Estado inicial: **PREPARADO PARA PUBLICACIÓN**.
+Estado: **HOTFIX ACTIVO; CONFIRMACIÓN DE USUARIO PENDIENTE**.
 
 ## Alcance
 
@@ -9,6 +9,8 @@ Estado inicial: **PREPARADO PARA PUBLICACIÓN**.
 - No se modifican frontend, Identity, workers, bases, flags ni permisos de
   negocio.
 - Base del hotfix: `origin/main` en `a7b0f79d2313ce7883a2e46375b3c4092fd6b448`.
+- Commit del hotfix: `ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7` (rama
+  `codex/hotfix-cors-learning-unit`, publicada en `origin`).
 
 ## Causa demostrada
 
@@ -69,8 +71,37 @@ ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073
 
 ## Despliegue y rollback
 
-Pendiente de publicación. Antes del cambio se capturó en la VPS, con permisos
-restringidos y fuera de Git:
+El build `runtime` terminó en la VPS. El primer intento de push fue rechazado
+por scopes del token del registry; tras reautenticar de forma controlada, la
+imagen quedó publicada en GHCR con el digest:
+
+```text
+ghcr.io/sherydans12/edupay-academico@sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767
+```
+
+El image ID local coincide con ese digest (`sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767`).
+La primera activación operativa fue el `2026-09-17 19:42 UTC`, mediante
+`docker compose` sobre el Compose administrado por Coolify, con override
+efímero y `up -d --no-deps --pull never academic-api`; la aplicación final de
+la configuración persistida en Coolify terminó a las `19:50 UTC`.
+
+Resultado del recurso:
+
+- contenedor anterior: `f439ba8252dd5aa5d57550670a85af8b1daee4ef80d8dc18f1c2b1e755e9c4b2`;
+- contenedor hotfix final: `63a210328f996fb0169243e4a913ddf2a0180856970f4a829a368e7f027d9b06`;
+- estado hotfix: `running`, `healthy`;
+- no se ejecutó runner de migraciones, no se tocaron workers ni volúmenes.
+
+La primera recreación efímera (`231468b3b45e4254fe89ddec7c4313260b3285ae1fca56f8ae4887853b95b85`)
+quedó operativa. Al intentar reconciliar directamente antes de que Coolify
+regenerara su Compose, éste todavía apuntaba al digest anterior y creó
+brevemente el contenedor viejo `11fcd5f161c0b5dcbc1fce4e2e922998cfa060d97cdcf80c24f9a99b809ec44`.
+No fue un rollback por fallo de gate ni hubo cambio de datos; la acción de
+arranque de Coolify aplicó inmediatamente el digest nuevo y dejó el contenedor
+final healthy. Queda documentado como incidente operativo de aplicación, no
+como estado final.
+
+Antes del cambio se capturó en la VPS, con permisos restringidos y fuera de Git:
 
 ```text
 /root/edupay-hotfix-cors-20260917-pre
@@ -78,11 +109,21 @@ restringidos y fuera de Git:
 
 Incluye inspect del contenedor/imagen, Compose efectivo y el tag local
 `ghcr.io/sherydans12/edupay-academico:rollback-cors-20260917` apuntando al
-digest anterior. Se desplegará sólo el subrecurso del API; no se relanzará el
-runner de migraciones ni se tocarán workers o volúmenes.
+digest anterior. La configuración final de Coolify quedó fijada al digest
+nuevo y su arranque mostró `Pulling images`, `Pulled`, `Recreate` y `Started`
+para `academic-api` únicamente.
 
-Tras publicar, completar aquí el SHA del hotfix, digest, deployment Coolify,
-resultado del preflight posterior, live/ready, acceso normal y si hubo rollback.
+Rollback por recurso: restaurar la imagen anterior en el Compose efectivo y
+recrear sólo `academic-api` con `--no-deps`; el tag anterior está preservado en
+el snapshot indicado. No hubo rollback.
+
+Preflight posterior público: `204`; `Access-Control-Allow-Origin` coincide
+exactamente con `https://academico.edupay.baselogic.cl` y
+`Access-Control-Allow-Headers` ahora incluye `Idempotency-Key` junto con
+`Content-Type`, `Authorization` y `X-Request-Id`. El origen no autorizado
+continuó sin permiso CORS (`404`, sin headers de allow). Live y ready
+respondieron `200`. Un `POST` sin autenticación respondió `401`; no se creó
+ninguna unidad real.
 
 ## 404 independientes
 
@@ -93,10 +134,12 @@ resultado del preflight posterior, live/ready, acceso normal y si hubo rollback.
   de `apps/web/src/features/course-builder/course-builder.tsx` apunta a esa
   ruta, pero el árbol Next sólo contiene la página de la asignatura y `items`;
   no existe el segmento `estudiantes`. La respuesta observada incluye headers
-  `Vary: rsc` y `Next-Router-Prefetch`, consistente con un prefetch RSC, pero la
-  navegación directa a la misma ruta también es `404`. Es un defecto frontend
-  independiente: crear la ruta de roster o cambiar el enlace a la interacción
-  existente, con su propia prueba y release; no se incluye en este hotfix.
+  `Vary: rsc, next-router-state-tree, next-router-prefetch,
+next-router-segment-prefetch, Accept-Encoding`, consistente con un prefetch
+  RSC, pero la navegación directa a la misma ruta también es `404`. Es un
+  defecto frontend independiente: crear la ruta de roster o cambiar el enlace
+  a la interacción existente, con su propia prueba y release; no se incluye en
+  este hotfix.
 
 Confirmación pendiente: el usuario debe crear una unidad desde su sesión de
 profesor después de verificar el hotfix. Health y preflight correctos no se
