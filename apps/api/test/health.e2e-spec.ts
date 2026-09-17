@@ -91,4 +91,42 @@ describe('Health endpoint (e2e)', () => {
 
     expect(untrusted.headers['access-control-allow-origin']).toBeUndefined();
   });
+
+  it('allows the browser preflight used by learning mutations', async () => {
+    const requestedHeaders =
+      'authorization,content-type,idempotency-key,x-request-id';
+    const trusted = await request(application.getHttpServer())
+      .options('/api/v1/learning-units')
+      .set('Origin', 'http://localhost:3000')
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', requestedHeaders)
+      .expect(204);
+
+    expect(trusted.headers['access-control-allow-origin']).toBe(
+      'http://localhost:3000',
+    );
+    const allowMethods = trusted.headers['access-control-allow-methods'] ?? '';
+    const allowHeaders = trusted.headers['access-control-allow-headers'] ?? '';
+    expect(allowMethods.split(',')).toEqual(expect.arrayContaining(['POST']));
+    expect(
+      allowHeaders.split(',').map((header) => header.trim().toLowerCase()),
+    ).toEqual(
+      expect.arrayContaining([
+        'authorization',
+        'content-type',
+        'idempotency-key',
+        'x-request-id',
+      ]),
+    );
+
+    const untrusted = await request(application.getHttpServer())
+      .options('/api/v1/learning-units')
+      .set('Origin', 'https://evil.example')
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', requestedHeaders)
+      .expect(404);
+
+    expect(untrusted.headers['access-control-allow-origin']).toBeUndefined();
+    expect(untrusted.headers['access-control-allow-headers']).toBeUndefined();
+  });
 });
