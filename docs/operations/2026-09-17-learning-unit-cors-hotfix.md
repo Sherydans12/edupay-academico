@@ -137,12 +137,13 @@ ninguna unidad real.
   ruta, pero el árbol Next sólo contiene la página de la asignatura y `items`;
   no existe el segmento `estudiantes`. La respuesta observada incluye headers
   `Vary: rsc, next-router-state-tree, next-router-prefetch,
-next-router-segment-prefetch, Accept-Encoding`, consistente con un prefetch
+  next-router-segment-prefetch, Accept-Encoding`, consistente con un prefetch
   RSC, pero la navegación directa a la misma ruta también es `404`. Es un
   defecto frontend independiente: crear la ruta de roster o cambiar el enlace
   a la interacción existente, con su propia prueba y release; no se incluye en
   este hotfix.
 
-Confirmación pendiente: el usuario debe crear una unidad desde su sesión de
-profesor después de verificar el hotfix. Health y preflight correctos no se
-consideran prueba de creación real.
+Confirmación del usuario: **2026-09-17 — creación de unidades confirmada como
+funcional desde su sesión de profesor**. Esta confirmación se limita al flujo
+de unidades y no implica validación de los 404 independientes ni del presente
+flujo de recuperación de contraseña.
