@@ -13,6 +13,7 @@ import { ApiTags } from '@nestjs/swagger';
 import {
   academicYearPageSchema,
   academicYearSchema,
+  academicPreparationStatusSchema,
   assignCourseSubjectTeachersSchema,
   courseEnrollmentSchema,
   courseListQuerySchema,
@@ -100,6 +101,13 @@ export class AcademicAdminController {
   @ContractResponse(tenantSchema)
   tenant(): Promise<object> {
     return this.academics.currentTenant(this.context());
+  }
+
+  @Get('academic-preparation/status')
+  @RequireCurrentIdentityStatus()
+  @ContractResponse(academicPreparationStatusSchema)
+  academicPreparationStatus(): Promise<object> {
+    return this.academics.academicPreparationStatus(this.context());
   }
 
   @Post('academic-years')
