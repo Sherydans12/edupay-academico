@@ -73,6 +73,22 @@ const emptyData: AdminData = {
   academicPreparationError: null,
 };
 
+function preferredAcademicYearId(
+  data: Pick<AdminData, 'academicYears' | 'academicPreparation'>,
+): string {
+  const selectedActiveYearId =
+    data.academicPreparation?.academicYears.selectedActiveYearId;
+  if (selectedActiveYearId) return selectedActiveYearId;
+
+  const activeYears = data.academicYears.filter(
+    (year) => year.status === 'ACTIVE',
+  );
+  if (activeYears.length === 1) return activeYears[0]?.id ?? '';
+  if (activeYears.length > 1) return '';
+
+  return data.academicYears.find((year) => year.status === 'DRAFT')?.id ?? '';
+}
+
 function errorMessage(error: unknown): { title: string; message: string } {
   if (error instanceof AcademicApiError) {
     if (error.status === 401)
@@ -82,6 +98,12 @@ function errorMessage(error: unknown): { title: string; message: string } {
         title: 'Sin permiso para este espacio',
         message:
           'Tu sesión está autenticada, pero tu rol no puede administrar la estructura académica de este tenant.',
+      };
+    }
+    if (error.status === 409) {
+      return {
+        title: 'La configuración entra en conflicto',
+        message: error.message,
       };
     }
     return {
@@ -784,7 +806,7 @@ function CourseForm({
   onSaved: () => void;
 }) {
   const [academicYearId, setAcademicYearId] = useState(
-    data.academicYears[0]?.id ?? '',
+    preferredAcademicYearId(data),
   );
   const [label, setLabel] = useState('');
   const [status, setStatus] = useState<'DRAFT' | 'ACTIVE'>('DRAFT');
@@ -934,6 +956,7 @@ function SubjectCatalog({
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [editSubject, setEditSubject] = useState<
     AdminData['subjects'][number] | null
   >(null);
@@ -945,9 +968,11 @@ function SubjectCatalog({
     if (!name.trim()) return;
     setSaving(true);
     setError('');
+    setSuccess('');
     try {
       await api.createSubject({ name: name.trim() });
       setName('');
+      setSuccess('La asignatura quedó disponible en el catálogo del tenant.');
       onSaved();
     } catch (nextError) {
       setError(errorMessage(nextError).message);
@@ -961,9 +986,11 @@ function SubjectCatalog({
     if (!editSubject || !editName.trim()) return;
     setSaving(true);
     setActionError('');
+    setSuccess('');
     try {
       await api.updateSubject(editSubject.id, { name: editName.trim() });
       setEditSubject(null);
+      setSuccess('El nombre de la asignatura se actualizó.');
       onSaved();
     } catch (nextError) {
       setActionError(errorMessage(nextError).message);
@@ -974,8 +1001,10 @@ function SubjectCatalog({
 
   async function archiveSubject(id: string) {
     setActionError('');
+    setSuccess('');
     try {
       await api.updateSubject(id, { status: 'ARCHIVED' });
+      setSuccess('La asignatura se archivó y su historia quedó conservada.');
       onSaved();
     } catch (nextError) {
       setActionError(errorMessage(nextError).message);
@@ -995,6 +1024,11 @@ function SubjectCatalog({
       {actionError ? (
         <Alert title="Error al actualizar asignatura" tone="error">
           {actionError}
+        </Alert>
+      ) : null}
+      {success ? (
+        <Alert title="Catálogo actualizado" tone="success">
+          {success}
         </Alert>
       ) : null}
       <form className="academic-form" onSubmit={createSubjectSubmit}>
@@ -1124,11 +1158,13 @@ function CourseSubjectTeacherManager({
   api,
   courseSubjectId,
   teachers,
+  readOnly = false,
   onUpdated,
 }: {
   api: AcademicApiClient;
   courseSubjectId: string;
   teachers: AdminData['teachers'];
+  readOnly?: boolean;
   onUpdated: () => void;
 }) {
   const [assigned, setAssigned] = useState<
@@ -1157,7 +1193,7 @@ function CourseSubjectTeacherManager({
 
   async function handleAssign(e: FormEvent) {
     e.preventDefault();
-    if (!selectedTeacherId) return;
+    if (!selectedTeacherId || readOnly) return;
     setBusy(true);
     setError('');
     try {
@@ -1176,6 +1212,7 @@ function CourseSubjectTeacherManager({
   }
 
   async function handleUnassign(assignmentId: string) {
+    if (readOnly) return;
     setBusy(true);
     setError('');
     try {
@@ -1211,7 +1248,7 @@ function CourseSubjectTeacherManager({
               <button
                 aria-label={`Desasignar a ${item.teacher?.firstName ?? 'profesor'}`}
                 className="chip-remove-button"
-                disabled={busy}
+                disabled={busy || readOnly}
                 type="button"
                 onClick={() => void handleUnassign(item.id)}
               >
@@ -1224,7 +1261,7 @@ function CourseSubjectTeacherManager({
         <p className="empty-subtext">Sin profesores asignados actualmente.</p>
       )}
 
-      {availableTeachers.length > 0 ? (
+      {availableTeachers.length > 0 && !readOnly ? (
         <form className="assign-teacher-inline" onSubmit={handleAssign}>
           <Select
             id={`assign-teacher-${courseSubjectId}`}
@@ -1248,6 +1285,12 @@ function CourseSubjectTeacherManager({
             Asignar
           </Button>
         </form>
+      ) : null}
+      {readOnly ? (
+        <p className="empty-subtext">
+          El año o curso está cerrado; las asignaciones existentes se conservan
+          y no se pueden modificar.
+        </p>
       ) : null}
       {error ? (
         <p className="form-error" role="alert">
@@ -1274,6 +1317,7 @@ function CourseSubjectManagement({
   const [sortOrder, setSortOrder] = useState('0');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [editItem, setEditItem] = useState<
     AdminData['courseSubjects'][number] | null
   >(null);
@@ -1283,6 +1327,18 @@ function CourseSubjectManagement({
   const courseSubjects = data.courseSubjects.filter(
     (cs) => cs.courseId === selectedCourse.id,
   );
+  const courseYear = data.academicYears.find(
+    (year) => year.id === selectedCourse.academicYearId,
+  );
+  const canMutate = Boolean(
+    courseYear &&
+    !['CLOSED', 'ARCHIVED'].includes(courseYear.status) &&
+    selectedCourse.status !== 'ARCHIVED',
+  );
+  const readOnlyMessage =
+    courseYear?.status === 'CLOSED' || courseYear?.status === 'ARCHIVED'
+      ? 'El año académico está cerrado o archivado. Puedes consultar la configuración, pero no modificarla.'
+      : 'El curso está archivado. Puedes consultar la historia, pero no modificarla.';
   const existingSubjectIds = new Set(
     courseSubjects
       .filter((cs) => cs.status === 'ACTIVE')
@@ -1297,6 +1353,7 @@ function CourseSubjectManagement({
     if (!subjectId) return;
     setSaving(true);
     setError('');
+    setSuccess('');
     try {
       await api.createCourseSubject({
         courseId: selectedCourse.id,
@@ -1306,6 +1363,7 @@ function CourseSubjectManagement({
       });
       setSubjectId('');
       setSortOrder('0');
+      setSuccess('La asignatura quedó asociada a este curso.');
       onSaved();
     } catch (nextError) {
       setError(errorMessage(nextError).message);
@@ -1319,12 +1377,14 @@ function CourseSubjectManagement({
     if (!editItem) return;
     setSaving(true);
     setError('');
+    setSuccess('');
     try {
       await api.updateCourseSubject(editItem.id, {
         defaultForCourse: editDefault,
         sortOrder: parseInt(editSortOrder, 10) || 0,
       });
       setEditItem(null);
+      setSuccess('La configuración de la asignatura se actualizó.');
       onSaved();
     } catch (nextError) {
       setError(errorMessage(nextError).message);
@@ -1335,8 +1395,10 @@ function CourseSubjectManagement({
 
   async function handleArchiveCourseSubject(id: string) {
     setError('');
+    setSuccess('');
     try {
       await api.updateCourseSubject(id, { status: 'ARCHIVED' });
+      setSuccess('La asociación se archivó y su historia quedó conservada.');
       onSaved();
     } catch (nextError) {
       setError(errorMessage(nextError).message);
@@ -1353,6 +1415,17 @@ function CourseSubjectManagement({
         </p>
       </div>
 
+      {!canMutate ? (
+        <Alert title="Configuración en solo lectura" tone="warning">
+          {readOnlyMessage}
+        </Alert>
+      ) : null}
+      {success ? (
+        <Alert title="Asociación actualizada" tone="success">
+          {success}
+        </Alert>
+      ) : null}
+
       <form className="academic-form" onSubmit={handleAddCourseSubject}>
         <h3>Agregar asignatura al curso</h3>
         <div className="academic-form__fields">
@@ -1360,6 +1433,7 @@ function CourseSubjectManagement({
             id="add-subject-select"
             label="Asignatura del catálogo"
             required
+            disabled={!canMutate}
             value={subjectId}
             onChange={(e) => setSubjectId(e.target.value)}
           >
@@ -1374,6 +1448,7 @@ function CourseSubjectManagement({
             id="course-subject-sort-order"
             label="Orden de presentación"
             min="0"
+            disabled={!canMutate}
             type="number"
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
@@ -1382,6 +1457,7 @@ function CourseSubjectManagement({
         <Checkbox
           checked={defaultForCourse}
           description="Todos los alumnos inscritos en este curso cursarán esta asignatura por defecto."
+          disabled={!canMutate}
           id="course-subject-default"
           label="Asignación general para todos los alumnos del curso"
           onChange={(e) => setDefaultForCourse(e.target.checked)}
@@ -1391,7 +1467,11 @@ function CourseSubjectManagement({
             {error}
           </p>
         ) : null}
-        <Button disabled={!subjectId || saving} loading={saving} type="submit">
+        <Button
+          disabled={!subjectId || saving || !canMutate}
+          loading={saving}
+          type="submit"
+        >
           Agregar asignatura al curso
         </Button>
       </form>
@@ -1429,6 +1509,7 @@ function CourseSubjectManagement({
                       <Button
                         size="sm"
                         variant="secondary"
+                        disabled={!canMutate}
                         onClick={() => {
                           setEditItem(cs);
                           setEditDefault(cs.defaultForCourse);
@@ -1440,6 +1521,7 @@ function CourseSubjectManagement({
                       <Button
                         size="sm"
                         variant="ghost"
+                        disabled={!canMutate}
                         onClick={() => void handleArchiveCourseSubject(cs.id)}
                       >
                         Archivar
@@ -1455,6 +1537,7 @@ function CourseSubjectManagement({
                 <CourseSubjectTeacherManager
                   api={api}
                   courseSubjectId={cs.id}
+                  readOnly={!canMutate}
                   teachers={data.teachers}
                   onUpdated={onSaved}
                 />
@@ -1585,6 +1668,142 @@ function CourseRoster({
   );
 }
 
+function SubjectCoverageSummary({
+  activeSubjectCount,
+  coursesWithoutSubjects,
+  selectedYear,
+  subjectCounts,
+  totalCourses,
+  onSelectCourse,
+  onOpenAssociations,
+}: {
+  activeSubjectCount: number;
+  coursesWithoutSubjects: AdminData['courses'];
+  selectedYear: AdminData['academicYears'][number] | undefined;
+  subjectCounts: Map<string, number>;
+  totalCourses: number;
+  onSelectCourse: (courseId: string) => void;
+  onOpenAssociations: () => void;
+}) {
+  if (!selectedYear) {
+    return (
+      <section
+        aria-labelledby="academic-subject-progress-title"
+        className="academic-panel academic-subject-progress-panel"
+      >
+        <div className="section-heading">
+          <div>
+            <h2 id="academic-subject-progress-title">Asignaturas del año</h2>
+            <p>
+              Selecciona un año académico para revisar sus cursos y las
+              asociaciones existentes.
+            </p>
+          </div>
+          <Badge tone="neutral">Sin contexto</Badge>
+        </div>
+      </section>
+    );
+  }
+
+  const pendingCount = coursesWithoutSubjects.length;
+
+  return (
+    <section
+      aria-labelledby="academic-subject-progress-title"
+      className="academic-panel academic-subject-progress-panel"
+    >
+      <div className="section-heading">
+        <div>
+          <h2 id="academic-subject-progress-title">
+            Asignaturas del año {selectedYear.label}
+          </h2>
+          <p>
+            Seguimiento de asociaciones activas por curso. Este avance es
+            independiente del indicador de estructura base y no define
+            asignaturas obligatorias para el colegio.
+          </p>
+        </div>
+        <Badge tone={pendingCount ? 'warning' : 'success'}>
+          {pendingCount
+            ? `${pendingCount} curso${pendingCount === 1 ? '' : 's'} por revisar`
+            : 'Sin pendientes en este corte'}
+        </Badge>
+      </div>
+
+      <div
+        aria-label="Resumen de asignaturas del año"
+        className="academic-subject-progress-summary"
+      >
+        <div>
+          <strong>{activeSubjectCount}</strong>
+          <span>asignaturas activas en el catálogo</span>
+        </div>
+        <div>
+          <strong>{totalCourses}</strong>
+          <span>cursos en este año</span>
+        </div>
+        <div>
+          <strong>{totalCourses - pendingCount}</strong>
+          <span>cursos con al menos una asociación activa</span>
+        </div>
+      </div>
+
+      {pendingCount ? (
+        <div className="academic-subject-progress-pending" role="list">
+          <div>
+            <h3>Acciones pendientes en este año</h3>
+            <p>
+              Revisa cada curso sin asociación activa. Las asociaciones
+              archivadas siguen formando parte de la historia.
+            </p>
+          </div>
+          {coursesWithoutSubjects.map((course) => (
+            <div
+              className="academic-subject-progress-row"
+              key={course.id}
+              role="listitem"
+            >
+              <div>
+                <strong>{course.label}</strong>
+                <span>
+                  {statusLabel(course.status)} · Sin asociaciones activas
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  onSelectCourse(course.id);
+                  onOpenAssociations();
+                }}
+              >
+                Configurar curso <Icon name="chevron-right" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="academic-subject-progress-confirmation" role="status">
+          Cada curso de este contexto tiene al menos una asignatura asociada.
+          Puedes seguir ajustando orden, alcance y profesores desde “Asignaturas
+          del Curso”.
+        </p>
+      )}
+
+      {totalCourses > 0 ? (
+        <p className="integration-note">
+          <Icon name="layers" />
+          Asociaciones activas en el contexto:{' '}
+          {Array.from(subjectCounts.values()).reduce(
+            (total, count) => total + count,
+            0,
+          )}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function StructureView({
   api,
   data,
@@ -1596,19 +1815,140 @@ function StructureView({
   onSaved: () => void;
   onRetryPreparation: () => void;
 }) {
-  const [selectedCourseId, setSelectedCourseId] = useState(
-    data.courses[0]?.id ?? '',
-  );
+  const [selectedYearId, setSelectedYearId] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState('');
   const [activeTab, setActiveTab] = useState<
     'years-courses' | 'subjects' | 'course-subjects'
   >('years-courses');
-  const selectedCourse =
-    data.courses.find((course) => course.id === selectedCourseId) ??
-    data.courses[0];
+  const availableYears = useMemo(
+    () => data.academicYears.filter((year) => year.status !== 'ARCHIVED'),
+    [data.academicYears],
+  );
+  const resolvedSelectedYearId = availableYears.some(
+    (year) => year.id === selectedYearId,
+  )
+    ? selectedYearId
+    : preferredAcademicYearId(data);
+  const selectedYear = data.academicYears.find(
+    (year) => year.id === resolvedSelectedYearId,
+  );
+  const scopedCourses = useMemo(
+    () =>
+      data.courses.filter(
+        (course) =>
+          course.academicYearId === resolvedSelectedYearId &&
+          course.status !== 'ARCHIVED',
+      ),
+    [data.courses, resolvedSelectedYearId],
+  );
+  const resolvedSelectedCourseId = scopedCourses.some(
+    (course) => course.id === selectedCourseId,
+  )
+    ? selectedCourseId
+    : (scopedCourses[0]?.id ?? '');
+  const selectedCourse = scopedCourses.find(
+    (course) => course.id === resolvedSelectedCourseId,
+  );
+  const subjectCounts = useMemo(
+    () =>
+      new Map(
+        scopedCourses.map((course) => [
+          course.id,
+          data.courseSubjects.filter(
+            (courseSubject) =>
+              courseSubject.courseId === course.id &&
+              courseSubject.status === 'ACTIVE',
+          ).length,
+        ]),
+      ),
+    [data.courseSubjects, scopedCourses],
+  );
+  const coursesWithoutSubjects = scopedCourses.filter(
+    (course) => (subjectCounts.get(course.id) ?? 0) === 0,
+  );
+
+  const activeSubjectCount = data.subjects.filter(
+    (subject) => subject.status === 'ACTIVE',
+  ).length;
 
   return (
     <div className="academic-stack">
       <AcademicPreparationPanel data={data} onRetry={onRetryPreparation} />
+      <section
+        aria-labelledby="academic-structure-scope-title"
+        className="academic-panel academic-structure-scope"
+      >
+        <div className="section-heading">
+          <div>
+            <h2 id="academic-structure-scope-title">
+              Contexto de configuración
+            </h2>
+            <p>
+              Selecciona un año y un curso para que el catálogo y sus
+              asociaciones se muestren en el contexto correcto.
+            </p>
+          </div>
+          <Badge
+            tone={selectedYear?.status === 'ACTIVE' ? 'success' : 'neutral'}
+          >
+            {selectedYear ? statusLabel(selectedYear.status) : 'Sin año'}
+          </Badge>
+        </div>
+        <div className="academic-form__fields academic-structure-scope__fields">
+          <Select
+            id="academic-structure-scope-year"
+            label="Año académico"
+            value={resolvedSelectedYearId}
+            onChange={(event) => {
+              setSelectedYearId(event.target.value);
+              setSelectedCourseId('');
+            }}
+          >
+            <option value="">Selecciona un año</option>
+            {availableYears.map((year) => (
+              <option key={year.id} value={year.id}>
+                {year.label} · {statusLabel(year.status)}
+              </option>
+            ))}
+          </Select>
+          <Select
+            disabled={!scopedCourses.length}
+            hint={
+              selectedYear
+                ? 'Las asignaturas se asocian al curso seleccionado.'
+                : 'Primero selecciona un año académico.'
+            }
+            id="academic-structure-scope-course"
+            label="Curso"
+            value={resolvedSelectedCourseId}
+            onChange={(event) => setSelectedCourseId(event.target.value)}
+          >
+            <option value="">Selecciona un curso</option>
+            {scopedCourses.map((course) => (
+              <option key={course.id} value={course.id}>
+                {course.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {selectedYear?.status === 'CLOSED' ||
+        selectedYear?.status === 'ARCHIVED' ? (
+          <p className="integration-note">
+            <Icon name="archive" />
+            Este año es de solo lectura. Su historia se conserva sin permitir
+            nuevas asociaciones.
+          </p>
+        ) : null}
+      </section>
+      <SubjectCoverageSummary
+        activeSubjectCount={activeSubjectCount}
+        coursesWithoutSubjects={coursesWithoutSubjects}
+        onOpenAssociations={() => setActiveTab('course-subjects')}
+        onSelectCourse={setSelectedCourseId}
+        selectedYear={selectedYear}
+        subjectCounts={subjectCounts}
+        totalCourses={scopedCourses.length}
+      />
       <div className="admin-tabs-nav" role="tablist">
         <button
           aria-selected={activeTab === 'years-courses'}
@@ -1768,27 +2108,18 @@ function StructureView({
                 })}
               </div>
             ) : null}
-            <div className="course-select-bar">
-              <Select
-                id="structure-course"
-                label="Seleccionar curso para ver roster"
-                value={selectedCourseId}
-                onChange={(event) => setSelectedCourseId(event.target.value)}
-              >
-                <option value="">Selecciona un curso</option>
-                {data.courses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.label}
-                    {course.source === 'EDUPAY' ? ' · EduPay' : ''}
-                  </option>
-                ))}
-              </Select>
-            </div>
             {selectedCourse ? (
-              <CourseRoster api={api} course={selectedCourse} />
+              <>
+                <p className="course-context-note">
+                  <Icon name="layers" />
+                  Roster del curso en contexto:{' '}
+                  <strong>{selectedCourse.label}</strong>
+                </p>
+                <CourseRoster api={api} course={selectedCourse} />
+              </>
             ) : (
               <EmptyState
-                description="Elige un curso para revisar su roster de alumnos."
+                description="Elige un año y un curso en el contexto de configuración para revisar su roster."
                 title="Selecciona un curso"
               />
             )}
@@ -1810,18 +2141,6 @@ function StructureView({
                 profesores responsables.
               </p>
             </div>
-            <Select
-              id="course-subject-course-picker"
-              label="Curso a configurar"
-              value={selectedCourseId}
-              onChange={(e) => setSelectedCourseId(e.target.value)}
-            >
-              {data.courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </Select>
           </div>
           {selectedCourse ? (
             <CourseSubjectManagement

@@ -387,6 +387,60 @@ describe('Academic admin screens', () => {
     ).toBeTruthy();
   });
 
+  it('keeps subject progress scoped to the selected year and course', async () => {
+    const client = adminClient();
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Asignaturas del año 2026' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Sin pendientes en este corte')).toBeTruthy();
+
+    const yearSelect = document.getElementById(
+      'academic-structure-scope-year',
+    ) as HTMLSelectElement;
+    const courseSelect = document.getElementById(
+      'academic-structure-scope-course',
+    ) as HTMLSelectElement;
+    expect(yearSelect.value).toBe(id);
+    expect(courseSelect.value).toBe(id);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Asignaturas por curso' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Asignaturas de 7º Básico A')).toBeTruthy();
+  });
+
+  it('shows a bounded read-only state for associations in a closed year', async () => {
+    const closedYear = { ...year, status: 'CLOSED' as const };
+    const closedCourse = { ...course, status: 'ACTIVE' as const };
+    const client = adminClient({
+      listAcademicYears: vi.fn(async () => ({
+        items: [closedYear],
+        nextCursor: null,
+      })),
+      listCourses: vi.fn(async () => ({
+        items: [closedCourse],
+        nextCursor: null,
+      })),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+    fireEvent.click(
+      await screen.findByRole('tab', { name: 'Asignaturas del Curso' }),
+    );
+
+    expect(
+      await screen.findByText('Configuración en solo lectura'),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Agregar asignatura al curso' }),
+    ).toHaveProperty('disabled', true);
+    expect(
+      screen.getByText(/las asignaciones existentes se conservan/i),
+    ).toBeTruthy();
+  });
+
   it('creates and archives a subject from the Subject Catalog tab', async () => {
     const client = adminClient();
     render(<AcademicAdminScreen api={client} view="structure" />);
