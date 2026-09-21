@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "verifiedDate": "2026-09-14",
+  "verifiedDate": "2026-09-17",
   "scope": "EduPay production only; not a full inventory of unrelated VPS projects",
   "status": "RELEASE_DEPLOYED_FLAGS_OFF",
   "project": {
@@ -81,8 +81,8 @@
       "name": "edupay-academico-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-academico",
-      "sha": "e5bd78a3c0588df540878b130d7d22cd039cf7d1",
-      "image": "ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff",
+      "sha": "ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7",
+      "image": "ghcr.io/sherydans12/edupay-academico@sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767",
       "domain": "academico-api.edupay.baselogic.cl",
       "port": 3001,
       "health": [

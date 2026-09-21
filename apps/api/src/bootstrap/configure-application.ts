@@ -48,7 +48,12 @@ export function configureApplication(application: INestApplication): void {
     },
     credentials: false,
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Request-Id',
+      'Idempotency-Key',
+    ],
     exposedHeaders: ['X-Request-Id'],
     maxAge: 600,
     optionsSuccessStatus: 204,

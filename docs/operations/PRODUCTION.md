@@ -8,9 +8,9 @@ sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica
 
 ## Observación de release — 2026-09-14
 
-Académico API ejecuta el build funcional
-`e5bd78a3c0588df540878b130d7d22cd039cf7d1` desde
-`ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`.
+Académico API ejecuta el hotfix
+`ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7` desde
+`ghcr.io/sherydans12/edupay-academico@sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767`.
 Los workers conservan el digest anterior verificado. BL FRONT continúa en
 `502e6463464de0a54b440362a64da0c31450818f`; BL BACK está desplegado desde
 `16e208af6a50e5703bc8f6edd51d7ff11b9c6381`, con imagen/manifiesto local
@@ -37,7 +37,7 @@ o un contenedor healthy por sí solos no identifican al producto correcto.
 | Repositorio | Responsabilidad | Código productivo al cierre |
 |---|---|---|
 | [Sherydans12/BL-002-EduPay](https://github.com/Sherydans12/BL-002-EduPay) | Administración de pagos, alumnos/cursos de origen, autenticación administrativa y API de integración | FRONT: `502e6463464de0a54b440362a64da0c31450818f`; BACK: `16e208af6a50e5703bc8f6edd51d7ff11b9c6381` |
-| [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | FRONT: `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; API: `e5bd78a3c0588df540878b130d7d22cd039cf7d1`; workers: `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` |
+| [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | FRONT: `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; API: `ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7`; workers: `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` |
 | [Sherydans12/edupay-identity](https://github.com/Sherydans12/edupay-identity) | Credenciales, sesiones, membresías, roles, activación, recuperación y auditoría de autenticación | OCI `b38849be78fee492f68f2d0e99cff3b69a08415a` |
 
 BL-002 conserva su dominio de autenticación propio. No valida sesiones
@@ -83,7 +83,7 @@ host para resolver fallos de comunicación privada.
 
 La API Académico ejecuta exactamente:
 
-`ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`
+`ghcr.io/sherydans12/edupay-academico@sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767`
 
 Ambos workers conservan exactamente:
 
