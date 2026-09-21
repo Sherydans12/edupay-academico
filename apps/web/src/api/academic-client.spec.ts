@@ -152,6 +152,57 @@ describe('AcademicApiClient', () => {
     expect(headers.get('x-request-id')).toBeTruthy();
   });
 
+  it('loads and validates the tenant-scoped academic preparation status', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        'http://localhost:3001/api/v1/academic-preparation/status',
+      );
+      return response({
+        scope: 'ACADEMIC_BASE',
+        status: 'ACTION_REQUIRED',
+        ready: false,
+        evaluatedAt: timestamp,
+        academicYears: {
+          total: 0,
+          active: 0,
+          draft: 0,
+          selectedActiveYearId: null,
+        },
+        courses: {
+          activeInSelectedYear: null,
+          draftInSelectedYear: null,
+        },
+        checks: [
+          {
+            code: 'ACADEMIC_YEAR',
+            status: 'ACTION_REQUIRED',
+            action: 'Crear año académico',
+            message: 'Crea un año académico para comenzar la preparación.',
+          },
+          {
+            code: 'COURSES',
+            status: 'ACTION_REQUIRED',
+            action: 'Activar un año académico primero',
+            message:
+              'No se evalúan cursos hasta que exista un único año académico activo.',
+          },
+        ],
+      });
+    });
+    const client = new AcademicApiClient({
+      baseUrl: 'http://localhost:3001/api/v1',
+      fetchImpl,
+      sessionAdapter: session,
+    });
+
+    await expect(client.getAcademicPreparationStatus()).resolves.toMatchObject({
+      scope: 'ACADEMIC_BASE',
+      status: 'ACTION_REQUIRED',
+      academicYears: { selectedActiveYearId: null },
+      courses: { activeInSelectedYear: null, draftInSelectedYear: null },
+    });
+  });
+
   it('parses the stable error envelope with status and request id', async () => {
     const fetchImpl = vi.fn(async () =>
       response(

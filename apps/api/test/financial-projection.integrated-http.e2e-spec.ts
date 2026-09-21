@@ -14,6 +14,7 @@ import { configureApplication } from '../src/bootstrap/configure-application';
 import { ACADEMIC_AUDIT_PORT } from '../src/academic/academic-audit.port';
 import { FinancialProjectionPublisherService } from '../src/financial-projection/financial-projection-publisher.service';
 import { PrismaService } from '../src/persistence/prisma.service';
+import type { FinancialProjectionOutboxEvent } from '../src/generated/prisma/client';
 import { IdentityInternalFixture } from './support/identity-internal.fixture';
 import { IdentityJwksFixture } from './support/identity-jwks.fixture';
 
@@ -28,6 +29,73 @@ const blAdminSecret = 'synthetic-bl-admin-secret-at-least-32-characters';
 const blPort = 4101;
 const academicPort = 4102;
 const academicProxyPort = 4103;
+
+type BlQuery = Readonly<Record<string, unknown>>;
+
+interface BlCountDelegate {
+  count(args?: BlQuery): Promise<number>;
+}
+
+interface BlRecordDelegate<TRecord> extends BlCountDelegate {
+  create(args: BlQuery): Promise<TRecord>;
+  findFirst(args?: BlQuery): Promise<TRecord | null>;
+  findFirstOrThrow(args?: BlQuery): Promise<TRecord>;
+  findMany(args?: BlQuery): Promise<TRecord[]>;
+  findUniqueOrThrow(args?: BlQuery): Promise<TRecord>;
+  upsert(args: BlQuery): Promise<TRecord>;
+}
+
+interface BlRoleRecord {
+  id: string;
+}
+
+interface BlUserRecord {
+  id: string;
+}
+
+interface BlTenantRecord {
+  id: string;
+}
+
+interface BlTenantCanonicalMappingRecord {
+  id: string;
+}
+
+interface BlAcademicFinancialProjectionRecord {
+  academicCourseId: string;
+  academicEnrollmentId: string;
+  enrollmentStatus: string;
+  id: string;
+  lastSnapshotId: string | null;
+  operation: string;
+  tenantId: string;
+  version: bigint | number;
+}
+
+interface BlAcademicFinancialProjectionSnapshotRecord {
+  id: string;
+  nextCursor: string | null;
+  receivedItemCount: number;
+  startedAt: Date;
+  status: string;
+  watermark: string;
+}
+
+interface BlPrismaClient {
+  $disconnect(): Promise<void>;
+  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
+  academicFinancialProjection: BlRecordDelegate<BlAcademicFinancialProjectionRecord>;
+  academicFinancialProjectionConsumedEvent: BlCountDelegate;
+  academicFinancialProjectionSnapshot: BlRecordDelegate<BlAcademicFinancialProjectionSnapshotRecord>;
+  charge: BlCountDelegate;
+  payment: BlCountDelegate;
+  paymentConcept: BlCountDelegate;
+  paymentGroup: BlCountDelegate;
+  role: BlRecordDelegate<BlRoleRecord>;
+  tenant: BlRecordDelegate<BlTenantRecord>;
+  tenantCanonicalMapping: BlRecordDelegate<BlTenantCanonicalMappingRecord>;
+  user: BlRecordDelegate<BlUserRecord>;
+}
 
 /**
  * This is intentionally a cross-repository gate: both real Nest applications
@@ -48,7 +116,7 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
     let failAfterFirstSnapshotPage = false;
     let snapshotPageRequests = 0;
     let academicPrisma: PrismaService;
-    let blPrisma: any;
+    let blPrisma: BlPrismaClient;
     let blPool: { end(): Promise<void> } | undefined;
     let publisher: FinancialProjectionPublisherService;
     let blBaseUrl: string;
@@ -109,7 +177,7 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
       blPool = new blPg.Pool({ connectionString: blUrl });
       blPrisma = new blClient.PrismaClient({
         adapter: new blAdapter.PrismaPg(blPool),
-      });
+      }) as BlPrismaClient;
 
       Object.assign(process.env, {
         ...jwks.environment(),
@@ -701,7 +769,7 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
         'ACADEMIC_FINANCIAL_PROJECTION_PUBLISHER_ENABLED',
         false,
       );
-      let event: any;
+      let event: FinancialProjectionOutboxEvent | undefined;
       try {
         const fixture = await createEnrollmentFixture(
           admin,
@@ -741,6 +809,7 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
           true,
         );
       }
+      if (!event) throw new Error('Expected a publisher outbox event.');
       expect(await publisher.publishPending()).toEqual({
         attempted: 1,
         published: 1,
@@ -1014,12 +1083,16 @@ describe.runIf(Boolean(academicUrl && blUrl && blRoot))(
         paymentConcepts: await blPrisma.paymentConcept.count(),
       };
     }
-    async function deliver(outbox: any) {
+    async function deliver(outbox: FinancialProjectionOutboxEvent) {
       const response = await deliverWith(tokenA, 'academic-a', outbox);
       expect(response.status).toBe(201);
       return response.json();
     }
-    async function deliverWith(token: string, keyId: string, outbox: any) {
+    async function deliverWith(
+      token: string,
+      keyId: string,
+      outbox: FinancialProjectionOutboxEvent,
+    ) {
       return fetch(
         `${blBaseUrl}/api/integrations/academic-financial-projection/events`,
         {
