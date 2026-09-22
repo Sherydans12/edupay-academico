@@ -499,6 +499,91 @@ describe.runIf(testDatabaseUrl)(
       ).toBe(2);
     });
 
+    it('supports the tenant-scoped subject association workflow and preserves history', async () => {
+      const adminA = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      const base = await createStructure(adminA, '2026', '5° A', 'Lenguaje');
+      const secondSubject = await post(adminA, '/api/v1/subjects', {
+        name: 'Historia',
+      });
+
+      const listed = await api(adminA)
+        .get(`/api/v1/course-subjects?courseId=${base.course.id}`)
+        .expect(200);
+      expect(listed.body.items).toHaveLength(1);
+      expect(listed.body.items[0]).toMatchObject({
+        courseId: base.course.id,
+        subjectId: base.subject.id,
+        status: 'ACTIVE',
+      });
+
+      const crossTenantRead = await api(adminB)
+        .get(`/api/v1/course-subjects?courseId=${base.course.id}`)
+        .expect(200);
+      expect(crossTenantRead.body.items).toEqual([]);
+      await api(adminB)
+        .post('/api/v1/course-subjects')
+        .send({ courseId: base.course.id, subjectId: secondSubject.id })
+        .expect(404);
+
+      await api(adminA)
+        .post('/api/v1/course-subjects')
+        .send({ courseId: base.course.id, subjectId: base.subject.id })
+        .expect(409);
+
+      await patch(adminA, `/api/v1/course-subjects/${base.courseSubject.id}`, {
+        status: 'ARCHIVED',
+      });
+      const replacement = await post(adminA, '/api/v1/course-subjects', {
+        courseId: base.course.id,
+        subjectId: base.subject.id,
+      });
+      expect(replacement.id).not.toBe(base.courseSubject.id);
+      expect(
+        await prisma.courseSubject.count({
+          where: {
+            tenantId: 'tenant-a',
+            courseId: base.course.id,
+            subjectId: base.subject.id,
+          },
+        }),
+      ).toBe(2);
+
+      await patch(adminA, `/api/v1/academic-years/${base.year.id}`, {
+        status: 'CLOSED',
+      });
+      await api(adminA)
+        .post('/api/v1/course-subjects')
+        .send({ courseId: base.course.id, subjectId: secondSubject.id })
+        .expect(409);
+      await api(adminA)
+        .patch(`/api/v1/course-subjects/${replacement.id}`)
+        .send({ sortOrder: 2 })
+        .expect(409);
+
+      const teacher = await token('tenant-a', 'teacher-user', ['TEACHER']);
+      await api(teacher)
+        .get(`/api/v1/course-subjects?courseId=${base.course.id}`)
+        .expect(403);
+      const systemAdmin = await token('tenant-a', 'system-user', [
+        'SYSTEM_ADMIN',
+      ]);
+      await api(systemAdmin)
+        .get(`/api/v1/course-subjects?courseId=${base.course.id}`)
+        .expect(403);
+
+      identityInternal.sessionResponse = {
+        active: false,
+        identityUserId: 'admin-a',
+        membershipActive: false,
+        membershipId: 'membership-tenant-a-admin-a',
+        sessionActive: false,
+        sessionId: 'session-tenant-a-admin-a',
+        tenantId: 'tenant-a',
+      };
+      await api(adminA).get('/api/v1/academic-preparation/status').expect(403);
+    });
+
     it('resolves default and direct student access once and removes only current access on deactivation', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
       const base = await createStructure(admin, '2026', '6° A', 'Matemáticas');

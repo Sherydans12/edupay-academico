@@ -2368,6 +2368,113 @@ a.submission-row:hover {
   margin-bottom: 0.5rem;
   overflow-x: auto;
 }
+.academic-structure-scope {
+  display: grid;
+  gap: 1rem;
+}
+.academic-structure-scope__fields {
+  max-width: 54rem;
+}
+.academic-subject-progress-panel {
+  display: grid;
+  gap: 1rem;
+}
+.academic-subject-progress-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  padding: 1rem 0;
+}
+.academic-subject-progress-summary > div {
+  display: grid;
+  gap: 0.2rem;
+}
+.academic-subject-progress-summary strong {
+  color: var(--brand-primary-dark);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.academic-subject-progress-summary span {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+.academic-subject-progress-pending {
+  display: grid;
+  gap: 0.7rem;
+}
+.academic-subject-progress-pending > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+.academic-subject-progress-pending h3,
+.academic-subject-progress-pending p {
+  margin: 0;
+}
+.academic-subject-progress-pending h3 {
+  font-size: 0.88rem;
+}
+.academic-subject-progress-pending p,
+.academic-subject-progress-row span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+.academic-subject-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--border-default);
+  padding-top: 0.7rem;
+}
+.academic-subject-progress-row > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.academic-subject-progress-row strong {
+  font-size: 0.82rem;
+}
+.academic-subject-progress-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+.academic-subject-progress-row button svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+.academic-subject-progress-confirmation,
+.course-context-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.academic-subject-progress-confirmation svg,
+.course-context-note svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  color: var(--brand-primary);
+}
+.course-context-note {
+  align-items: center;
+  margin: 1rem 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-secondary);
+  padding: 0.65rem 0.75rem;
+}
+.course-context-note strong {
+  color: var(--text-primary);
+}
 .admin-tab-button {
   border: 0;
   background: transparent;
@@ -3993,6 +4100,18 @@ a.submission-row:hover {
   }
   .academic-preparation-panel__link {
     margin-left: 1.85rem;
+  }
+  .academic-subject-progress-summary {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .academic-subject-progress-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .academic-subject-progress-row button {
+    width: 100%;
+    justify-content: center;
   }
   .course-readiness-list__heading {
     align-items: flex-start;

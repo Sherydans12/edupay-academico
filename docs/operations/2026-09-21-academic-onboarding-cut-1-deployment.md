@@ -86,6 +86,13 @@ significa sólo estructura base preparada; `ACTION_REQUIRED` o `BLOCKED` pueden
 ser correctos según los datos existentes. No se modificaron datos para forzar
 ningún resultado.
 
+## Validación funcional posterior
+
+El usuario confirmó que el indicador de Onboarding 1 funciona correctamente.
+La confirmación no implicó crear, activar, archivar ni modificar años o cursos
+reales; la comprobación TENANT_ADMIN queda registrada como validación de lectura
+del indicador.
+
 ## Rollback operativo
 
 - Si falla sólo API: restaurar en el Compose del recurso API el digest anterior
