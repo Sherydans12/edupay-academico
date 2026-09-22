@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -68,6 +69,29 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
     await seedTenant('die-tenant-a');
     await seedTenant('die-tenant-b');
+    await prisma.storageQuotaPolicy.upsert({
+      where: { scopeKey: 'GLOBAL' },
+      create: {
+        scopeKey: 'GLOBAL',
+        scopeType: 'GLOBAL',
+        quotaBytes: 20_000_000_000n,
+      },
+      update: { quotaBytes: 20_000_000_000n },
+    });
+  });
+
+  afterEach(async () => {
+    const withinTestTenants = {
+      tenantId: { in: ['die-tenant-a', 'die-tenant-b'] },
+    };
+    await prisma.fileReference.deleteMany({ where: withinTestTenants });
+    await prisma.dieAuditEvent.deleteMany({ where: withinTestTenants });
+    await prisma.dieActionAssignment.deleteMany({ where: withinTestTenants });
+    await prisma.dieAction.deleteMany({ where: withinTestTenants });
+    await prisma.dieJournalRevision.deleteMany({ where: withinTestTenants });
+    await prisma.dieJournalEntry.deleteMany({ where: withinTestTenants });
+    await prisma.dieSupportEpisode.deleteMany({ where: withinTestTenants });
+    await prisma.dieMemberAssignment.deleteMany({ where: withinTestTenants });
   });
 
   afterAll(async () => {
