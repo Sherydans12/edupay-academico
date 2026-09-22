@@ -2,6 +2,11 @@
 
 Fecha: 2026-09-21 (UTC)
 
+Este documento conserva la evidencia histórica del despliegue de Onboarding 1.
+La reconciliación posterior a PR #7 y PR #8, incluido el FRONT aún pendiente de
+redeploy, está en [PRODUCTION.md](PRODUCTION.md) y
+[PHASE-CLOSEOUT.md](PHASE-CLOSEOUT.md).
+
 ## Release
 
 - PR #5: `https://github.com/Sherydans12/edupay-academico/pull/5` — merged.
@@ -52,9 +57,13 @@ Recurso Coolify `edupay-academico-web`
   `qf65r4ltig6jhb6t8dmv2qyw:e844f5b54291af7c7027498c8972fa90cb46783d`,
   manifest digest
   `sha256:ae93b9646016860af02fcc332ff6e0b0fedd9de548e428b427c462a7bcdf1a13`.
-- Rollback por recurso: deployment anterior exitoso de
-  `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; no retirar el candidato API si
-  sólo falla FRONT.
+- Rollback por recurso: el deployment Coolify anterior registrado es
+  `wxgimhdhkeolqstf35psgwvh`, con SHA de código
+  `4f5ad2839e08e561e0335f6e4fdedfe448f15415`. El manifiesto conocido de la
+  imagen de Cut 1 es
+  `sha256:ae93b9646016860af02fcc332ff6e0b0fedd9de548e428b427c462a7bcdf1a13`.
+  Confirmar la relación actual en Coolify antes de usarla; no retirar el
+  candidato API si sólo falla FRONT.
 - Healthcheck interno `GET /login`: `healthy`; deployment Coolify: `Success`.
 - Variables públicas verificadas antes del build y encontradas en los bundles:
   - `NEXT_PUBLIC_API_BASE_URL=https://academico-api.edupay.baselogic.cl/api/v1`
@@ -98,7 +107,8 @@ del indicador.
 - Si falla sólo API: restaurar en el Compose del recurso API el digest anterior
   indicado arriba y reiniciar/desplegar sólo `edupay-academico-pinned`, sin
   dependencias y sin migraciones; volver a comprobar live, ready y preflight.
-- Si falla sólo FRONT: usar el rollback de Coolify al deployment anterior de
-  `4f5ad2839e08e561e0335f6e4fdedfe448f15415`, conservando las URLs públicas y
-  sin tocar API, Identity, BL ni workers.
+- Si falla sólo FRONT: usar en Coolify el deployment UUID
+  `wxgimhdhkeolqstf35psgwvh` (código `4f5ad2839e08e561e0335f6e4fdedfe448f15415`,
+  manifest conocido `sha256:ae93b9646016860af02fcc332ff6e0b0fedd9de548e428b427c462a7bcdf1a13`),
+  conservando las URLs públicas y sin tocar API, Identity, BL ni workers.
 - No ejecutar rollback cruzado por una falla aislada del otro recurso.

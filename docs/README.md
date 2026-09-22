@@ -9,6 +9,17 @@ y [el inventario de Coolify](operations/coolify-inventory.json).
 Los ADR aceptados mantienen autoridad sobre arquitectura y seguridad; los
 runbooks anteriores no sustituyen la fotografía operativa actual.
 
+## Cierre documental vigente — 2026-09-22
+
+La integración de PR #7 y PR #8 está en `main` (`8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`)
+y CI de `main` está aprobado. El FRONT de este corte aún no tiene confirmación
+de despliegue: leer [topología y estado reconciliado](operations/PRODUCTION.md),
+[cierre de fase y redeploy FRONT](operations/PHASE-CLOSEOUT.md),
+[Onboarding 1](operations/2026-09-21-academic-onboarding-cut-1-deployment.md),
+[Onboarding 2](operations/2026-09-21-academic-onboarding-cut-2-subjects.md) y
+[la ruta docente/favicon](operations/2026-09-21-frontend-404-fixes.md).
+El módulo DIE sólo tiene inicio documental pendiente; no está implementado.
+
 ## Reading order
 
 1. [Product vision](product/vision.md)

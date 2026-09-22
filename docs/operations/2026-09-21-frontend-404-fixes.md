@@ -4,6 +4,11 @@ Fecha: 2026-09-21
 Rama: `codex/frontend-academic-404-fixes`
 Base: `origin/main` en `965c049a246676f21ae8a004817c0e956e7272c3`
 
+Estado de integración: PR #7 fue integrada en `main` mediante merge
+`10b84fd12ddc76221c862589267067d5fb7e5cbd`. La documentación conserva la
+evidencia del cambio; el FRONT que contiene también Onboarding 2 aún no tiene
+confirmación de redeploy ni validación de usuario.
+
 ## Hallazgos y cambio mínimo
 
 - `/favicon.ico` no tenía asset ni declaración explícita en el layout. Se

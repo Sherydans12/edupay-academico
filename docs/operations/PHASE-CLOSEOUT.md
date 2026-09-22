@@ -9,6 +9,78 @@ del backup real protegido de PostgreSQL BL-002 está verificada; no se certifica
 por ello la consistencia completa de la base viva ni la cobertura íntegra de
 uploads.
 
+## Actualización documental — 2026-09-22
+
+### Fases cerradas y estado actual
+
+- Topología, recuperación de versiones y limpieza de Coolify quedaron cerradas;
+  los recursos canónicos y sus UUID permanecen en
+  [PRODUCTION.md](PRODUCTION.md). Los commits de documentación no cambian los
+  bytes desplegados.
+- La proyección Académico→BL está desplegada con funcionalidades apagadas:
+  `RUN_MIGRATIONS=false`, producer/publisher/shadow apagados y sin mappings ni
+  credenciales S2S nuevas.
+- El mapping BL está desplegado y su acceso fue confirmado; no se hicieron
+  asignaciones reales. Mapping explícito, proyección y sincronización siguen
+  siendo procesos separados.
+- El registry GHCR privado es operativo para los artefactos runtime fijados por
+  digest; no se documentan secretos ni se promueve por ello ningún candidato.
+- El hotfix CORS de Académico queda confirmado por el usuario, incluida la
+  autorización de `Idempotency-Key`; sus pruebas históricas se conservan.
+- Recuperación y plantilla de correo de Identity quedaron confirmadas. La red
+  persistente de Identity debe desplegarse mediante Coolify para conservar sus
+  hooks de conexión (`connect_to_docker_network=true`); no sustituirlos por un
+  `docker network connect` manual ni omitirlos al recrear el servicio.
+- Onboarding 1 está desplegado y validado por el usuario como indicador de
+  lectura. `READY` sólo representa año y cursos preparados.
+- PR #7 y PR #8 están integradas en `main` de Académico. Onboarding 2 conserva
+  la paginación completa y protección ante cambios de tenant, pero su FRONT aún
+  no tiene confirmación de despliegue ni validación de usuario.
+
+### Pendientes vigentes y asuntos resueltos
+
+Pendiente para el usuario: redeploy manual sólo del FRONT
+`qf65r4ltig6jhb6t8dmv2qyw` desde `8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`,
+con `/deploy/Dockerfile.web`, target `runtime`, puerto 3000, health `/login` y
+las bases públicas documentadas en [PRODUCTION.md](PRODUCTION.md). Después,
+comprobar navegación y lecturas autorizadas sin crear datos reales. No ejecutar
+migraciones.
+
+La proyección shadow sigue apagada; no inventar mappings, credenciales ni
+dependencias con BL. Rollover/feed v2 y el trabajo local original quedan
+preservados, sin declararlos integrados. Invitaciones, labels OCI y otras
+mejoras de deuda técnica siguen pendientes de sus propios cambios. DIE sólo
+inicia aquí su registro documental pendiente: no hay implementación, endpoint,
+persistencia, migración ni flag DIE.
+
+Los incidentes de creación de unidades, entrega de recuperación, plantilla de
+correo y CORS autorizado se consideran resueltos según sus cierres; no deben
+reabrirse como bloqueos de este redeploy. La falta de confirmación del FRONT de
+Onboarding 2 sí sigue vigente.
+
+### Redeploy y rollback del FRONT
+
+Aplicar sólo sobre `qf65r4ltig6jhb6t8dmv2qyw`; conservar auto deploy manual,
+sin tocar API, Identity, BL, workers, mappings, flags, secretos o bases. Usar
+el SHA completo aprobado arriba y las variables:
+
+```text
+NEXT_PUBLIC_API_BASE_URL=https://academico-api.edupay.baselogic.cl/api/v1
+NEXT_PUBLIC_IDENTITY_BASE_URL=https://identity.edupay.baselogic.cl
+```
+
+El rollback debe registrar por separado: UUID de deployment Coolify
+`wxgimhdhkeolqstf35psgwvh`, SHA de código anterior
+`4f5ad2839e08e561e0335f6e4fdedfe448f15415` y manifest conocido de Cut 1
+`sha256:ae93b9646016860af02fcc332ff6e0b0fedd9de548e428b427c462a7bcdf1a13`
+(imagen etiquetada con `e844f5b…`). Validar esa relación en Coolify antes de
+rollback; un SHA Git no es un deployment.
+
+### DIE
+
+El módulo DIE es trabajo futuro. Este registro marca únicamente el inicio
+documental previo al módulo; no declara diseño aceptado ni implementación.
+
 ## Resultado y evidencia
 
 ## Estado final del release flags-off

@@ -1,6 +1,6 @@
 # Hotfix CORS para creación de unidades — 2026-09-17
 
-Estado: **HOTFIX ACTIVO; CONFIRMACIÓN DE USUARIO PENDIENTE**.
+Estado: **HOTFIX ACTIVO; CONFIRMADO POR EL USUARIO**.
 
 ## Alcance
 

@@ -1,6 +1,7 @@
 # Academic onboarding cut 2 — asignaturas y asociaciones por curso
 
-Estado: implementación propuesta en PR; sin despliegue ni migraciones
+Estado: integrado en `main` mediante merge `8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`;
+FRONT pendiente de redeploy y validación de usuario; sin migraciones
 productivas.
 
 ## Validación heredada
@@ -79,3 +80,11 @@ en la PR junto con lint, typecheck, tests y build.
 Este cambio no toca producción, Identity, BL, Registry, workers, flags de
 proyección, secretos ni migraciones. La proyección continúa apagada. Las
 pruebas usan fixtures sintéticos y no crean ni activan datos reales.
+
+## Cierre de integración
+
+El corte conserva la ruta docente/favicon de PR #7 y la paginación completa del
+corte 2. La integración en `main` no implica que Coolify haya reconstruido el
+recurso FRONT. Ver [PRODUCTION.md](PRODUCTION.md) y
+[PHASE-CLOSEOUT.md](PHASE-CLOSEOUT.md) para el redeploy manual, rollback y
+comprobaciones de lectura pendientes.
