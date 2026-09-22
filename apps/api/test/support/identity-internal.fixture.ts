@@ -25,6 +25,7 @@ export class IdentityInternalFixture {
   delayMs = 0;
   forcedStatus: number | undefined;
   identityLinkResponse: unknown | typeof NO_OVERRIDE = NO_OVERRIDE;
+  membershipVerificationResponse: unknown | typeof NO_OVERRIDE = NO_OVERRIDE;
   sessionResponse: unknown | typeof NO_OVERRIDE = NO_OVERRIDE;
 
   private baseUrlValue!: string;
@@ -55,6 +56,7 @@ export class IdentityInternalFixture {
     this.delayMs = 0;
     this.forcedStatus = undefined;
     this.identityLinkResponse = NO_OVERRIDE;
+    this.membershipVerificationResponse = NO_OVERRIDE;
     this.requests.length = 0;
     this.sessionResponse = NO_OVERRIDE;
     this.sessions.clear();
@@ -154,6 +156,31 @@ export class IdentityInternalFixture {
               roles: [requestBody.expectedRole],
             }
           : this.identityLinkResponse,
+      );
+      return;
+    }
+
+    if (
+      request.method === 'POST' &&
+      request.url === '/internal/v1/tenant-memberships/verify'
+    ) {
+      const requestBody = body as {
+        actor?: { tenantId?: unknown };
+        targetIdentityUserId?: unknown;
+      };
+      this.json(
+        response,
+        200,
+        this.membershipVerificationResponse === NO_OVERRIDE
+          ? {
+              verified: true,
+              identityUserId: requestBody.targetIdentityUserId,
+              membershipId: `membership-${String(requestBody.actor?.tenantId)}-${String(requestBody.targetIdentityUserId)}`,
+              tenantId: requestBody.actor?.tenantId,
+              membershipStatus: 'ACTIVE',
+              roles: ['TEACHER'],
+            }
+          : this.membershipVerificationResponse,
       );
       return;
     }

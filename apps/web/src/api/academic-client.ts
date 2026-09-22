@@ -112,6 +112,43 @@ import {
   type UpdateSubject,
   type UpdateTeacher,
   type VerifiedIdentityLink,
+  addDieMemberSchema,
+  correctDieJournalEntrySchema,
+  createDieActionSchema,
+  createDieJournalEntrySchema,
+  createDieUploadIntentSchema,
+  dieAccessSchema,
+  dieActionSchema,
+  dieJournalEntrySchema,
+  dieMemberCandidateSchema,
+  dieMemberSchema,
+  dieStudentCandidateSchema,
+  dieStudentSummarySchema,
+  dieSupportEpisodeSchema,
+  dieUploadIntentSchema,
+  finishDieSupportSchema,
+  reassignDieActionSchema,
+  removeDieMemberSchema,
+  startDieSupportSchema,
+  updateDieActionSchema,
+  updateDieMemberRoleSchema,
+  voidDieJournalEntrySchema,
+  type AddDieMember,
+  type CorrectDieJournalEntry,
+  type CreateDieAction,
+  type CreateDieJournalEntry,
+  type CreateDieUploadIntent,
+  type DieAction,
+  type DieJournalEntry,
+  type DieMember,
+  type DieStudentSummary,
+  type DieSupportEpisode,
+  type DieUploadIntent,
+  type FinishDieSupport,
+  type ReassignDieAction,
+  type RemoveDieMember,
+  type StartDieSupport,
+  type UpdateDieAction,
 } from '@edupay/contracts';
 import { apiErrorEnvelopeSchema, type ApiErrorDetail } from '@edupay/contracts';
 import { z } from 'zod';
@@ -260,7 +297,7 @@ function newRequestId(): string {
 
 function addQuery(
   path: string,
-  query: Record<string, string | number | undefined>,
+  query: Record<string, string | number | boolean | undefined>,
 ): string {
   const params = new URLSearchParams();
   Object.entries(query).forEach(([key, value]) => {
@@ -437,7 +474,7 @@ export class AcademicApiClient {
   }
 
   async completeUploadIntent(
-    intent: UploadIntent,
+    intent: UploadIntent | DieUploadIntent,
     file: File,
     onProgress?: (progress: number) => void,
     signal?: AbortSignal,
@@ -532,6 +569,193 @@ export class AcademicApiClient {
       }
     } else if (fallback) filename = fallback;
     return { blob: await response.blob(), filename };
+  }
+
+  getDieAccess() {
+    return this.request('die/access', dieAccessSchema);
+  }
+  listDieMemberCandidates(search?: string) {
+    return this.request(
+      addQuery('die/member-candidates', { search }),
+      dieMemberCandidateSchema.array(),
+    );
+  }
+  listDieMembers(): Promise<DieMember[]> {
+    return this.request('die/members', dieMemberSchema.array());
+  }
+  addDieMember(input: AddDieMember): Promise<DieMember> {
+    return this.request('die/members', dieMemberSchema, {
+      method: 'POST',
+      body: JSON.stringify(addDieMemberSchema.parse(input)),
+    });
+  }
+  updateDieMemberRole(
+    memberId: string,
+    role: 'MEMBER' | 'COORDINATOR',
+  ): Promise<DieMember> {
+    return this.request(`die/members/${memberId}/role`, dieMemberSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateDieMemberRoleSchema.parse({ role })),
+    });
+  }
+  async removeDieMember(
+    memberId: string,
+    input: RemoveDieMember,
+  ): Promise<void> {
+    await this.requestRaw(`die/members/${memberId}/remove`, {
+      method: 'POST',
+      body: JSON.stringify(removeDieMemberSchema.parse(input)),
+    });
+  }
+  listDieStudentCandidates(search?: string) {
+    return this.request(
+      addQuery('die/student-candidates', { search }),
+      dieStudentCandidateSchema.array(),
+    );
+  }
+  listDieStudents(search?: string): Promise<DieStudentSummary[]> {
+    return this.request(
+      addQuery('die/students', { search }),
+      dieStudentSummarySchema.array(),
+    );
+  }
+  startDieSupport(input: StartDieSupport): Promise<DieSupportEpisode> {
+    return this.request('die/support-episodes', dieSupportEpisodeSchema, {
+      method: 'POST',
+      body: JSON.stringify(startDieSupportSchema.parse(input)),
+    });
+  }
+  finishDieSupport(
+    episodeId: string,
+    input: FinishDieSupport,
+  ): Promise<DieSupportEpisode> {
+    return this.request(
+      `die/support-episodes/${episodeId}/finish`,
+      dieSupportEpisodeSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(finishDieSupportSchema.parse(input)),
+      },
+    );
+  }
+  listDieEpisodes(studentId: string): Promise<DieSupportEpisode[]> {
+    return this.request(
+      `die/students/${studentId}/support-episodes`,
+      dieSupportEpisodeSchema.array(),
+    );
+  }
+  listDieJournal(
+    studentId: string,
+    filters: {
+      from?: string;
+      to?: string;
+      category?: string;
+      authorIdentityUserId?: string;
+      includeVoided?: boolean;
+    } = {},
+  ): Promise<DieJournalEntry[]> {
+    return this.request(
+      addQuery(`die/students/${studentId}/journal`, filters),
+      dieJournalEntrySchema.array(),
+    );
+  }
+  createDieJournalEntry(
+    input: CreateDieJournalEntry,
+  ): Promise<DieJournalEntry> {
+    return this.request('die/journal-entries', dieJournalEntrySchema, {
+      method: 'POST',
+      body: JSON.stringify(createDieJournalEntrySchema.parse(input)),
+    });
+  }
+  correctDieJournalEntry(
+    entryId: string,
+    input: CorrectDieJournalEntry,
+  ): Promise<DieJournalEntry> {
+    return this.request(
+      `die/journal-entries/${entryId}`,
+      dieJournalEntrySchema,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(correctDieJournalEntrySchema.parse(input)),
+      },
+    );
+  }
+  voidDieJournalEntry(
+    entryId: string,
+    reason: string,
+  ): Promise<DieJournalEntry> {
+    return this.request(
+      `die/journal-entries/${entryId}/void`,
+      dieJournalEntrySchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(voidDieJournalEntrySchema.parse({ reason })),
+      },
+    );
+  }
+  createDieAction(input: CreateDieAction): Promise<DieAction> {
+    return this.request('die/actions', dieActionSchema, {
+      method: 'POST',
+      body: JSON.stringify(createDieActionSchema.parse(input)),
+    });
+  }
+  listDieActions(
+    filters: {
+      studentId?: string;
+      assigneeMemberAssignmentId?: string;
+      status?: string;
+      overdue?: boolean;
+      mine?: boolean;
+    } = {},
+  ): Promise<DieAction[]> {
+    return this.request(
+      addQuery('die/actions', filters),
+      dieActionSchema.array(),
+    );
+  }
+  updateDieAction(
+    actionId: string,
+    input: UpdateDieAction,
+  ): Promise<DieAction> {
+    return this.request(`die/actions/${actionId}`, dieActionSchema, {
+      method: 'PATCH',
+      body: JSON.stringify(updateDieActionSchema.parse(input)),
+    });
+  }
+  reassignDieAction(
+    actionId: string,
+    input: ReassignDieAction,
+  ): Promise<DieAction> {
+    return this.request(`die/actions/${actionId}/reassign`, dieActionSchema, {
+      method: 'POST',
+      body: JSON.stringify(reassignDieActionSchema.parse(input)),
+    });
+  }
+  createDieUploadIntent(entryId: string, input: CreateDieUploadIntent) {
+    return this.request(
+      `die/journal-entries/${entryId}/upload-intents`,
+      dieUploadIntentSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(createDieUploadIntentSchema.parse(input)),
+      },
+    );
+  }
+  async exportDiePdf(
+    studentId: string,
+    filters: {
+      from?: string;
+      to?: string;
+      category?: string;
+      authorIdentityUserId?: string;
+      includeVoided?: boolean;
+    } = {},
+  ) {
+    const response = await this.requestRaw(
+      addQuery(`die/students/${studentId}/export.pdf`, filters),
+      { headers: { Accept: 'application/pdf' } },
+    );
+    return response.blob();
   }
   listAcademicYears(cursor?: string) {
     return this.request(

@@ -4,7 +4,7 @@ import { Avatar, DropdownItem, DropdownMenu } from '@edupay/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { createAcademicApiClient } from '@/api/client-factory';
 import {
@@ -96,17 +96,22 @@ export function AppShell({
   children,
   dataMode = 'demo',
   notificationsApi,
+  dieAccessGranted,
   session,
 }: CurrentSessionConsumerProps & {
   children: ReactNode;
   dataMode?: 'demo' | 'real';
   notificationsApi?: NotificationApiClient;
+  dieAccessGranted?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const identity = useIdentitySession();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigation = workspaceNavigation[session.workspace];
+  const [dieProbe, setDieProbe] = useState<{
+    membershipId: string;
+    allowed: boolean;
+  } | null>(null);
   const defaultNotificationsApi = useMemo(
     () =>
       dataMode === 'real' && getIdentitySessionAdapter()
@@ -115,6 +120,43 @@ export function AppShell({
     [dataMode],
   );
   const notificationApi = notificationsApi ?? defaultNotificationsApi;
+  useEffect(() => {
+    if (dieAccessGranted !== undefined) return;
+    if (dataMode !== 'real' || session.roles.includes('STUDENT')) return;
+    if (!getIdentitySessionAdapter()) return;
+    let mounted = true;
+    void createAcademicApiClient()
+      .getDieAccess()
+      .then(() => {
+        if (mounted)
+          setDieProbe({ membershipId: session.membershipId, allowed: true });
+      })
+      .catch(() => {
+        if (mounted)
+          setDieProbe({ membershipId: session.membershipId, allowed: false });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [dataMode, dieAccessGranted, session.membershipId, session.roles]);
+  const dieAllowed =
+    dieAccessGranted ??
+    (dieProbe?.membershipId === session.membershipId && dieProbe.allowed);
+  const navigation = useMemo(
+    () =>
+      dieAllowed
+        ? [
+            ...workspaceNavigation[session.workspace],
+            {
+              href: '/die',
+              icon: 'review' as const,
+              label: 'Inclusión educativa',
+              mobile: session.workspace !== 'student',
+            },
+          ]
+        : workspaceNavigation[session.workspace],
+    [dieAllowed, session.workspace],
+  );
 
   return (
     <div className="app-shell">
