@@ -15,6 +15,7 @@ import type {
   StorageCategory as PrismaStorageCategory,
 } from '../generated/prisma/client';
 import type { CreateUploadIntent, StorageUsage } from '@edupay/contracts';
+import type { CreateDieUploadIntent } from '@edupay/contracts';
 
 import { AuthorizationService } from '../authorization/authorization.service';
 import { TenantCapability } from '../authorization/authorization.types';
@@ -49,6 +50,7 @@ import {
   type MalwareScanFailureReason,
   type MalwareScanner,
 } from './malware-scanner.port';
+import { CurrentIdentityStatusService } from '../identity/current-identity-status.service';
 
 const GLOBAL_SCOPE_KEY = 'GLOBAL';
 const EXPIRY_MS = 15 * 60 * 1000;
@@ -58,7 +60,7 @@ type LearningAttachmentPurpose =
   | 'ASSIGNMENT_SOURCE'
   | 'ASSESSMENT_SOURCE';
 
-type UploadCategory = LearningAttachmentPurpose | 'STUDENT_SUBMISSION';
+type UploadCategory = LearningAttachmentPurpose | 'STUDENT_SUBMISSION' | 'DIE_ATTACHMENT';
 
 export type StoredFileResult = {
   readonly id: string;
@@ -91,6 +93,7 @@ export class StorageService implements LearningAttachmentPort {
     private readonly audit: AcademicAuditPort,
     @Inject(MALWARE_SCANNER)
     private readonly malwareScanner: MalwareScanner,
+    private readonly identityStatus: CurrentIdentityStatusService,
   ) {}
 
   async getUsage(context: AcademicRequestContext): Promise<StorageUsage> {
@@ -272,6 +275,47 @@ export class StorageService implements LearningAttachmentPort {
       mimeType: metadata.declaredMime,
       sizeBytes: metadata.declaredSizeBytes,
       status: 'RESERVED',
+      expiresAt: intent.expiresAt.toISOString(),
+      upload: {
+        method: 'POST',
+        path: `/api/v1/file-upload-intents/${intent.id}/content`,
+        fieldName: 'file',
+        maxSizeBytes: MAX_FILE_SIZE_BYTES,
+      },
+    };
+  }
+
+  async createDieUploadIntent(
+    context: AcademicRequestContext,
+    journalEntryId: string,
+    input: CreateDieUploadIntent,
+  ): Promise<object> {
+    const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
+    await this.requireDieAccess(context);
+    const entry = await this.prisma.dieJournalEntry.findUnique({
+      where: { tenantId_id: { tenantId, id: journalEntryId } },
+    });
+    if (!entry) this.notFound();
+    let metadata: ReturnType<typeof validateUploadMetadata>;
+    try {
+      metadata = validateUploadMetadata(input);
+    } catch (error) {
+      this.throwValidation(error);
+    }
+    if (metadata.extension === '.zip') {
+      throw new BadRequestException('ZIP files are not allowed for DIE attachments.');
+    }
+    const intent = await this.reserveUpload(
+      context,
+      { parentType: 'DIE_JOURNAL_ENTRY', parentId: entry.id, category: 'DIE_ATTACHMENT' },
+      metadata,
+    );
+    return {
+      id: intent.id,
+      journalEntryId: entry.id,
+      filename: metadata.normalizedFilename,
+      mimeType: metadata.declaredMime,
+      sizeBytes: metadata.declaredSizeBytes,
       expiresAt: intent.expiresAt.toISOString(),
       upload: {
         method: 'POST',
@@ -617,6 +661,7 @@ export class StorageService implements LearningAttachmentPort {
           include: {
             learningItem: true,
             submissionRevision: { include: { submission: true } },
+            dieJournalEntry: true,
           },
         },
       },
@@ -639,6 +684,10 @@ export class StorageService implements LearningAttachmentPort {
         const submission = reference.submissionRevision.submission;
         allowed ||= await this.canReadSubmission(context, submission);
       }
+      if (reference.dieJournalEntry) {
+        await this.requireDieAccess(context);
+        allowed = true;
+      }
     }
     if (!allowed) this.deny();
     const body = await this.provider.read(file.storedBlob.storageKey);
@@ -648,6 +697,19 @@ export class StorageService implements LearningAttachmentPort {
       resourceId: file.id,
       resourceType: 'FileObject',
     });
+    if (file.fileReferences.some((reference) => reference.dieJournalEntry)) {
+      await this.prisma.dieAuditEvent.create({
+        data: {
+          tenantId,
+          action: 'DIE_ATTACHMENT_DOWNLOADED',
+          actorIdentityUserId: context.principal.identityUserId,
+          membershipId: context.tenant.membershipId,
+          resourceType: 'FileObject',
+          resourceId: file.id,
+          requestId: context.requestId,
+        },
+      });
+    }
     return {
       filename: file.normalizedFilename,
       mimeType: file.detectedMime,
@@ -666,6 +728,14 @@ export class StorageService implements LearningAttachmentPort {
     });
     if (!intent || intent.createdByIdentityUserId !== context.principal.identityUserId) {
       this.deny();
+    }
+    if (intent.parentType === 'DIE_JOURNAL_ENTRY') {
+      await this.requireDieAccess(context);
+      const entry = await this.prisma.dieJournalEntry.findUnique({
+        where: { tenantId_id: { tenantId, id: intent.parentId } },
+      });
+      if (!entry || intent.category !== 'DIE_ATTACHMENT') this.deny();
+      return intent;
     }
     if (intent.parentType !== 'LEARNING_ITEM') this.deny();
     const item = await this.prisma.learningItem.findUnique({
@@ -820,7 +890,7 @@ export class StorageService implements LearningAttachmentPort {
   private async reserveUpload(
     context: AcademicRequestContext,
     reference: {
-      parentType: 'LEARNING_ITEM';
+      parentType: 'LEARNING_ITEM' | 'DIE_JOURNAL_ENTRY';
       parentId: string;
       category: UploadCategory;
     },
@@ -927,7 +997,30 @@ export class StorageService implements LearningAttachmentPort {
           validatedAt: now,
         },
       });
-      if (input.intent.category !== 'STUDENT_SUBMISSION') {
+      if (input.intent.category === 'DIE_ATTACHMENT') {
+        await tx.fileReference.create({
+          data: {
+            id: randomUUID(),
+            tenantId: input.intent.tenantId,
+            fileObjectId: file.id,
+            referenceType: 'DIE_JOURNAL_ENTRY',
+            category: 'DIE_ATTACHMENT',
+            dieJournalEntryId: input.intent.parentId,
+            createdByIdentityUserId: input.context.principal.identityUserId,
+          },
+        });
+        await tx.dieAuditEvent.create({
+          data: {
+            tenantId: input.intent.tenantId,
+            action: 'DIE_ATTACHMENT_ADDED',
+            actorIdentityUserId: input.context.principal.identityUserId,
+            membershipId: input.context.tenant.membershipId,
+            resourceType: 'FileObject',
+            resourceId: file.id,
+            requestId: input.context.requestId,
+          },
+        });
+      } else if (input.intent.category !== 'STUDENT_SUBMISSION') {
         await tx.fileReference.create({
           data: {
             id: randomUUID(),
@@ -1233,6 +1326,24 @@ export class StorageService implements LearningAttachmentPort {
     category: record.category,
     createdAt: record.createdAt.toISOString(),
   });
+
+  private async requireDieAccess(context: AcademicRequestContext): Promise<void> {
+    await this.identityStatus.requireCurrentActiveContext(
+      context.principal,
+      context.tenant,
+      context.requestId,
+    );
+    if (context.principal.roles.includes('TENANT_ADMIN')) return;
+    const member = await this.prisma.dieMemberAssignment.findFirst({
+      where: {
+        tenantId: context.tenant.tenantId,
+        identityUserId: context.principal.identityUserId,
+        removedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!member) this.deny();
+  }
 
   private quotaState(
     percentage: number,

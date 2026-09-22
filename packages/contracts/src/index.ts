@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './academic.js';
 export * from './academic-financial-projection.js';
+export * from './die.js';
 export * from './learning.js';
 export * from './learning-read.js';
 export * from './notifications.js';

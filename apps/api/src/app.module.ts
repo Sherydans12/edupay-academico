@@ -11,6 +11,7 @@ import { StorageModule } from './storage/storage.module';
 import { NotificationsApiModule } from './notifications/notifications-api.module';
 import { SyncModule } from './sync/sync.module';
 import { FinancialProjectionContractModule } from './financial-projection/financial-projection-contract.module';
+import { DieModule } from './die/die.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { FinancialProjectionContractModule } from './financial-projection/financ
     NotificationsApiModule,
     SyncModule,
     FinancialProjectionContractModule,
+    DieModule,
     HealthModule,
   ],
 })

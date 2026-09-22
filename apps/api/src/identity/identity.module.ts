@@ -30,6 +30,7 @@ import { JwksIdentityAccessTokenVerifier } from './jwks-identity-access-token-ve
     },
   ],
   exports: [
+    IdentityInternalHttpClient,
     ACADEMIC_IDENTITY_LINK_VERIFIER,
     IDENTITY_ACCESS_TOKEN_VERIFIER,
     IDENTITY_SESSION_STATUS_ADAPTER,
