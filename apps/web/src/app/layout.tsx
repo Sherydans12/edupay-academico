@@ -15,6 +15,9 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
+  icons: {
+    icon: '/favicon.ico',
+  },
   title: 'EduPay Académico · Colegio Conquistadores',
   description: 'Espacio académico de estudiantes y docentes',
 };
