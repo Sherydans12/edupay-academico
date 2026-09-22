@@ -6,6 +6,62 @@ validación del release con flags apagados. Estado funcional:
 Esta es la referencia operativa vigente. Los ADR aceptados conservan autoridad
 sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica.
 
+## Reconciliación documental vigente — 2026-09-22
+
+Esta sección separa integración en Git, despliegue observado y validación del
+usuario. El `main` de Académico integra PR #7 (merge
+`10b84fd12ddc76221c862589267067d5fb7e5cbd`) y PR #8 (merge
+`8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`); CI de `main` fue aprobado. Eso no
+prueba que Coolify haya reconstruido el FRONT. El código realmente desplegado
+no se sustituye en esta fotografía por el SHA de `main`.
+
+| Componente | Integrado / referencia de código | Despliegue o artefacto conocido | Estado de validación |
+|---|---|---|---|
+| Académico FRONT | `main` en `8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`; PR #7 y Onboarding 2 integrados | Evidencia de Cut 1: fuente `e844f5b54291af7c7027498c8972fa90cb46783d`, imagen `qf65r4ltig6jhb6t8dmv2qyw:e844f5b54291af7c7027498c8972fa90cb46783d`, manifiesto `sha256:ae93b9646016860af02fcc332ff6e0b0fedd9de548e428b427c462a7bcdf1a13`; la fotografía base también conserva deployment Coolify `wxgimhdhkeolqstf35psgwvh` y SHA estable `4f5ad2839e08e561e0335f6e4fdedfe448f15415` | Integrado; FRONT de PR #8 pendiente de redeploy y validación de usuario |
+| Académico API | Hotfix y primer corte ya integrados en `main` | Último inventario canónico: código `ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7`, imagen `ghcr.io/sherydans12/edupay-academico@sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767`; Cut 1 documentó además `sha256:89bb5a7a54100a0bcd1d1fc239b2c56309a243f7914105fb4e245a7ee2732c18` | Desplegado previamente; este cierre no autoriza ni requiere redeploy API |
+| Académico workers | Código `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` | `ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a` | Desplegado; fuera del corte documental |
+| Identity | Referencia de `origin/main` `0616adbd3226b97f84381f65f3bb9fe5fe03cee1`; recuperación/plantilla documentadas en sus merges | Evidencia posterior de plantilla: `ghcr.io/sherydans12/edupay-identity@sha256:6733d04b53c87145429927b2d9a37e2fe7d44d73314d857c6a03bd8e67f64103`; el inventario histórico conserva `b38849be78fee492f68f2d0e99cff3b69a08415a` / `sha256:eb35930f4fb0358d891c50c57e301d47fb033b9d9a0b53284fea0b68e73aa7f8` | Recuperación y plantilla confirmadas por el usuario; no modificar Identity |
+| BL-002 | `origin/main` consultado en `d3e40da0bcf893e8d02f2c23d7c79a4d46b8071f` | Mapping desplegado desde `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c`; BACK manifest `sha256:4b0f403a51bc45b3ce229bf01d97e108804d3326765f1e3f4e788834bac76a1a`, FRONT manifest `sha256:9b2193b1783b764ae2ff304f7ccd14154af6cb37277359d23cb0215301e3b2d9`; 0 escrituras de mapping | Acceso confirmado; sin asignaciones reales; fuera de este cambio |
+| Registry | No es un SHA de aplicación | GHCR privado operativo para los artefactos runtime fijados por digest; no se registran credenciales. El candidato histórico `sha256:c19015e02821bcb5ede62b837ab33eba542d947f0de9a70d93bde89f5c5e1cf4` sigue sin equivaler a despliegue | Operativo; no confundir disponibilidad del registry con promoción de una imagen |
+
+La diferencia entre el registro histórico del FRONT (`4f5ad283…`/deployment
+`wxgim…`) y el artefacto explícito de Cut 1 (`e844f5b…`/manifiesto
+`ae93…`) queda conservada como evidencia separada. Antes de un rollback se debe
+confirmar en Coolify cuál es el deployment vigente y su imagen; ninguno de esos
+identificadores se reemplaza por `8b9805af…` sin evidencia de despliegue.
+
+Onboarding 1 fue desplegado y el usuario confirmó el indicador en lectura. Su
+`READY` sigue significando únicamente estructura base preparada. PR #7 y
+Onboarding 2 están integrados, pero el FRONT de ese corte sigue pendiente de
+redeploy y de comprobación de navegación/lectura.
+
+## Instrucción concreta para el redeploy pendiente del FRONT
+
+El usuario debe actuar sólo sobre el recurso Coolify
+`qf65r4ltig6jhb6t8dmv2qyw` (`academico.edupay.baselogic.cl`):
+
+1. Seleccionar `main` en el candidato aprobado
+   `8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`; no conservar un pin anterior ni
+   confundir el SHA Git con un deployment o un digest.
+2. Mantener `/deploy/Dockerfile.web`, target `runtime`, puerto `3000` y health
+   `GET /login`.
+3. Conservar exactamente `NEXT_PUBLIC_API_BASE_URL=https://academico-api.edupay.baselogic.cl/api/v1`
+   y `NEXT_PUBLIC_IDENTITY_BASE_URL=https://identity.edupay.baselogic.cl`.
+4. Ejecutar sólo FRONT, sin migraciones ni cambios en API, workers, Identity,
+   BL, mappings, flags o secretos. Auto deploy permanece manual.
+5. Tras el deploy, comprobar sólo lecturas: `/login`, navegación a
+   `/docente/asignaturas/.../estudiantes`, `/administracion/estructura`, el
+   indicador autorizado de TENANT_ADMIN y cambio de contexto. No crear ni
+   activar años, cursos, asignaturas o asociaciones reales.
+
+Para rollback, identificar tres cosas por separado: deployment Coolify UUID
+`wxgimhdhkeolqstf35psgwvh` (registro histórico del FRONT), SHA de código
+`4f5ad2839e08e561e0335f6e4fdedfe448f15415` y, como artefacto conocido de Cut 1,
+manifiesto `sha256:ae93b9646016860af02fcc332ff6e0b0fedd9de548e428b427c462a7bcdf1a13`
+de la imagen etiquetada con `e844f5b…`. Confirmar en Coolify que esa relación
+sigue disponible antes de usarla; no llamar “deployment” a un SHA Git y no
+hacer rollback cruzado si sólo falla FRONT.
+
 ## Observación de release — 2026-09-14
 
 Académico API ejecuta el hotfix
