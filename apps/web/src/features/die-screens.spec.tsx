@@ -107,4 +107,49 @@ describe('DIE workspace', () => {
     );
     expect(screen.queryByText('Ana Pérez')).toBeNull();
   });
+
+  it('hides the previous tenant data immediately when membership context changes', async () => {
+    const firstApi = api();
+    const nextApi = api({
+      listDieStudents: vi.fn().mockResolvedValue([
+        {
+          studentId: '00000000-0000-4000-8000-000000000099',
+          displayName: 'Tomás Nuevo Tenant',
+          activeEpisode: null,
+          latestEpisode: {
+            id: episodeId,
+            studentId: '00000000-0000-4000-8000-000000000099',
+            startDate: '2026-09-02',
+            reason: 'Acompañamiento anterior.',
+            responsibleMemberAssignmentId: null,
+            status: 'FINISHED',
+            endDate: '2026-09-20',
+            endReason: 'Cierre.',
+            academicContext: {
+              academicYearId: null,
+              academicYearLabel: null,
+              courseId: null,
+              courseLabel: null,
+            },
+            createdAt: timestamp,
+          },
+        },
+      ]),
+    });
+    const nextSession = {
+      ...demoSessions.admin,
+      membershipId: 'membership-other-tenant',
+      tenantId: 'other-tenant',
+      tenantDisplayName: 'Otro colegio',
+    };
+    const view = render(
+      <DieWorkspace api={firstApi} session={demoSessions.admin} />,
+    );
+    expect(await screen.findByText('Ana Pérez')).toBeTruthy();
+
+    view.rerender(<DieWorkspace api={nextApi} session={nextSession} />);
+    expect(screen.queryByText('Ana Pérez')).toBeNull();
+    expect(await screen.findByText('Tomás Nuevo Tenant')).toBeTruthy();
+    expect(nextApi.getDieAccess).toHaveBeenCalled();
+  });
 });

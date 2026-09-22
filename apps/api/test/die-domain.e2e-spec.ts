@@ -45,27 +45,29 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
 
   beforeEach(async () => {
     identity.reset();
-    await prisma.fileReference.deleteMany();
-    await prisma.fileObject.deleteMany();
-    await prisma.uploadIntent.deleteMany();
-    await prisma.storedBlob.deleteMany();
-    await prisma.dieAuditEvent.deleteMany();
-    await prisma.dieActionAssignment.deleteMany();
-    await prisma.dieAction.deleteMany();
-    await prisma.dieJournalRevision.deleteMany();
-    await prisma.dieJournalEntry.deleteMany();
-    await prisma.dieSupportEpisode.deleteMany();
-    await prisma.dieMemberAssignment.deleteMany();
-    await prisma.courseEnrollment.deleteMany();
-    await prisma.teacher.deleteMany();
-    await prisma.student.deleteMany();
-    await prisma.course.deleteMany();
-    await prisma.academicYear.deleteMany();
-    await prisma.storageUsageAccount.deleteMany();
-    await prisma.storageQuotaPolicy.deleteMany();
-    await prisma.tenant.deleteMany();
-    await seedTenant('tenant-a');
-    await seedTenant('tenant-b');
+    const tenantIds: string[] = ['die-tenant-a', 'die-tenant-b'];
+    const withinTestTenants = { tenantId: { in: tenantIds } };
+    await prisma.fileReference.deleteMany({ where: withinTestTenants });
+    await prisma.fileObject.deleteMany({ where: withinTestTenants });
+    await prisma.uploadIntent.deleteMany({ where: withinTestTenants });
+    await prisma.storedBlob.deleteMany({ where: withinTestTenants });
+    await prisma.dieAuditEvent.deleteMany({ where: withinTestTenants });
+    await prisma.dieActionAssignment.deleteMany({ where: withinTestTenants });
+    await prisma.dieAction.deleteMany({ where: withinTestTenants });
+    await prisma.dieJournalRevision.deleteMany({ where: withinTestTenants });
+    await prisma.dieJournalEntry.deleteMany({ where: withinTestTenants });
+    await prisma.dieSupportEpisode.deleteMany({ where: withinTestTenants });
+    await prisma.dieMemberAssignment.deleteMany({ where: withinTestTenants });
+    await prisma.courseEnrollment.deleteMany({ where: withinTestTenants });
+    await prisma.teacher.deleteMany({ where: withinTestTenants });
+    await prisma.student.deleteMany({ where: withinTestTenants });
+    await prisma.course.deleteMany({ where: withinTestTenants });
+    await prisma.academicYear.deleteMany({ where: withinTestTenants });
+    await prisma.storageUsageAccount.deleteMany({ where: withinTestTenants });
+    await prisma.storageQuotaPolicy.deleteMany({ where: withinTestTenants });
+    await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
+    await seedTenant('die-tenant-a');
+    await seedTenant('die-tenant-b');
   });
 
   afterAll(async () => {
@@ -76,10 +78,15 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
   });
 
   it('grants admins automatically, denies ordinary teachers, and lets every DIE member add an ordinary member', async () => {
-    const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
-    const first = await teacher('tenant-a', 'teacher-one', 'Elena', 'Ríos');
-    const second = await teacher('tenant-a', 'teacher-two', 'Mario', 'Soto');
-    const ordinary = await token('tenant-a', 'teacher-one', ['TEACHER']);
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const first = await teacher('die-tenant-a', 'teacher-one', 'Elena', 'Ríos');
+    const second = await teacher(
+      'die-tenant-a',
+      'teacher-two',
+      'Mario',
+      'Soto',
+    );
+    const ordinary = await token('die-tenant-a', 'teacher-one', ['TEACHER']);
 
     await api(admin).get('/api/v1/die/access').expect(200);
     await api(ordinary).get('/api/v1/die/access').expect(403);
@@ -96,7 +103,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
 
     expect(
       await prisma.dieMemberAssignment.count({
-        where: { tenantId: 'tenant-a', removedAt: null },
+        where: { tenantId: 'die-tenant-a', removedAt: null },
       }),
     ).toBe(2);
     expect(
@@ -107,10 +114,10 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
   });
 
   it('keeps coordination tenant-admin-only and never accepts a cross-tenant academic target', async () => {
-    const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
-    const first = await teacher('tenant-a', 'teacher-one', 'Elena', 'Ríos');
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const first = await teacher('die-tenant-a', 'teacher-one', 'Elena', 'Ríos');
     const foreign = await teacher(
-      'tenant-b',
+      'die-tenant-b',
       'teacher-foreign',
       'Otra',
       'Empresa',
@@ -119,7 +126,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .post('/api/v1/die/members')
       .send({ teacherId: first.id })
       .expect(201);
-    const member = await token('tenant-a', 'teacher-one', ['TEACHER']);
+    const member = await token('die-tenant-a', 'teacher-one', ['TEACHER']);
 
     await api(member)
       .patch(`/api/v1/die/members/${created.body.id}/role`)
@@ -136,10 +143,10 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
   });
 
   it('serializes active support, preserves episode history, and captures course/year at the time of the fact', async () => {
-    const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
-    const student = await studentRecord('tenant-a', 'Ana', 'Pérez');
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const student = await studentRecord('die-tenant-a', 'Ana', 'Pérez');
     const { course } = await academicContext(
-      'tenant-a',
+      'die-tenant-a',
       student.id,
       '2026',
       '5° A',
@@ -166,13 +173,17 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .send(journalBody(student.id, episode.id))
       .expect(201);
     await prisma.courseEnrollment.updateMany({
-      where: { tenantId: 'tenant-a', studentId: student.id },
+      where: { tenantId: 'die-tenant-a', studentId: student.id },
       data: { status: 'INACTIVE' },
     });
     await api(admin)
       .post(`/api/v1/die/support-episodes/${episode.id}/finish`)
       .send({ endDate: '2026-09-10', reason: 'Objetivo de período cumplido.' })
       .expect(201);
+    await api(admin)
+      .post('/api/v1/die/journal-entries')
+      .send(journalBody(student.id, episode.id))
+      .expect(409);
     const resumed = await api(admin)
       .post('/api/v1/die/support-episodes')
       .send({
@@ -194,15 +205,15 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
   });
 
   it('versions corrections, preserves original authorship, and restricts correction/void authority', async () => {
-    const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
     const authorTeacher = await teacher(
-      'tenant-a',
+      'die-tenant-a',
       'author-user',
       'Sara',
       'León',
     );
     const otherTeacher = await teacher(
-      'tenant-a',
+      'die-tenant-a',
       'other-user',
       'Nicolás',
       'Díaz',
@@ -215,9 +226,9 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .post('/api/v1/die/members')
       .send({ teacherId: otherTeacher.id })
       .expect(201);
-    const author = await token('tenant-a', 'author-user', ['TEACHER']);
-    const other = await token('tenant-a', 'other-user', ['TEACHER']);
-    const student = await studentRecord('tenant-a', 'Lucas', 'Vera');
+    const author = await token('die-tenant-a', 'author-user', ['TEACHER']);
+    const other = await token('die-tenant-a', 'other-user', ['TEACHER']);
+    const student = await studentRecord('die-tenant-a', 'Lucas', 'Vera');
     const episode = await api(admin)
       .post('/api/v1/die/support-episodes')
       .send({
@@ -262,10 +273,15 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
   });
 
   it('requires transactional reassignment when removing a member with open actions', async () => {
-    const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
-    const firstTeacher = await teacher('tenant-a', 'first-user', 'Pía', 'Mora');
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const firstTeacher = await teacher(
+      'die-tenant-a',
+      'first-user',
+      'Pía',
+      'Mora',
+    );
     const secondTeacher = await teacher(
-      'tenant-a',
+      'die-tenant-a',
       'second-user',
       'José',
       'Lagos',
@@ -278,7 +294,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .post('/api/v1/die/members')
       .send({ teacherId: secondTeacher.id })
       .expect(201);
-    const student = await studentRecord('tenant-a', 'Marta', 'Silva');
+    const student = await studentRecord('die-tenant-a', 'Marta', 'Silva');
     const action = await api(admin)
       .post('/api/v1/die/actions')
       .send({
@@ -302,20 +318,20 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .expect(201);
 
     const stored = await prisma.dieAction.findUniqueOrThrow({
-      where: { tenantId_id: { tenantId: 'tenant-a', id: action.body.id } },
+      where: { tenantId_id: { tenantId: 'die-tenant-a', id: action.body.id } },
     });
     expect(stored.assigneeMemberAssignmentId).toBe(second.body.id);
     expect(
       await prisma.dieActionAssignment.count({
-        where: { tenantId: 'tenant-a', actionId: action.body.id },
+        where: { tenantId: 'die-tenant-a', actionId: action.body.id },
       }),
     ).toBe(2);
   });
 
   it('protects DIE attachments from broader academic access and rejects ZIP for this resource class', async () => {
-    const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
     const memberTeacher = await teacher(
-      'tenant-a',
+      'die-tenant-a',
       'member-user',
       'Inés',
       'Pino',
@@ -324,9 +340,9 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .post('/api/v1/die/members')
       .send({ teacherId: memberTeacher.id })
       .expect(201);
-    const member = await token('tenant-a', 'member-user', ['TEACHER']);
-    const outsider = await token('tenant-a', 'outsider-user', ['TEACHER']);
-    const student = await studentRecord('tenant-a', 'Sol', 'Reyes');
+    const member = await token('die-tenant-a', 'member-user', ['TEACHER']);
+    const outsider = await token('die-tenant-a', 'outsider-user', ['TEACHER']);
+    const student = await studentRecord('die-tenant-a', 'Sol', 'Reyes');
     const episode = await api(admin)
       .post('/api/v1/die/support-episodes')
       .send({
@@ -366,12 +382,22 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .get(`/api/v1/files/${uploaded.body.id}/download`)
       .expect(200);
     expect(download.text).toBe('contenido seguro');
+    const rejoined = await token(
+      'die-tenant-a',
+      'member-user',
+      ['TEACHER'],
+      'replacement-membership',
+    );
+    await api(rejoined).get('/api/v1/die/access').expect(403);
+    await api(rejoined)
+      .get(`/api/v1/files/${uploaded.body.id}/download`)
+      .expect(403);
   });
 
   it('exports an audited PDF and denies cross-tenant export tampering', async () => {
-    const adminA = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
-    const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
-    const student = await studentRecord('tenant-a', 'Eva', 'Núñez');
+    const adminA = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const adminB = await token('die-tenant-b', 'admin-b', ['TENANT_ADMIN']);
+    const student = await studentRecord('die-tenant-a', 'Eva', 'Núñez');
     const episode = await api(adminA)
       .post('/api/v1/die/support-episodes')
       .send({
@@ -393,7 +419,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     expect(
       await prisma.dieAuditEvent.count({
         where: {
-          tenantId: 'tenant-a',
+          tenantId: 'die-tenant-a',
           action: 'DIE_STUDENT_PDF_EXPORTED',
           resourceId: student.id,
         },
@@ -420,10 +446,11 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     tenantId: string,
     userId: string,
     roles: Array<'TENANT_ADMIN' | 'TEACHER' | 'STUDENT'>,
+    membershipId = `membership-${tenantId}-${userId}`,
   ) {
     const context = {
       identityUserId: userId,
-      membershipId: `membership-${tenantId}-${userId}`,
+      membershipId,
       sessionId: `session-${tenantId}-${userId}`,
       tenantId,
     };

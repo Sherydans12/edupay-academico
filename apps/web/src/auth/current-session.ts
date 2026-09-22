@@ -85,5 +85,7 @@ export function useTrustedCurrentSession(fallback: TrustedCurrentSession): {
 
   return context?.session
     ? { loading: false, session: context.session }
-    : { loading, session };
+    : activeSessionAdapter
+      ? { loading, session }
+      : { loading: false, session: fallback };
 }

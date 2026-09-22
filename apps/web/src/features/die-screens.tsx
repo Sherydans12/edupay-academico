@@ -7,7 +7,7 @@ import type {
   DieMember,
   DieStudentSummary,
 } from '@edupay/contracts';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   AcademicApiError,
@@ -53,6 +53,9 @@ export function DieWorkspace({
 }) {
   const { session } = useTrustedCurrentSession(suppliedSession);
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
+  const contextKey = `${session.tenantId}:${session.membershipId}`;
+  const loadRequest = useRef(0);
+  const journalRequest = useRef(0);
   const [view, setView] = useState<View>('students');
   const [members, setMembers] = useState<DieMember[]>([]);
   const [students, setStudents] = useState<DieStudentSummary[]>([]);
@@ -60,11 +63,16 @@ export function DieWorkspace({
   const [journal, setJournal] = useState<DieJournalEntry[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [loadedContextKey, setLoadedContextKey] = useState('');
   const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
+    const requestId = ++loadRequest.current;
     setLoading(true);
     setError(null);
+    setLoadedContextKey('');
+    setJournal([]);
+    setSelectedStudentId('');
     try {
       await client.getDieAccess();
       const [nextMembers, nextStudents, nextActions] = await Promise.all([
@@ -72,30 +80,33 @@ export function DieWorkspace({
         client.listDieStudents(),
         client.listDieActions(),
       ]);
+      if (loadRequest.current !== requestId) return;
       setMembers(nextMembers);
       setStudents(nextStudents);
       setActions(nextActions);
-      setSelectedStudentId(
-        (current) => current || nextStudents[0]?.studentId || '',
-      );
+      setSelectedStudentId(nextStudents[0]?.studentId || '');
+      setLoadedContextKey(contextKey);
     } catch (nextError) {
-      setError(nextError);
+      if (loadRequest.current === requestId) setError(nextError);
     } finally {
-      setLoading(false);
+      if (loadRequest.current === requestId) setLoading(false);
     }
-  }, [client]);
+  }, [client, contextKey]);
 
   const loadJournal = useCallback(async () => {
+    const requestId = ++journalRequest.current;
     if (!selectedStudentId) {
       setJournal([]);
       return;
     }
     try {
-      setJournal(
-        await client.listDieJournal(selectedStudentId, { includeVoided: true }),
-      );
+      const nextJournal = await client.listDieJournal(selectedStudentId, {
+        includeVoided: true,
+      });
+      if (journalRequest.current !== requestId) return;
+      setJournal(nextJournal);
     } catch (nextError) {
-      setError(nextError);
+      if (journalRequest.current === requestId) setError(nextError);
     }
   }, [client, selectedStudentId]);
 
@@ -111,6 +122,7 @@ export function DieWorkspace({
   const selectedStudent = students.find(
     (student) => student.studentId === selectedStudentId,
   );
+  const contextIsCurrent = loadedContextKey === contextKey;
   return (
     <AppShell dataMode="real" dieAccessGranted session={session}>
       <PageHeading
@@ -138,7 +150,7 @@ export function DieWorkspace({
           {message(error)}
         </Alert>
       ) : null}
-      {loading ? (
+      {loading || !contextIsCurrent ? (
         <div className="die-loading">
           <Skeleton />
           <Skeleton />

@@ -1338,6 +1338,7 @@ export class StorageService implements LearningAttachmentPort {
       where: {
         tenantId: context.tenant.tenantId,
         identityUserId: context.principal.identityUserId,
+        identityMembershipId: context.tenant.membershipId,
         removedAt: null,
       },
       select: { id: true },

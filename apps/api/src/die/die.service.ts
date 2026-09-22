@@ -168,22 +168,25 @@ export class DieService {
     this.access.requireTenantAdmin(access);
     const tenantId = context.tenant.tenantId;
     const member = await this.activeMember(tenantId, memberId);
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.dieMemberAssignment.update({
-        where: { tenantId_id: { tenantId, id: member.id } },
-        data: { role },
-        include: { teacher: true },
-      });
-      await this.audit(
-        tx,
-        context,
-        'DIE_MEMBER_ROLE_CHANGED',
-        'DieMemberAssignment',
-        member.id,
-        { role },
-      );
-      return row;
-    });
+    const updated = await this.prisma.$transaction(
+      async (tx) => {
+        const row = await tx.dieMemberAssignment.update({
+          where: { tenantId_id: { tenantId, id: member.id } },
+          data: { role },
+          include: { teacher: true },
+        });
+        await this.audit(
+          tx,
+          context,
+          'DIE_MEMBER_ROLE_CHANGED',
+          'DieMemberAssignment',
+          member.id,
+          { role },
+        );
+        return row;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
     return this.memberView(updated);
   }
 
@@ -202,80 +205,94 @@ export class DieService {
         'A department member cannot remove their own active assignment.',
       );
     }
-    const openCount = await this.prisma.dieAction.count({
-      where: {
-        tenantId,
-        assigneeMemberAssignmentId: member.id,
-        status: { in: OPEN_ACTION_STATUSES },
-      },
-    });
-    let replacement: Awaited<ReturnType<DieService['activeMember']>> | null =
-      null;
-    if (openCount > 0) {
-      if (!input.reassignToMemberAssignmentId) {
-        throw new ConflictException(
-          'Open actions must be reassigned before removing this member.',
+    await this.prisma.$transaction(
+      async (tx) => {
+        const currentMember = await this.activeMemberIn(
+          tx,
+          tenantId,
+          member.id,
         );
-      }
-      replacement = await this.activeMember(
-        tenantId,
-        input.reassignToMemberAssignmentId,
-      );
-      if (replacement.id === member.id)
-        throw new BadRequestException(
-          'The replacement member must be different.',
-        );
-    }
-    await this.prisma.$transaction(async (tx) => {
-      if (replacement) {
-        const actions = await tx.dieAction.findMany({
+        if (currentMember.role === 'COORDINATOR')
+          this.access.requireTenantAdmin(actor);
+        if (currentMember.identityUserId === context.principal.identityUserId)
+          throw new ConflictException(
+            'A department member cannot remove their own active assignment.',
+          );
+        const openCount = await tx.dieAction.count({
           where: {
             tenantId,
-            assigneeMemberAssignmentId: member.id,
+            assigneeMemberAssignmentId: currentMember.id,
             status: { in: OPEN_ACTION_STATUSES },
           },
-          select: { id: true },
         });
-        const now = new Date();
-        for (const action of actions) {
-          await tx.dieActionAssignment.updateMany({
-            where: { tenantId, actionId: action.id, unassignedAt: null },
-            data: { unassignedAt: now },
-          });
-          await tx.dieAction.update({
-            where: { tenantId_id: { tenantId, id: action.id } },
-            data: { assigneeMemberAssignmentId: replacement.id },
-          });
-          await tx.dieActionAssignment.create({
-            data: {
-              tenantId,
-              actionId: action.id,
-              memberAssignmentId: replacement.id,
-              assignedByIdentityUserId: context.principal.identityUserId,
-              reason: 'Reasignación por retiro de miembro DIE.',
-            },
-          });
+        let replacement = null;
+        if (openCount > 0) {
+          if (!input.reassignToMemberAssignmentId) {
+            throw new ConflictException(
+              'Open actions must be reassigned before removing this member.',
+            );
+          }
+          replacement = await this.activeMemberIn(
+            tx,
+            tenantId,
+            input.reassignToMemberAssignmentId,
+          );
+          if (replacement.id === currentMember.id)
+            throw new BadRequestException(
+              'The replacement member must be different.',
+            );
         }
-      }
-      await tx.dieMemberAssignment.update({
-        where: { tenantId_id: { tenantId, id: member.id } },
-        data: {
-          removedAt: new Date(),
-          removedByIdentityUserId: context.principal.identityUserId,
-          removalReason: input.reason,
-        },
-      });
-      await this.audit(
-        tx,
-        context,
-        'DIE_MEMBER_REMOVED',
-        'DieMemberAssignment',
-        member.id,
-        {
-          reassignedActionCount: openCount,
-        },
-      );
-    });
+        if (replacement) {
+          const actions = await tx.dieAction.findMany({
+            where: {
+              tenantId,
+              assigneeMemberAssignmentId: currentMember.id,
+              status: { in: OPEN_ACTION_STATUSES },
+            },
+            select: { id: true },
+          });
+          const now = new Date();
+          for (const action of actions) {
+            await tx.dieActionAssignment.updateMany({
+              where: { tenantId, actionId: action.id, unassignedAt: null },
+              data: { unassignedAt: now },
+            });
+            await tx.dieAction.update({
+              where: { tenantId_id: { tenantId, id: action.id } },
+              data: { assigneeMemberAssignmentId: replacement.id },
+            });
+            await tx.dieActionAssignment.create({
+              data: {
+                tenantId,
+                actionId: action.id,
+                memberAssignmentId: replacement.id,
+                assignedByIdentityUserId: context.principal.identityUserId,
+                reason: 'Reasignación por retiro de miembro DIE.',
+              },
+            });
+          }
+        }
+        await tx.dieMemberAssignment.update({
+          where: { tenantId_id: { tenantId, id: currentMember.id } },
+          data: {
+            removedAt: new Date(),
+            removedByIdentityUserId: context.principal.identityUserId,
+            removalReason: input.reason,
+          },
+        });
+        await this.audit(
+          tx,
+          context,
+          'DIE_MEMBER_REMOVED',
+          'DieMemberAssignment',
+          currentMember.id,
+          {
+            reassignedActionCount: openCount,
+          },
+        );
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async listStudents(context: AcademicRequestContext, search?: string) {
@@ -289,10 +306,16 @@ export class DieService {
               student: {
                 OR: [
                   {
-                    firstName: { contains: search.trim(), mode: 'insensitive' },
+                    firstName: {
+                      contains: search.trim(),
+                      mode: 'insensitive',
+                    },
                   },
                   {
-                    lastName: { contains: search.trim(), mode: 'insensitive' },
+                    lastName: {
+                      contains: search.trim(),
+                      mode: 'insensitive',
+                    },
                   },
                 ],
               },
@@ -395,35 +418,42 @@ export class DieService {
       where: { tenantId_id: { tenantId, id: input.studentId } },
     });
     if (!student || student.status !== 'ACTIVE') this.notFound();
-    if (input.responsibleMemberAssignmentId)
-      await this.activeMember(tenantId, input.responsibleMemberAssignmentId);
     const academic = await this.captureAcademicContext(
       tenantId,
       input.studentId,
     );
     try {
-      const episode = await this.prisma.$transaction(async (tx) => {
-        const row = await tx.dieSupportEpisode.create({
-          data: {
-            tenantId,
-            studentId: input.studentId,
-            startDate: this.date(input.startDate),
-            reason: input.reason,
-            responsibleMemberAssignmentId:
-              input.responsibleMemberAssignmentId ?? null,
-            ...academic,
-            createdByIdentityUserId: context.principal.identityUserId,
-          },
-        });
-        await this.audit(
-          tx,
-          context,
-          'DIE_SUPPORT_STARTED',
-          'DieSupportEpisode',
-          row.id,
-        );
-        return row;
-      });
+      const episode = await this.prisma.$transaction(
+        async (tx) => {
+          if (input.responsibleMemberAssignmentId)
+            await this.activeMemberIn(
+              tx,
+              tenantId,
+              input.responsibleMemberAssignmentId,
+            );
+          const row = await tx.dieSupportEpisode.create({
+            data: {
+              tenantId,
+              studentId: input.studentId,
+              startDate: this.date(input.startDate),
+              reason: input.reason,
+              responsibleMemberAssignmentId:
+                input.responsibleMemberAssignmentId ?? null,
+              ...academic,
+              createdByIdentityUserId: context.principal.identityUserId,
+            },
+          });
+          await this.audit(
+            tx,
+            context,
+            'DIE_SUPPORT_STARTED',
+            'DieSupportEpisode',
+            row.id,
+          );
+          return row;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
       return this.episodeView(episode);
     } catch (error) {
       if (this.isUniqueConflict(error))
@@ -452,29 +482,34 @@ export class DieService {
       throw new BadRequestException(
         'The end date cannot precede the start date.',
       );
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const changed = await tx.dieSupportEpisode.updateMany({
-        where: { tenantId, id: episode.id, endedAt: null },
-        data: {
-          endedAt: endDate,
-          endReason: input.reason,
-          endedByIdentityUserId: context.principal.identityUserId,
-        },
-      });
-      if (changed.count !== 1)
-        throw new ConflictException('The support episode is already finished.');
-      const row = await tx.dieSupportEpisode.findUniqueOrThrow({
-        where: { tenantId_id: { tenantId, id: episode.id } },
-      });
-      await this.audit(
-        tx,
-        context,
-        'DIE_SUPPORT_FINISHED',
-        'DieSupportEpisode',
-        row.id,
-      );
-      return row;
-    });
+    const updated = await this.prisma.$transaction(
+      async (tx) => {
+        const changed = await tx.dieSupportEpisode.updateMany({
+          where: { tenantId, id: episode.id, endedAt: null },
+          data: {
+            endedAt: endDate,
+            endReason: input.reason,
+            endedByIdentityUserId: context.principal.identityUserId,
+          },
+        });
+        if (changed.count !== 1)
+          throw new ConflictException(
+            'The support episode is already finished.',
+          );
+        const row = await tx.dieSupportEpisode.findUniqueOrThrow({
+          where: { tenantId_id: { tenantId, id: episode.id } },
+        });
+        await this.audit(
+          tx,
+          context,
+          'DIE_SUPPORT_FINISHED',
+          'DieSupportEpisode',
+          row.id,
+        );
+        return row;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
     return this.episodeView(updated);
   }
 
@@ -506,34 +541,48 @@ export class DieService {
       tenantId,
       input.studentId,
     );
-    const entry = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.dieJournalEntry.create({
-        data: {
-          tenantId,
-          studentId: input.studentId,
-          supportEpisodeId: input.supportEpisodeId,
-          originalAuthorIdentityUserId: context.principal.identityUserId,
-        },
-      });
-      await tx.dieJournalRevision.create({
-        data: {
-          tenantId,
-          journalEntryId: row.id,
-          revisionNumber: 1,
-          ...this.revisionData(input, academic),
-          correctedByIdentityUserId: context.principal.identityUserId,
-        },
-      });
-      await this.audit(
-        tx,
-        context,
-        'DIE_JOURNAL_ENTRY_CREATED',
-        'DieJournalEntry',
-        row.id,
-        { category: input.category },
-      );
-      return row;
-    });
+    const entry = await this.prisma.$transaction(
+      async (tx) => {
+        const currentEpisode = await tx.dieSupportEpisode.findUnique({
+          where: {
+            tenantId_id: { tenantId, id: input.supportEpisodeId },
+          },
+        });
+        if (!currentEpisode || currentEpisode.studentId !== input.studentId)
+          this.notFound();
+        if (currentEpisode.endedAt)
+          throw new ConflictException(
+            'New journal entries require an active support episode.',
+          );
+        const row = await tx.dieJournalEntry.create({
+          data: {
+            tenantId,
+            studentId: input.studentId,
+            supportEpisodeId: input.supportEpisodeId,
+            originalAuthorIdentityUserId: context.principal.identityUserId,
+          },
+        });
+        await tx.dieJournalRevision.create({
+          data: {
+            tenantId,
+            journalEntryId: row.id,
+            revisionNumber: 1,
+            ...this.revisionData(input, academic),
+            correctedByIdentityUserId: context.principal.identityUserId,
+          },
+        });
+        await this.audit(
+          tx,
+          context,
+          'DIE_JOURNAL_ENTRY_CREATED',
+          'DieJournalEntry',
+          row.id,
+          { category: input.category },
+        );
+        return row;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
     return this.getJournalEntry(context, entry.id);
   }
 
@@ -724,40 +773,50 @@ export class DieService {
       where: { tenantId_id: { tenantId, id: input.studentId } },
     });
     if (!student) this.notFound();
-    const assignee = await this.activeMember(
-      tenantId,
-      input.assigneeMemberAssignmentId,
-    );
     if (input.journalEntryId) {
       const entry = await this.prisma.dieJournalEntry.findUnique({
         where: { tenantId_id: { tenantId, id: input.journalEntryId } },
       });
       if (!entry || entry.studentId !== input.studentId) this.notFound();
     }
-    const action = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.dieAction.create({
-        data: {
+    const action = await this.prisma.$transaction(
+      async (tx) => {
+        const assignee = await this.activeMemberIn(
+          tx,
           tenantId,
-          studentId: input.studentId,
-          journalEntryId: input.journalEntryId ?? null,
-          title: input.title,
-          description: input.description ?? null,
-          assigneeMemberAssignmentId: assignee.id,
-          dueDate: input.dueDate ? this.date(input.dueDate) : null,
-          createdByIdentityUserId: context.principal.identityUserId,
-        },
-      });
-      await tx.dieActionAssignment.create({
-        data: {
-          tenantId,
-          actionId: row.id,
-          memberAssignmentId: assignee.id,
-          assignedByIdentityUserId: context.principal.identityUserId,
-        },
-      });
-      await this.audit(tx, context, 'DIE_ACTION_CREATED', 'DieAction', row.id);
-      return row;
-    });
+          input.assigneeMemberAssignmentId,
+        );
+        const row = await tx.dieAction.create({
+          data: {
+            tenantId,
+            studentId: input.studentId,
+            journalEntryId: input.journalEntryId ?? null,
+            title: input.title,
+            description: input.description ?? null,
+            assigneeMemberAssignmentId: assignee.id,
+            dueDate: input.dueDate ? this.date(input.dueDate) : null,
+            createdByIdentityUserId: context.principal.identityUserId,
+          },
+        });
+        await tx.dieActionAssignment.create({
+          data: {
+            tenantId,
+            actionId: row.id,
+            memberAssignmentId: assignee.id,
+            assignedByIdentityUserId: context.principal.identityUserId,
+          },
+        });
+        await this.audit(
+          tx,
+          context,
+          'DIE_ACTION_CREATED',
+          'DieAction',
+          row.id,
+        );
+        return row;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
     return this.actionView(action);
   }
 
@@ -860,42 +919,52 @@ export class DieService {
     if (!action) this.notFound();
     if (!OPEN_ACTION_STATUSES.includes(action.status))
       throw new ConflictException('Closed actions cannot be reassigned.');
-    const assignee = await this.activeMember(
-      tenantId,
-      input.assigneeMemberAssignmentId,
-    );
-    if (assignee.id === action.assigneeMemberAssignmentId)
-      throw new BadRequestException(
-        'The action is already assigned to this member.',
-      );
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const now = new Date();
-      await tx.dieActionAssignment.updateMany({
-        where: { tenantId, actionId: action.id, unassignedAt: null },
-        data: { unassignedAt: now },
-      });
-      const row = await tx.dieAction.update({
-        where: { tenantId_id: { tenantId, id: action.id } },
-        data: { assigneeMemberAssignmentId: assignee.id },
-      });
-      await tx.dieActionAssignment.create({
-        data: {
+    const updated = await this.prisma.$transaction(
+      async (tx) => {
+        const currentAction = await tx.dieAction.findUnique({
+          where: { tenantId_id: { tenantId, id: action.id } },
+        });
+        if (!currentAction) this.notFound();
+        if (!OPEN_ACTION_STATUSES.includes(currentAction.status))
+          throw new ConflictException('Closed actions cannot be reassigned.');
+        const assignee = await this.activeMemberIn(
+          tx,
           tenantId,
-          actionId: action.id,
-          memberAssignmentId: assignee.id,
-          assignedByIdentityUserId: context.principal.identityUserId,
-          reason: input.reason,
-        },
-      });
-      await this.audit(
-        tx,
-        context,
-        'DIE_ACTION_REASSIGNED',
-        'DieAction',
-        row.id,
-      );
-      return row;
-    });
+          input.assigneeMemberAssignmentId,
+        );
+        if (assignee.id === currentAction.assigneeMemberAssignmentId)
+          throw new BadRequestException(
+            'The action is already assigned to this member.',
+          );
+        const now = new Date();
+        await tx.dieActionAssignment.updateMany({
+          where: { tenantId, actionId: action.id, unassignedAt: null },
+          data: { unassignedAt: now },
+        });
+        const row = await tx.dieAction.update({
+          where: { tenantId_id: { tenantId, id: action.id } },
+          data: { assigneeMemberAssignmentId: assignee.id },
+        });
+        await tx.dieActionAssignment.create({
+          data: {
+            tenantId,
+            actionId: action.id,
+            memberAssignmentId: assignee.id,
+            assignedByIdentityUserId: context.principal.identityUserId,
+            reason: input.reason,
+          },
+        });
+        await this.audit(
+          tx,
+          context,
+          'DIE_ACTION_REASSIGNED',
+          'DieAction',
+          row.id,
+        );
+        return row;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
     return this.actionView(updated);
   }
 
@@ -1066,6 +1135,18 @@ export class DieService {
 
   private async activeMember(tenantId: string, id: string) {
     const member = await this.prisma.dieMemberAssignment.findUnique({
+      where: { tenantId_id: { tenantId, id } },
+    });
+    if (!member || member.removedAt) this.notFound();
+    return member;
+  }
+
+  private async activeMemberIn(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    id: string,
+  ) {
+    const member = await tx.dieMemberAssignment.findUnique({
       where: { tenantId_id: { tenantId, id } },
     });
     if (!member || member.removedAt) this.notFound();

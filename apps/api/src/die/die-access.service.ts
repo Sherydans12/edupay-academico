@@ -30,6 +30,7 @@ export class DieAccessService {
       where: {
         tenantId: context.tenant.tenantId,
         identityUserId: context.principal.identityUserId,
+        identityMembershipId: context.tenant.membershipId,
         removedAt: null,
       },
       select: { id: true, role: true },
