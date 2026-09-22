@@ -16,6 +16,7 @@ vi.mock('next/navigation', () => ({
 afterEach(() => cleanup());
 
 const subjectId = '00000000-0000-4000-8000-000000000001';
+const otherSubjectId = '00000000-0000-4000-8000-000000000003';
 const studentId = '00000000-0000-4000-8000-000000000002';
 const timestamp = '2026-08-08T12:00:00+00:00';
 const subject = {
@@ -45,6 +46,18 @@ const subject = {
   createdAt: timestamp,
   updatedAt: timestamp,
 };
+const otherSubject = {
+  ...subject,
+  id: otherSubjectId,
+  courseId: otherSubjectId,
+  subjectId: otherSubjectId,
+  course: { ...subject.course, id: otherSubjectId, label: '8º Básico A' },
+  subject: {
+    ...subject.subject,
+    id: otherSubjectId,
+    name: 'Matemática',
+  },
+};
 
 function client(overrides: Partial<AcademicApiClient>): AcademicApiClient {
   return overrides as AcademicApiClient;
@@ -73,7 +86,7 @@ describe('Teacher course subject roster route', () => {
     render(
       <TeacherCourseSubjectRosterScreen
         api={client({
-          getTeacherContextSubjects: vi.fn(async () => [subject]),
+          getTeacherContextSubjects: vi.fn(async () => [subject, otherSubject]),
           getTeacherCourseSubjectRoster,
         })}
         courseSubjectId={subjectId}
@@ -88,6 +101,8 @@ describe('Teacher course subject roster route', () => {
     ).toBeTruthy();
     expect(await screen.findByText('Emilia Vargas')).toBeTruthy();
     expect(getTeacherCourseSubjectRoster).toHaveBeenCalledWith(subjectId);
+    expect(getTeacherCourseSubjectRoster).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Matemática')).toBeNull();
   });
 
   it('shows the API authorization boundary without rendering roster data', async () => {

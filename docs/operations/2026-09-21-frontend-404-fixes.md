@@ -7,10 +7,10 @@ Base: `origin/main` en `965c049a246676f21ae8a004817c0e956e7272c3`
 ## Hallazgos y cambio mínimo
 
 - `/favicon.ico` no tenía asset ni declaración explícita en el layout. Se
-  agregó un favicon ICO de 32×32 usando el marcador `CC` que ya utiliza el
-  shell y los tokens de marca de Colegio Conquistadores (`#14234f` y
-  `#e6b83f`). No se inventó un escudo: el producto documenta que todavía no
-  existe un logo institucional aprobado.
+  agregó un favicon ICO de 32×32 con el icono neutral `book` ya existente en
+  `apps/web/src/components/icons.tsx` y la paleta base de EduPay (`#243b53` y
+  `#d5a021`). No contiene iniciales ni colores de Colegio Conquistadores:
+  este producto es multi-colegio.
 - El enlace de `Ver estudiantes` en la vista docente de una asignatura apunta a
   `/docente/asignaturas/<courseSubjectId>/estudiantes`, pero ese segmento no
   existía. La intención es el roster docente, no una pantalla de administración.
@@ -21,6 +21,9 @@ Base: `origin/main` en `965c049a246676f21ae8a004817c0e956e7272c3`
   devuelto por el servidor. Si no está, no solicita el roster; si el API
   responde `401`/`403`, muestra el estado de sesión o autorización sin datos.
   No se cambiaron permisos, contratos ni endpoints.
+- Revisión final: el controlador API entrega el principal y tenant confiables al
+  servicio; `courseSubjectRoster` exige una asignación docente activa dentro de
+  ese tenant. La prueba API existente confirma `403` al pedir otra asignatura.
 
 ## Aislamiento y solapamiento
 
@@ -32,19 +35,22 @@ navegación faltante, una pantalla nueva, sus pruebas, el asset y esta nota.
 
 ## Evidencia ejecutada
 
-- Pruebas focalizadas: 4/4, incluyendo sesión sintética docente autorizada,
-  `403` sin estudiantes renderizados y asignatura fuera del contexto sin
-  solicitud de roster.
-- Suite completa: web 118/118 y API 208/208; 49 pruebas de API quedaron
+- Pruebas focalizadas: 4/4, incluyendo resolución independiente de la ruta,
+  sesión sintética docente autorizada, `403` sin estudiantes renderizados y
+  asignatura fuera del contexto sin solicitud de roster; el caso autorizado
+  también confirma que solo solicita el `courseSubjectId` seleccionado cuando
+  el contexto contiene otra asignatura.
+- Suite completa previa: web 118/118 y API 208/208; 49 pruebas de API quedaron
   omitidas por la configuración existente de la suite.
+- Suite web posterior a esta revisión: 119/119.
 - `pnpm db:validate`, `pnpm db:generate`, `pnpm typecheck` y `pnpm build`
   pasaron con la configuración pública sintética HTTPS que usa CI.
 - `pnpm lint` pasó con 0 errores y 12 warnings preexistentes concentrados en
   `apps/web/src/features/course-builder/`, fuera de este corte.
 - Servidor local: `GET
-  /docente/asignaturas/00000000-0000-4000-8000-000000000001/estudiantes` →
+/docente/asignaturas/00000000-0000-4000-8000-000000000001/estudiantes` →
   `200`, respuesta con el contenido de la pantalla de estudiantes; `HEAD
-  /favicon.ico` → `200`, `image/x-icon`, 4670 bytes. El ICO decodifica como
+/favicon.ico` → `200`, `image/x-icon`, 4670 bytes. El ICO decodifica como
   una imagen 32×32 de 32 bits.
 - Los archivos modificados por este corte pasan Prettier. El `format:check`
   global continúa reportando 12 archivos preexistentes sin formato, que no se
