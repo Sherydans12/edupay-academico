@@ -12,6 +12,9 @@ import {
   AcademicApiError,
   type AcademicApiClient,
 } from '@/api/academic-client';
+import type { TrustedCurrentSession } from '@/auth/current-session';
+import { IdentitySessionContext } from '@/auth/session-context';
+import type { IdentitySessionContextValue } from '@/auth/session-provider';
 import { AcademicAdminScreen } from '@/features/academic-admin';
 
 vi.mock('next/navigation', () => ({
@@ -25,7 +28,25 @@ afterEach(() => {
 
 const id = '00000000-0000-4000-8000-000000000001';
 const id2 = '00000000-0000-4000-8000-000000000002';
+const id3 = '00000000-0000-4000-8000-000000000003';
+const id4 = '00000000-0000-4000-8000-000000000004';
+const id5 = '00000000-0000-4000-8000-000000000005';
+const id6 = '00000000-0000-4000-8000-000000000006';
 const timestamp = '2026-08-08T12:00:00+00:00';
+
+type AcademicYearsPage = Awaited<
+  ReturnType<AcademicApiClient['listAcademicYears']>
+>;
+type CoursesPage = Awaited<ReturnType<AcademicApiClient['listCourses']>>;
+type StudentsPage = Awaited<ReturnType<AcademicApiClient['listStudents']>>;
+type TeachersPage = Awaited<ReturnType<AcademicApiClient['listTeachers']>>;
+type SubjectsPage = Awaited<ReturnType<AcademicApiClient['listSubjects']>>;
+type CourseSubjectsPage = Awaited<
+  ReturnType<AcademicApiClient['listCourseSubjects']>
+>;
+type AcademicPreparation = Awaited<
+  ReturnType<AcademicApiClient['getAcademicPreparationStatus']>
+>;
 
 const year = {
   id,
@@ -313,6 +334,45 @@ function adminClient(
   } as unknown as AcademicApiClient;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
+function sessionForTenant(tenantId: string): TrustedCurrentSession {
+  return {
+    displayName: `Admin ${tenantId}`,
+    identityUserId: `user-${tenantId}`,
+    membershipId: `membership-${tenantId}`,
+    roles: ['TENANT_ADMIN'],
+    roleLabel: 'Administración académica',
+    tenantDisplayName: tenantId,
+    tenantId,
+    workspace: 'tenant-admin',
+  };
+}
+
+function sessionContext(
+  session: TrustedCurrentSession,
+): IdentitySessionContextValue {
+  return {
+    status: 'authenticated',
+    session,
+    memberships: [],
+    login: async () => session,
+    logout: async () => undefined,
+    refresh: async () => null,
+    retryBootstrap: async () => undefined,
+    switchMembership: async () => session,
+    provisionMembership: vi.fn(),
+    inviteMembership: vi.fn(),
+    createActivationChallenge: vi.fn(),
+  } as unknown as IdentitySessionContextValue;
+}
+
 describe('Academic admin screens', () => {
   it('renders academic overview with sync and storage usage', async () => {
     const client = adminClient();
@@ -410,6 +470,257 @@ describe('Academic admin screens', () => {
       await screen.findByRole('heading', { name: 'Asignaturas por curso' }),
     ).toBeTruthy();
     expect(screen.getByText('Asignaturas de 7º Básico A')).toBeTruthy();
+  });
+
+  it('shows a neutral state when the selected year has no courses', async () => {
+    const client = adminClient({
+      listCourses: vi.fn(async () => ({ items: [], nextCursor: null })),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    expect(
+      await screen.findByText('Sin cursos en este año.', { exact: true }),
+    ).toBeTruthy();
+    expect(screen.queryByText('Sin pendientes en este corte')).toBeNull();
+  });
+
+  it('loads every relevant academic page before calculating subject progress', async () => {
+    const pagedYear = {
+      ...year,
+      id: id3,
+      label: '2027',
+      status: 'DRAFT' as const,
+    };
+    const pagedCourse = {
+      ...course,
+      id: id4,
+      academicYearId: id,
+      label: '8º Básico B',
+    };
+    const pagedSubject = { ...subject2, id: id5, name: 'Ciencias' };
+    const pagedCourseSubject = {
+      ...courseSubject1,
+      id: id6,
+      courseId: pagedCourse.id,
+      subjectId: pagedSubject.id,
+      course: pagedCourse,
+      subject: pagedSubject,
+    };
+    const client = adminClient({
+      listAcademicYears: vi.fn(async (cursor?: string) =>
+        cursor === 'years-page-2'
+          ? { items: [pagedYear], nextCursor: null }
+          : { items: [year], nextCursor: 'years-page-2' },
+      ),
+      listCourses: vi.fn(async (_academicYearId?: string, cursor?: string) =>
+        cursor === 'courses-page-2'
+          ? { items: [pagedCourse], nextCursor: null }
+          : { items: [course], nextCursor: 'courses-page-2' },
+      ),
+      listSubjects: vi.fn(async (cursor?: string) =>
+        cursor === 'subjects-page-2'
+          ? { items: [pagedSubject], nextCursor: null }
+          : { items: [subject1], nextCursor: 'subjects-page-2' },
+      ),
+      listCourseSubjects: vi.fn(async (_courseId?: string, cursor?: string) =>
+        cursor === 'course-subjects-page-2'
+          ? { items: [pagedCourseSubject], nextCursor: null }
+          : { items: [courseSubject1], nextCursor: 'course-subjects-page-2' },
+      ),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    const summary = await screen.findByLabelText(
+      'Resumen de asignaturas del año',
+    );
+    expect(within(summary).getAllByText('2', { exact: true })).toHaveLength(3);
+    expect(
+      screen.getByRole('option', { name: '2027 · Borrador' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('option', { name: '8º Básico B' })).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole('tab', { name: 'Catálogo de Asignaturas' }),
+    );
+    expect(screen.getByText('Ciencias')).toBeTruthy();
+
+    expect(client.listAcademicYears).toHaveBeenCalledTimes(2);
+    expect(client.listAcademicYears).toHaveBeenNthCalledWith(2, 'years-page-2');
+    expect(client.listCourses).toHaveBeenCalledTimes(2);
+    expect(client.listCourses).toHaveBeenNthCalledWith(
+      2,
+      undefined,
+      'courses-page-2',
+    );
+    expect(client.listSubjects).toHaveBeenCalledTimes(2);
+    expect(client.listSubjects).toHaveBeenNthCalledWith(2, 'subjects-page-2');
+    expect(client.listCourseSubjects).toHaveBeenCalledTimes(2);
+    expect(client.listCourseSubjects).toHaveBeenNthCalledWith(
+      2,
+      undefined,
+      'course-subjects-page-2',
+    );
+  });
+
+  it('does not show subject progress success when a later page fails', async () => {
+    const client = adminClient({
+      listCourses: vi.fn(async (_academicYearId?: string, cursor?: string) => {
+        if (cursor === 'courses-page-failure') {
+          throw new Error('courses page failed');
+        }
+        return { items: [course], nextCursor: 'courses-page-failure' };
+      }),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    expect(
+      await screen.findByText('No pudimos completar la acción'),
+    ).toBeTruthy();
+    expect(screen.queryByText('Sin pendientes en este corte')).toBeNull();
+  });
+
+  it('stops on a repeated cursor instead of requesting pages forever', async () => {
+    const client = adminClient({
+      listSubjects: vi.fn(async () => ({
+        items: [subject1],
+        nextCursor: 'repeated-subjects-page',
+      })),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    expect(
+      await screen.findByText('No pudimos completar la acción'),
+    ).toBeTruthy();
+    expect(client.listSubjects).toHaveBeenCalledTimes(2);
+  });
+
+  it('discards late data from the previous tenant during a context reload', async () => {
+    const tenantAYear = { ...year, id: id3, label: 'Tenant A 2026' };
+    const tenantACourse = {
+      ...course,
+      id: id4,
+      academicYearId: tenantAYear.id,
+      label: 'Curso Tenant A',
+    };
+    const tenantASubject = {
+      ...subject1,
+      id: id5,
+      name: 'Asignatura Tenant A',
+    };
+    const tenantACourseSubject = {
+      ...courseSubject1,
+      id: id6,
+      courseId: tenantACourse.id,
+      subjectId: tenantASubject.id,
+      course: tenantACourse,
+      subject: tenantASubject,
+    };
+    const tenantBYear = { ...year, label: 'Tenant B 2026' };
+    const tenantBCourse = { ...course, label: 'Curso Tenant B' };
+    const tenantBSubject = { ...subject2, name: 'Asignatura Tenant B' };
+    const tenantBCourseSubject = {
+      ...courseSubject1,
+      course: tenantBCourse,
+      subject: tenantBSubject,
+    };
+    const firstYears = deferred<AcademicYearsPage>();
+    const secondYears = deferred<AcademicYearsPage>();
+    const firstCourses = deferred<CoursesPage>();
+    const secondCourses = deferred<CoursesPage>();
+    const firstStudents = deferred<StudentsPage>();
+    const secondStudents = deferred<StudentsPage>();
+    const firstTeachers = deferred<TeachersPage>();
+    const secondTeachers = deferred<TeachersPage>();
+    const firstSubjects = deferred<SubjectsPage>();
+    const secondSubjects = deferred<SubjectsPage>();
+    const firstCourseSubjects = deferred<CourseSubjectsPage>();
+    const secondCourseSubjects = deferred<CourseSubjectsPage>();
+    const firstPreparation = deferred<AcademicPreparation>();
+    const secondPreparation = deferred<AcademicPreparation>();
+    let tenant = 'tenant-a';
+    const client = adminClient({
+      listAcademicYears: vi.fn(() =>
+        tenant === 'tenant-a' ? firstYears.promise : secondYears.promise,
+      ),
+      listCourses: vi.fn(() =>
+        tenant === 'tenant-a' ? firstCourses.promise : secondCourses.promise,
+      ),
+      listStudents: vi.fn(() =>
+        tenant === 'tenant-a' ? firstStudents.promise : secondStudents.promise,
+      ),
+      listTeachers: vi.fn(() =>
+        tenant === 'tenant-a' ? firstTeachers.promise : secondTeachers.promise,
+      ),
+      listSubjects: vi.fn(() =>
+        tenant === 'tenant-a' ? firstSubjects.promise : secondSubjects.promise,
+      ),
+      listCourseSubjects: vi.fn(() =>
+        tenant === 'tenant-a'
+          ? firstCourseSubjects.promise
+          : secondCourseSubjects.promise,
+      ),
+      getAcademicPreparationStatus: vi.fn(() =>
+        tenant === 'tenant-a'
+          ? firstPreparation.promise
+          : secondPreparation.promise,
+      ),
+    });
+    const sessionA = sessionForTenant('tenant-a');
+    const sessionB = sessionForTenant('tenant-b');
+    const renderFor = (session: TrustedCurrentSession) => (
+      <IdentitySessionContext.Provider value={sessionContext(session)}>
+        <AcademicAdminScreen api={client} view="structure" />
+      </IdentitySessionContext.Provider>
+    );
+    const view = render(renderFor(sessionA));
+
+    await waitFor(() =>
+      expect(client.listAcademicYears).toHaveBeenCalledTimes(1),
+    );
+    tenant = 'tenant-b';
+    view.rerender(renderFor(sessionB));
+    await waitFor(() =>
+      expect(client.listAcademicYears).toHaveBeenCalledTimes(2),
+    );
+
+    secondYears.resolve({ items: [tenantBYear], nextCursor: null });
+    secondCourses.resolve({ items: [tenantBCourse], nextCursor: null });
+    secondStudents.resolve({ items: [], nextCursor: null });
+    secondTeachers.resolve({ items: [], nextCursor: null });
+    secondSubjects.resolve({ items: [tenantBSubject], nextCursor: null });
+    secondCourseSubjects.resolve({
+      items: [tenantBCourseSubject],
+      nextCursor: null,
+    });
+    secondPreparation.resolve({
+      ...academicPreparation,
+      academicYears: {
+        ...academicPreparation.academicYears,
+        selectedActiveYearId: tenantBYear.id,
+      },
+    });
+
+    expect(
+      (await screen.findAllByRole('option', { name: /^Tenant B 2026/ })).length,
+    ).toBeGreaterThan(0);
+
+    firstYears.resolve({ items: [tenantAYear], nextCursor: null });
+    firstCourses.resolve({ items: [tenantACourse], nextCursor: null });
+    firstStudents.resolve({ items: [], nextCursor: null });
+    firstTeachers.resolve({ items: [], nextCursor: null });
+    firstSubjects.resolve({ items: [tenantASubject], nextCursor: null });
+    firstCourseSubjects.resolve({
+      items: [tenantACourseSubject],
+      nextCursor: null,
+    });
+    firstPreparation.resolve(academicPreparation);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole('option', { name: /^Tenant B 2026/ }).length,
+      ).toBeGreaterThan(0);
+      expect(screen.queryByText('Tenant A 2026')).toBeNull();
+    });
   });
 
   it('shows a bounded read-only state for associations in a closed year', async () => {

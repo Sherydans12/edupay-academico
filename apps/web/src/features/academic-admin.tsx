@@ -57,6 +57,39 @@ interface AdminData {
   academicPreparationError: unknown | null;
 }
 
+interface CursorPage<T> {
+  items: T[];
+  nextCursor: string | null;
+  totalCount?: number | undefined;
+}
+
+async function loadAllPages<T>(
+  loadPage: (cursor?: string) => Promise<CursorPage<T>>,
+): Promise<CursorPage<T>> {
+  const items: T[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+  let totalCount: number | undefined;
+
+  while (true) {
+    const page = await loadPage(cursor);
+    items.push(...page.items);
+    totalCount ??= page.totalCount;
+
+    if (page.nextCursor === null) {
+      return totalCount === undefined
+        ? { items, nextCursor: null }
+        : { items, nextCursor: null, totalCount };
+    }
+    if (seenCursors.has(page.nextCursor)) {
+      throw new Error('La paginación devolvió un cursor repetido.');
+    }
+
+    seenCursors.add(page.nextCursor);
+    cursor = page.nextCursor;
+  }
+}
+
 const emptyData: AdminData = {
   academicYears: [],
   courses: [],
@@ -139,12 +172,12 @@ function useAdminData(api: AcademicApiClient, contextKey: string) {
 
     const [coreResult, preparationResult] = await Promise.allSettled([
       Promise.all([
-        api.listAcademicYears(),
-        api.listCourses(),
+        loadAllPages((cursor) => api.listAcademicYears(cursor)),
+        loadAllPages((cursor) => api.listCourses(undefined, cursor)),
         api.listStudents(),
         api.listTeachers(),
-        api.listSubjects(),
-        api.listCourseSubjects(),
+        loadAllPages((cursor) => api.listSubjects(cursor)),
+        loadAllPages((cursor) => api.listCourseSubjects(undefined, cursor)),
       ]),
       api.getAcademicPreparationStatus(),
     ]);
@@ -1701,6 +1734,31 @@ function SubjectCoverageSummary({
           </div>
           <Badge tone="neutral">Sin contexto</Badge>
         </div>
+      </section>
+    );
+  }
+
+  if (totalCourses === 0) {
+    return (
+      <section
+        aria-labelledby="academic-subject-progress-title"
+        className="academic-panel academic-subject-progress-panel"
+      >
+        <div className="section-heading">
+          <div>
+            <h2 id="academic-subject-progress-title">
+              Asignaturas del año {selectedYear.label}
+            </h2>
+            <p>
+              Cuando existan cursos en este año podrás revisar sus asociaciones
+              de asignaturas desde aquí.
+            </p>
+          </div>
+          <Badge tone="neutral">Sin cursos en este año</Badge>
+        </div>
+        <p className="academic-subject-progress-confirmation" role="status">
+          Sin cursos en este año.
+        </p>
       </section>
     );
   }

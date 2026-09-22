@@ -29,6 +29,14 @@ La interfaz refresca los datos después de las mutaciones existentes y no
 mantiene un curso seleccionado fuera del año visible. En años cerrados o
 archivados presenta la historia en solo lectura y no ofrece mutaciones.
 
+La cobertura se calcula sobre todas las páginas de años, cursos, asignaturas y
+asociaciones: la interfaz consume `nextCursor` hasta terminar, evita cursores
+repetidos y no duplica la carga. Si falla una página, la carga queda en error y
+no se presenta como progreso completo. Un año sin cursos muestra el estado
+neutral `Sin cursos en este año`; no se interpreta como preparación completada.
+El control de secuencia existente descarta respuestas tardías de un contexto
+tenant anterior.
+
 ## Capacidades y contratos reutilizados
 
 No se agregó una entidad, persistencia ni endpoint. Se reutilizan:
