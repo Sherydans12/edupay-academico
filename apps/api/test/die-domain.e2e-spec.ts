@@ -13,7 +13,10 @@ import {
 } from 'vitest';
 
 import { configureApplication } from '../src/bootstrap/configure-application';
+import { TrustedIdentityPrincipal } from '../src/identity/identity.types';
 import { PrismaService } from '../src/persistence/prisma.service';
+import { StorageService } from '../src/storage/storage.service';
+import { TrustedTenantContext } from '../src/tenant/trusted-tenant-context';
 import { IdentityInternalFixture } from './support/identity-internal.fixture';
 import { IdentityJwksFixture } from './support/identity-jwks.fixture';
 
@@ -388,12 +391,32 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
         sizeBytes: 8,
       })
       .expect(400);
-    const intent = await api(member)
-      .post(`/api/v1/die/journal-entries/${entry.body.id}/upload-intents`)
-      .send({ filename: 'nota.txt', mimeType: 'text/plain', sizeBytes: 15 })
-      .expect(201);
+    const principal = TrustedIdentityPrincipal.fromValidatedAccessTokenClaims({
+      aud: 'edupay-academico-api',
+      exp: Math.floor(Date.now() / 1000) + 300,
+      iat: Math.floor(Date.now() / 1000),
+      iss: jwks.issuer,
+      jti: 'die-storage-diagnostic',
+      membership_id: 'membership-die-tenant-a-member-user',
+      nbf: Math.floor(Date.now() / 1000) - 1,
+      roles: ['TEACHER'],
+      sid: 'session-die-tenant-a-member-user',
+      sub: 'member-user',
+      tenant_id: 'die-tenant-a',
+    });
+    const intent = await app.get(StorageService).createDieUploadIntent(
+      {
+        principal,
+        requestId: 'die-storage-diagnostic',
+        tenant: TrustedTenantContext.fromPrincipal(principal),
+      },
+      entry.body.id,
+      { filename: 'nota.txt', mimeType: 'text/plain', sizeBytes: 15 },
+    );
     const uploaded = await api(member)
-      .post(`/api/v1/file-upload-intents/${intent.body.id}/content`)
+      .post(
+        `/api/v1/file-upload-intents/${(intent as { id: string }).id}/content`,
+      )
       .attach('file', Buffer.from('contenido seguro'), {
         filename: 'nota.txt',
         contentType: 'text/plain',
