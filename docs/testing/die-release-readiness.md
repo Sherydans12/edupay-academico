@@ -71,9 +71,9 @@ Académico acepta como miembro DIE sólo una respuesta exacta del mismo usuario 
 
 Identity no tiene hoy una categoría de personal no docente: una membership debe tener roles y los únicos roles tenant son `TENANT_ADMIN`, `TEACHER`, `STUDENT` y `GUARDIAN`. Crear un `Teacher` ficticio o conceder `TEACHER` violaría el alcance.
 
-Recomendación concreta pendiente de aceptación: agregar en Identity el rol tenant-scoped `STAFF`, sin capacidades académicas o administrativas implícitas, y permitir que `TENANT_ADMIN` lo provisione mediante el ciclo de cuentas existente. La membership de aplicación `STAFF` sólo declara que la cuenta corresponde a personal del tenant; la asignación local DIE en Académico continúa siendo la única concesión de acceso DIE. `STUDENT` y `GUARDIAN` siguen siendo inelegibles aunque alguien intente incorporarlos.
+Decisión aprobada e implementada: Identity agrega `STAFF` tenant-scoped, administrado sólo por `TENANT_ADMIN`; no concede capacidad académica, administrativa, financiera ni DIE. La asignación local DIE continúa siendo la única concesión del módulo.
 
-Contrato mínimo adicional recomendado: resolución exacta server-to-server por `institutionalUsername`, no un listado. Identity revalida al actor y deriva su tenant; devuelve únicamente usuario/membership opacos, username normalizado y roles si el destino está ACTIVE, posee `STAFF`, `TEACHER` o `TENANT_ADMIN` y no posee `STUDENT`/`GUARDIAN`. Desconocido, excluido y cross-tenant responden igual. Así el navegador no aporta IDs de Identity y no puede enumerar otros tenants. No se implementa este cambio transversal hasta aceptación explícita.
+Contrato implementado: resolución exacta S2S por `institutionalUsername`, sin listado. Identity deriva tenant del actor revalidado y responde sólo para membership activa elegible. El username puede contener información personal y no se registra innecesariamente.
 
 Hasta desplegar y configurar el perfil, el PDF no se presenta como release-complete. La nueva API impedirá la exportación si falta el nombre en vez de sustituirlo por el UUID.
 

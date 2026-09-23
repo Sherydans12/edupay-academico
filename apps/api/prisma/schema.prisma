@@ -1202,9 +1202,10 @@ model TenantOperationalProfileRevision {
 model DieMemberAssignment {
   id                      String        @default(uuid()) @db.Uuid
   tenantId                String        @map("tenant_id") @db.VarChar(128)
-  teacherId               String        @map("teacher_id") @db.Uuid
+  teacherId               String?       @map("teacher_id") @db.Uuid
   identityUserId          String        @map("identity_user_id") @db.VarChar(128)
   identityMembershipId    String        @map("identity_membership_id") @db.VarChar(128)
+  displayLabelSnapshot    String        @map("display_label_snapshot") @db.VarChar(241)
   role                    DieMemberRole @default(MEMBER)
   addedByIdentityUserId   String        @map("added_by_identity_user_id") @db.VarChar(128)
   addedAt                 DateTime      @default(now()) @map("added_at") @db.Timestamptz(3)
@@ -1213,7 +1214,7 @@ model DieMemberAssignment {
   removalReason           String?       @map("removal_reason") @db.VarChar(500)
 
   tenant                  Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  teacher                 Teacher               @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Restrict)
+  teacher                 Teacher?              @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Restrict)
   responsibleEpisodes     DieSupportEpisode[]
   assignedActions         DieAction[]           @relation("die_action_current_assignee")
   actionAssignmentPeriods DieActionAssignment[]
@@ -1261,6 +1262,7 @@ model DieJournalEntry {
   studentId                    String                @map("student_id") @db.Uuid
   supportEpisodeId             String                @map("support_episode_id") @db.Uuid
   originalAuthorIdentityUserId String                @map("original_author_identity_user_id") @db.VarChar(128)
+  originalAuthorDisplayLabel   String                @map("original_author_display_label") @db.VarChar(241)
   currentRevisionNumber        Int                   @default(1) @map("current_revision_number")
   status                       DieJournalEntryStatus @default(CURRENT)
   voidReason                   String?               @map("void_reason") @db.VarChar(1000)
@@ -1303,6 +1305,7 @@ model DieJournalRevision {
   academicYearLabel         String?              @map("academic_year_label") @db.VarChar(160)
   courseLabel               String?              @map("course_label") @db.VarChar(160)
   correctedByIdentityUserId String               @map("corrected_by_identity_user_id") @db.VarChar(128)
+  correctedByDisplayLabel   String               @map("corrected_by_display_label") @db.VarChar(241)
   correctionReason          String?              @map("correction_reason") @db.VarChar(1000)
   createdAt                 DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
 

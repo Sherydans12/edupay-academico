@@ -1524,11 +1524,7 @@ function MembersPanel({
   onChanged: () => Promise<void>;
   tenantAdmin: boolean;
 }) {
-  const [search, setSearch] = useState('');
-  const [candidates, setCandidates] = useState<
-    Awaited<ReturnType<AcademicApiClient['listDieMemberCandidates']>>
-  >([]);
-  const [selected, setSelected] = useState('');
+  const [institutionalUsername, setInstitutionalUsername] = useState('');
   const [error, setError] = useState('');
   const [removing, setRemoving] = useState<DieMember | null>(null);
   const [removalReason, setRemovalReason] = useState('');
@@ -1540,19 +1536,10 @@ function MembersPanel({
         member.identityUserId === currentIdentityUserId &&
         member.role === 'COORDINATOR',
     );
-  async function find() {
-    try {
-      const rows = await api.listDieMemberCandidates(search);
-      setCandidates(rows);
-      setSelected(rows[0]?.teacherId ?? '');
-    } catch (cause) {
-      setError(message(cause));
-    }
-  }
   async function add() {
     try {
-      await api.addDieMember({ teacherId: selected });
-      setCandidates([]);
+      await api.addDieMember({ institutionalUsername });
+      setInstitutionalUsername('');
       await onChanged();
     } catch (cause) {
       setError(message(cause));
@@ -1694,37 +1681,18 @@ function MembersPanel({
         <div className="die-form-panel">
           <h3>Incorporar miembro ordinario</h3>
           <p>
-            Se elige una persona académica ya vinculada a una cuenta activa del
-            mismo tenant.
+            Escribe el username institucional exacto. No se muestran listados ni
+            coincidencias parciales.
           </p>
           <label>
-            Buscar persona
-            <span className="die-search-row">
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-              <Button variant="secondary" onClick={() => void find()}>
-                <Icon name="search" />
-                Buscar
-              </Button>
-            </span>
+            Username institucional
+            <input
+              autoComplete="off"
+              value={institutionalUsername}
+              onChange={(event) => setInstitutionalUsername(event.target.value)}
+            />
           </label>
-          <label>
-            Persona
-            <select
-              value={selected}
-              onChange={(event) => setSelected(event.target.value)}
-            >
-              <option value="">Selecciona</option>
-              {candidates.map((candidate) => (
-                <option key={candidate.teacherId} value={candidate.teacherId}>
-                  {candidate.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button disabled={!selected} onClick={() => void add()}>
+          <Button disabled={!institutionalUsername.trim()} onClick={() => void add()}>
             Incorporar como especialista
           </Button>
           <p className="die-help">

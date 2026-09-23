@@ -30,6 +30,7 @@ interface NavigationItem {
 }
 
 const workspaceNavigation: Record<WorkspaceKind, NavigationItem[]> = {
+  staff: [],
   student: [
     { href: '/estudiante', icon: 'home', label: 'Inicio', mobile: true },
     {

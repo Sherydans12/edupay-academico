@@ -149,12 +149,12 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
 
     await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: first.id })
+      .send({ institutionalUsername: first.identityUserId })
       .expect(201);
     await api(ordinary).get('/api/v1/die/access').expect(200);
     await api(ordinary)
       .post('/api/v1/die/members')
-      .send({ teacherId: second.id })
+      .send({ institutionalUsername: second.identityUserId })
       .expect(201);
 
     expect(
@@ -164,9 +164,69 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     ).toBe(2);
     expect(
       identity.requests.filter(
-        (item) => item.url === '/internal/v1/tenant-memberships/verify',
+        (item) =>
+          item.url ===
+          '/internal/v1/tenant-memberships/resolve-eligible-personnel',
       ),
     ).toHaveLength(2);
+  });
+
+  it('supports STAFF end to end without Teacher or unrelated academic capabilities', async () => {
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    identity.registerPersonnel({
+      identityUserId: 'staff-specialist',
+      membershipId: 'staff-membership-a',
+      roles: ['STAFF'],
+      tenantId: 'die-tenant-a',
+      username: 'specialist.staff',
+    });
+    identity.registerPersonnel({
+      identityUserId: 'staff-colleague',
+      membershipId: 'staff-membership-b',
+      roles: ['STAFF'],
+      tenantId: 'die-tenant-a',
+      username: 'colleague.staff',
+    });
+    const added = await api(admin)
+      .post('/api/v1/die/members')
+      .send({ institutionalUsername: 'Specialist.Staff' })
+      .expect(201);
+    expect(added.body).toMatchObject({
+      teacherId: null,
+      identityUserId: 'staff-specialist',
+      identityMembershipId: 'staff-membership-a',
+      displayName: 'specialist.staff',
+      role: 'MEMBER',
+    });
+    const staff = await token(
+      'die-tenant-a',
+      'staff-specialist',
+      ['STAFF'],
+      'staff-membership-a',
+    );
+    await api(staff).get('/api/v1/die/access').expect(200);
+    await api(staff).get('/api/v1/academic-years').expect(403);
+    await api(staff)
+      .post('/api/v1/die/members')
+      .send({ institutionalUsername: 'colleague.staff' })
+      .expect(201);
+    const membership = await prisma.dieMemberAssignment.findUniqueOrThrow({
+      where: { tenantId_id: { tenantId: 'die-tenant-a', id: added.body.id } },
+    });
+    expect(membership.displayLabelSnapshot).toBe('specialist.staff');
+
+    const newMembership = await token(
+      'die-tenant-a',
+      'staff-specialist',
+      ['STAFF'],
+      'staff-membership-new',
+    );
+    await api(newMembership).get('/api/v1/die/access').expect(403);
+
+    identity.setPersonnelRoles('die-tenant-a', 'staff-specialist', ['STUDENT']);
+    await api(staff).get('/api/v1/die/access').expect(403);
+    identity.revokePersonnel('die-tenant-a', 'staff-specialist');
+    await api(staff).get('/api/v1/die/access').expect(403);
   });
 
   it('keeps the operational profile tenant-scoped, admin-only for writes, and durably audited', async () => {
@@ -237,7 +297,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     );
     const responsible = await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: responsibleTeacher.id })
+      .send({ institutionalUsername: responsibleTeacher.identityUserId })
       .expect(201);
     const actionWithoutZone = await api(admin)
       .post('/api/v1/die/actions')
@@ -300,7 +360,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     );
     const created = await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: first.id })
+      .send({ institutionalUsername: first.identityUserId })
       .expect(201);
     const member = await token('die-tenant-a', 'teacher-one', ['TEACHER']);
 
@@ -314,8 +374,8 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .expect(200);
     await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: foreign.id })
-      .expect(404);
+      .send({ institutionalUsername: foreign.identityUserId })
+      .expect(403);
   });
 
   it('rejects a same-tenant target when its Identity membership contains an excluded role', async () => {
@@ -326,30 +386,32 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       'Identidad',
       'Excluida',
     );
-    identity.membershipVerificationResponse = {
+    identity.personnelResolutionResponse = {
       verified: true,
       identityUserId: 'student-only-user',
       membershipId: 'student-only-membership',
       tenantId: 'die-tenant-a',
       membershipStatus: 'ACTIVE',
+      institutionalUsername: 'student-only-user',
       roles: ['STUDENT'],
     };
 
     await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: target.id })
+      .send({ institutionalUsername: target.identityUserId })
       .expect(403);
-    identity.membershipVerificationResponse = {
+    identity.personnelResolutionResponse = {
       verified: true,
       identityUserId: 'student-only-user',
       membershipId: 'mixed-membership',
       tenantId: 'die-tenant-a',
       membershipStatus: 'ACTIVE',
+      institutionalUsername: 'student-only-user',
       roles: ['TEACHER', 'STUDENT'],
     };
     await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: target.id })
+      .send({ institutionalUsername: target.identityUserId })
       .expect(403);
     expect(
       await prisma.dieMemberAssignment.count({
@@ -442,11 +504,11 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     );
     const authorMember = await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: authorTeacher.id })
+      .send({ institutionalUsername: authorTeacher.identityUserId })
       .expect(201);
     const otherMember = await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: otherTeacher.id })
+      .send({ institutionalUsername: otherTeacher.identityUserId })
       .expect(201);
     const author = await token('die-tenant-a', 'author-user', ['TEACHER']);
     const other = await token('die-tenant-a', 'other-user', ['TEACHER']);
@@ -510,11 +572,11 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     );
     const first = await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: firstTeacher.id })
+      .send({ institutionalUsername: firstTeacher.identityUserId })
       .expect(201);
     const second = await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: secondTeacher.id })
+      .send({ institutionalUsername: secondTeacher.identityUserId })
       .expect(201);
     const student = await studentRecord('die-tenant-a', 'Marta', 'Silva');
     const episode = await api(admin)
@@ -579,7 +641,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     );
     await api(admin)
       .post('/api/v1/die/members')
-      .send({ teacherId: memberTeacher.id })
+      .send({ institutionalUsername: memberTeacher.identityUserId })
       .expect(201);
     const member = await token('die-tenant-a', 'member-user', ['TEACHER']);
     const outsiderTeacher = await teacher(
@@ -818,7 +880,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     );
     const responsibleMember = await api(adminA)
       .post('/api/v1/die/members')
-      .send({ teacherId: responsibleTeacher.id })
+      .send({ institutionalUsername: responsibleTeacher.identityUserId })
       .expect(201);
     await api(adminA)
       .post('/api/v1/die/actions')
@@ -874,7 +936,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
   async function token(
     tenantId: string,
     userId: string,
-    roles: Array<'TENANT_ADMIN' | 'TEACHER' | 'STUDENT'>,
+    roles: Array<'TENANT_ADMIN' | 'STAFF' | 'TEACHER' | 'STUDENT'>,
     membershipId = `membership-${tenantId}-${userId}`,
   ) {
     const context = {
@@ -910,6 +972,13 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     firstName: string,
     lastName: string,
   ) {
+    identity.registerPersonnel({
+      identityUserId,
+      membershipId: `membership-${tenantId}-${identityUserId}`,
+      roles: ['TEACHER'],
+      tenantId,
+      username: identityUserId,
+    });
     return prisma.teacher.create({
       data: { tenantId, identityUserId, firstName, lastName },
     });

@@ -21,7 +21,6 @@ import {
   dieAccessSchema,
   dieJournalEntrySchema,
   dieMemberSchema,
-  dieMemberCandidateSchema,
   dieStudentSummarySchema,
   dieStudentCandidateSchema,
   dieSupportEpisodeSchema,
@@ -74,13 +73,6 @@ export class DieController {
   async access() {
     await this.die.listMembers(this.context());
     return { allowed: true };
-  }
-
-  @Get('member-candidates')
-  @Header('Cache-Control', 'private, no-store')
-  @ContractResponse(dieMemberCandidateSchema.array())
-  candidates(@Query('search') search?: string) {
-    return this.die.listMemberCandidates(this.context(), search);
   }
 
   @Get('members')

@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:net';
+import { createServer as createNetServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
   const jwks = new IdentityJwksFixture();
   const identity = new IdentityInternalFixture();
   let child: ReturnType<typeof spawn> | undefined;
+  let containment: ReturnType<typeof createHttpServer> | undefined;
 
   try {
     await mkdir(dirname(join(storageRoot, storageKey)), { recursive: true });
@@ -65,16 +67,17 @@ async function main(): Promise<void> {
     await pool.query(
       `INSERT INTO die_journal_entries
       (id, tenant_id, student_id, support_episode_id,
-       original_author_identity_user_id, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())`,
+       original_author_identity_user_id, original_author_display_label, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $5, NOW())`,
       [entryId, tenantId, studentId, episodeId, actorId],
     );
     await pool.query(
       `INSERT INTO die_journal_revisions
       (id, tenant_id, journal_entry_id, revision_number, category, event_date,
-       title, description, information_source, corrected_by_identity_user_id)
+       title, description, information_source, corrected_by_identity_user_id,
+       corrected_by_display_label)
      VALUES ($1, $2, $3, 1, 'OBSERVATION', DATE '2026-09-23',
-       'Gate sintético', 'Contenido sintético', 'WITNESSED', $4)`,
+       'Gate sintético', 'Contenido sintético', 'WITNESSED', $4, $4)`,
       [revisionId, tenantId, entryId, actorId],
     );
     await pool.query(
@@ -161,16 +164,64 @@ async function main(): Promise<void> {
       throw new Error('The previous API error disclosed protected metadata.');
     }
     const contentType = response.headers.get('content-type') ?? '';
+    const oldExport = await fetch(
+      `http://127.0.0.1:${port}/api/v1/die/students/${studentId}/export.pdf`,
+      { headers: { authorization: `Bearer ${token}` } },
+    );
+    if (oldExport.ok) {
+      throw new Error('The previous API unexpectedly served a DIE export.');
+    }
+
+    const containmentPort = await freePort();
+    containment = createHttpServer((request, proxyResponse) => {
+      const url = request.url ?? '';
+      const protectedPath =
+        /^\/api\/v1\/files\/[^/]+\/download$/.test(url) ||
+        /^\/api\/v1\/die\/students\/[^/]+\/export\.pdf$/.test(url);
+      proxyResponse.writeHead(protectedPath ? 503 : 404, {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+      });
+      proxyResponse.end(
+        JSON.stringify({
+          error: {
+            code: protectedPath ? 'DIE_RECOVERY_CONTAINMENT' : 'NOT_FOUND',
+          },
+        }),
+      );
+    });
+    await new Promise<void>((resolve) =>
+      containment!.listen(containmentPort, '127.0.0.1', resolve),
+    );
+    for (const path of [
+      `/api/v1/files/${fileObjectId}/download`,
+      `/api/v1/die/students/${studentId}/export.pdf`,
+    ]) {
+      const blocked = await fetch(
+        `http://127.0.0.1:${containmentPort}${path}`,
+      );
+      if (blocked.status !== 503) {
+        throw new Error(`Containment did not block ${path}.`);
+      }
+    }
     console.log(
       JSON.stringify({
         gate: 'previous-api-die-download-boundary',
         oldApiStatus: response.status,
+        oldExportStatus: oldExport.status,
+        containedRoutes: [
+          '/api/v1/files/:fileObjectId/download',
+          '/api/v1/die/students/:studentId/export.pdf',
+        ],
         protected: true,
         responseWasAttachment: contentType.startsWith('application/pdf'),
         tenantScope: 'synthetic',
       }),
     );
   } finally {
+    await new Promise<void>((resolve) =>
+      containment ? containment.close(() => resolve()) : resolve(),
+    );
     child?.kill();
     await jwks.close().catch(() => undefined);
     await identity.close().catch(() => undefined);
@@ -183,7 +234,7 @@ void main();
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
-    const server = createServer();
+    const server = createNetServer();
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => {
       const address = server.address();

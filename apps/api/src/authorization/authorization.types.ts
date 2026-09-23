@@ -10,6 +10,7 @@ export enum TenantCapability {
 export const capabilityRoles = Object.freeze({
   [TenantCapability.AccessTenant]: [
     'TENANT_ADMIN',
+    'STAFF',
     'TEACHER',
     'STUDENT',
   ] as const,

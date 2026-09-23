@@ -2,9 +2,9 @@ import { useContext, useEffect, useState } from 'react';
 
 import { IdentitySessionContext } from './session-context';
 
-export type WorkspaceKind = 'student' | 'teacher' | 'tenant-admin';
+export type WorkspaceKind = 'student' | 'teacher' | 'staff' | 'tenant-admin';
 export type IdentityRole =
-  'SYSTEM_ADMIN' | 'TENANT_ADMIN' | 'TEACHER' | 'STUDENT';
+  'SYSTEM_ADMIN' | 'TENANT_ADMIN' | 'STAFF' | 'TEACHER' | 'STUDENT' | 'GUARDIAN';
 
 /**
  * Read-only view of server-validated Identity and Académico context.

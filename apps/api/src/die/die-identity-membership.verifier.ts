@@ -29,6 +29,10 @@ export interface VerifiedDieTargetMembership {
   readonly roles: readonly string[];
 }
 
+const resolvedPersonnelSchema = responseSchema.extend({
+  institutionalUsername: z.string().min(1).max(128),
+});
+
 @Injectable()
 export class DieIdentityMembershipVerifier {
   constructor(private readonly client: IdentityInternalHttpClient) {}
@@ -70,14 +74,51 @@ export class DieIdentityMembershipVerifier {
       !parsed.success ||
       parsed.data.identityUserId !== targetIdentityUserId ||
       parsed.data.tenantId !== context.tenant.tenantId ||
-      parsed.data.roles.includes('STUDENT') ||
+      parsed.data.roles.some((role) => role === 'STUDENT' || role === 'GUARDIAN') ||
       !parsed.data.roles.some((role) =>
-        ['TEACHER', 'TENANT_ADMIN'].includes(role),
+        ['STAFF', 'TEACHER', 'TENANT_ADMIN'].includes(role),
       )
     ) {
       throw new ForbiddenException(
         'The requested department member is not eligible.',
       );
+    }
+    return parsed.data;
+  }
+
+  async resolve(
+    context: AcademicRequestContext,
+    institutionalUsername: string,
+  ): Promise<VerifiedDieTargetMembership & { readonly institutionalUsername: string }> {
+    let response: unknown;
+    try {
+      response = await this.client.post(
+        '/internal/v1/tenant-memberships/resolve-eligible-personnel',
+        context.requestId,
+        {
+          actor: {
+            identityUserId: context.principal.identityUserId,
+            sessionId: context.principal.sessionId,
+            membershipId: context.tenant.membershipId,
+            tenantId: context.tenant.tenantId,
+          },
+          institutionalUsername,
+        },
+      );
+    } catch (error) {
+      if (error instanceof IdentityInternalHttpResponseError && (error.status === 403 || error.status === 404)) {
+        throw new ForbiddenException('The requested department member is not eligible.');
+      }
+      throw new ServiceUnavailableException('Identity verification is temporarily unavailable.');
+    }
+    const parsed = resolvedPersonnelSchema.safeParse(response);
+    if (
+      !parsed.success ||
+      parsed.data.tenantId !== context.tenant.tenantId ||
+      parsed.data.roles.some((role) => role === 'STUDENT' || role === 'GUARDIAN') ||
+      !parsed.data.roles.some((role) => ['STAFF', 'TEACHER', 'TENANT_ADMIN'].includes(role))
+    ) {
+      throw new ForbiddenException('The requested department member is not eligible.');
     }
     return parsed.data;
   }

@@ -832,6 +832,7 @@ async function main() {
     roleIds: {
       SYSTEM_ADMIN: randomUUID(),
       TENANT_ADMIN: randomUUID(),
+      STAFF: randomUUID(),
       TEACHER: randomUUID(),
       STUDENT: randomUUID(),
       GUARDIAN: randomUUID(),
@@ -1223,6 +1224,75 @@ async function main() {
   );
   checkpoint(
     'identity onboarding: Teacher and Student linked while pending, activated, and logged in',
+  );
+
+  const staffPassword = rememberSecret(
+    `Staff-${randomBytes(24).toString('base64url')}`,
+  );
+  const staffUsername = `pilot.staff.${randomUUID().slice(0, 8)}`;
+  const staffMembership = await provision(
+    identityBaseUrl,
+    adminA.accessToken,
+    bootstrap.tenantAId,
+    { institutionalUsername: staffUsername, roles: ['STAFF'] },
+  );
+  await activateMembership(
+    identityBaseUrl,
+    adminA.accessToken,
+    bootstrap.tenantAId,
+    staffMembership,
+    staffPassword,
+  );
+  const staffLogin = await login(
+    identityBaseUrl,
+    bootstrap.tenantAHandle,
+    staffUsername,
+    staffPassword,
+  );
+  assert.deepEqual(staffLogin.activeMembership.roles, ['STAFF']);
+  const staffAssignment = await requestJson(apiBaseUrl, '/die/members', {
+    method: 'POST',
+    expected: 201,
+    token: adminA.accessToken,
+    body: { institutionalUsername: staffUsername },
+  });
+  assert.equal(staffAssignment.teacherId, null);
+  assert.equal(staffAssignment.identityUserId, staffMembership.userId);
+  assert.equal(staffAssignment.identityMembershipId, staffMembership.membershipId);
+  await requestJson(apiBaseUrl, '/die/access', {
+    expected: 200,
+    token: staffLogin.accessToken,
+  });
+  await requestJson(apiBaseUrl, '/academic-years', {
+    expected: 403,
+    token: staffLogin.accessToken,
+  });
+
+  const colleaguePassword = rememberSecret(
+    `Staff-${randomBytes(24).toString('base64url')}`,
+  );
+  const colleagueUsername = `pilot.staff.colleague.${randomUUID().slice(0, 8)}`;
+  const colleagueMembership = await provision(
+    identityBaseUrl,
+    adminA.accessToken,
+    bootstrap.tenantAId,
+    { institutionalUsername: colleagueUsername, roles: ['STAFF'] },
+  );
+  await activateMembership(
+    identityBaseUrl,
+    adminA.accessToken,
+    bootstrap.tenantAId,
+    colleagueMembership,
+    colleaguePassword,
+  );
+  await requestJson(apiBaseUrl, '/die/members', {
+    method: 'POST',
+    expected: 201,
+    token: staffLogin.accessToken,
+    body: { institutionalUsername: colleagueUsername },
+  });
+  checkpoint(
+    'DIE STAFF: real Identity login, exact S2S enrollment, ordinary-member enrollment, and no teacher capability',
   );
 
   const outsideTeacher = await requestJson(apiBaseUrl, '/teachers', {

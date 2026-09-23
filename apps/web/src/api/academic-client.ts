@@ -120,7 +120,6 @@ import {
   dieAccessSchema,
   dieActionSchema,
   dieJournalEntrySchema,
-  dieMemberCandidateSchema,
   dieMemberSchema,
   dieStudentCandidateSchema,
   dieStudentSummarySchema,
@@ -594,12 +593,6 @@ export class AcademicApiClient {
         method: 'PATCH',
         body: JSON.stringify(updateTenantOperationalProfileSchema.parse(input)),
       },
-    );
-  }
-  listDieMemberCandidates(search?: string) {
-    return this.request(
-      addQuery('die/member-candidates', { search }),
-      dieMemberCandidateSchema.array(),
     );
   }
   listDieMembers(): Promise<DieMember[]> {

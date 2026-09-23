@@ -20,9 +20,6 @@ const timeZone = z
 
 export const dieMemberRoleSchema = z.enum(['MEMBER', 'COORDINATOR']);
 export const dieAccessSchema = z.object({ allowed: z.literal(true) }).strict();
-export const dieMemberCandidateSchema = z
-  .object({ teacherId: uuid, displayName: z.string() })
-  .strict();
 export const dieStudentCandidateSchema = z
   .object({
     studentId: uuid,
@@ -53,7 +50,8 @@ export const dieActionStatusSchema = z.enum([
 export const dieMemberSchema = z
   .object({
     id: uuid,
-    teacherId: uuid,
+    teacherId: uuid.nullable(),
+    identityMembershipId: z.string().min(1).max(128),
     identityUserId: z.string().min(1).max(128),
     displayName: z.string().min(1).max(241),
     role: dieMemberRoleSchema,
@@ -61,7 +59,9 @@ export const dieMemberSchema = z
   })
   .strict();
 
-export const addDieMemberSchema = z.object({ teacherId: uuid }).strict();
+export const addDieMemberSchema = z
+  .object({ institutionalUsername: trimmed(128) })
+  .strict();
 export const updateDieMemberRoleSchema = z
   .object({ role: dieMemberRoleSchema })
   .strict();
@@ -197,6 +197,7 @@ export const voidDieJournalEntrySchema = z
 export const dieJournalRevisionSchema = dieJournalContentSchema.extend({
   revisionNumber: z.number().int().positive(),
   correctedByIdentityUserId: z.string().min(1).max(128),
+  correctedByDisplayLabel: z.string().min(1).max(241),
   correctionReason: z.string().nullable(),
   createdAt: timestamp,
 });
@@ -218,6 +219,7 @@ export const dieJournalEntrySchema = z
     studentId: uuid,
     supportEpisodeId: uuid,
     originalAuthorIdentityUserId: z.string().min(1).max(128),
+    originalAuthorDisplayLabel: z.string().min(1).max(241),
     status: z.enum(['CURRENT', 'VOIDED']),
     voidReason: z.string().nullable(),
     voidedByIdentityUserId: z.string().nullable(),

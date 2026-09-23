@@ -58,47 +58,13 @@ export class DieService {
     private readonly tenantProfiles: TenantOperationalProfileService,
   ) {}
 
-  async listMemberCandidates(context: AcademicRequestContext, search?: string) {
-    await this.access.require(context);
-    const tenantId = context.tenant.tenantId;
-    const teachers = await this.prisma.teacher.findMany({
-      where: {
-        tenantId,
-        status: 'ACTIVE',
-        identityUserId: { not: null },
-        ...(search?.trim()
-          ? {
-              OR: [
-                { firstName: { contains: search.trim(), mode: 'insensitive' } },
-                { lastName: { contains: search.trim(), mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-      take: 50,
-      select: { id: true, firstName: true, lastName: true },
-    });
-    const active = await this.prisma.dieMemberAssignment.findMany({
-      where: { tenantId, removedAt: null },
-      select: { teacherId: true },
-    });
-    const assigned = new Set(active.map((item) => item.teacherId));
-    return teachers
-      .filter((teacher) => !assigned.has(teacher.id))
-      .map((teacher) => ({
-        teacherId: teacher.id,
-        displayName: `${teacher.firstName} ${teacher.lastName}`,
-      }));
-  }
-
   async listMembers(context: AcademicRequestContext) {
     await this.access.require(context);
     return this.prisma.dieMemberAssignment
       .findMany({
         where: { tenantId: context.tenant.tenantId, removedAt: null },
         include: { teacher: true },
-        orderBy: [{ role: 'asc' }, { teacher: { lastName: 'asc' } }],
+        orderBy: [{ role: 'asc' }, { displayLabelSnapshot: 'asc' }],
       })
       .then((rows) => rows.map((row) => this.memberView(row)));
   }
@@ -106,16 +72,17 @@ export class DieService {
   async addMember(context: AcademicRequestContext, input: AddDieMember) {
     await this.access.require(context);
     const tenantId = context.tenant.tenantId;
-    const teacher = await this.prisma.teacher.findUnique({
-      where: { tenantId_id: { tenantId, id: input.teacherId } },
-    });
-    if (!teacher || teacher.status !== 'ACTIVE' || !teacher.identityUserId) {
-      this.notFound();
-    }
-    const verified = await this.identityMemberships.verify(
+    const verified = await this.identityMemberships.resolve(
       context,
-      teacher.identityUserId,
+      input.institutionalUsername,
     );
+    const teacher = await this.prisma.teacher.findFirst({
+      where: {
+        tenantId,
+        identityUserId: verified.identityUserId,
+        status: 'ACTIVE',
+      },
+    });
     const existing = await this.prisma.dieMemberAssignment.findFirst({
       where: {
         tenantId,
@@ -132,9 +99,10 @@ export class DieService {
         const member = await tx.dieMemberAssignment.create({
           data: {
             tenantId,
-            teacherId: teacher.id,
+            teacherId: teacher?.id ?? null,
             identityUserId: verified.identityUserId,
             identityMembershipId: verified.membershipId,
+            displayLabelSnapshot: verified.institutionalUsername,
             role: 'MEMBER',
             addedByIdentityUserId: context.principal.identityUserId,
           },
@@ -207,6 +175,25 @@ export class DieService {
         'A department member cannot remove their own active assignment.',
       );
     }
+    let verifiedReplacementId: string | null = null;
+    if (input.reassignToMemberAssignmentId) {
+      const replacement = await this.activeMember(
+        tenantId,
+        input.reassignToMemberAssignmentId,
+      );
+      const verified = await this.identityMemberships.verify(
+        context,
+        replacement.identityUserId,
+      );
+      if (
+        verified.membershipId !== replacement.identityMembershipId ||
+        verified.roles.some((role) => role === 'STUDENT' || role === 'GUARDIAN') ||
+        !verified.roles.some((role) => ['STAFF', 'TEACHER', 'TENANT_ADMIN'].includes(role))
+      ) {
+        throw new ConflictException('The replacement member is not currently eligible.');
+      }
+      verifiedReplacementId = replacement.id;
+    }
     await this.prisma.$transaction(
       async (tx) => {
         const currentMember = await this.activeMemberIn(
@@ -246,6 +233,9 @@ export class DieService {
             tenantId,
             input.reassignToMemberAssignmentId,
           );
+          if (replacement.id !== verifiedReplacementId) {
+            throw new ConflictException('The replacement member is not currently eligible.');
+          }
           if (replacement.id === currentMember.id)
             throw new BadRequestException(
               'The replacement member must be different.',
@@ -545,7 +535,7 @@ export class DieService {
     context: AcademicRequestContext,
     input: CreateDieJournalEntry,
   ) {
-    await this.access.require(context);
+    const actorAccess = await this.access.require(context);
     const tenantId = context.tenant.tenantId;
     const episode = await this.prisma.dieSupportEpisode.findUnique({
       where: { tenantId_id: { tenantId, id: input.supportEpisodeId } },
@@ -581,6 +571,9 @@ export class DieService {
             studentId: input.studentId,
             supportEpisodeId: input.supportEpisodeId,
             originalAuthorIdentityUserId: context.principal.identityUserId,
+            originalAuthorDisplayLabel:
+              actorAccess.member?.displayLabelSnapshot ??
+              context.principal.identityUserId,
           },
         });
         await tx.dieJournalRevision.create({
@@ -590,6 +583,9 @@ export class DieService {
             revisionNumber: 1,
             ...this.revisionData(input, academic, eventTimeZone),
             correctedByIdentityUserId: context.principal.identityUserId,
+            correctedByDisplayLabel:
+              actorAccess.member?.displayLabelSnapshot ??
+              context.principal.identityUserId,
           },
         });
         await this.audit(
@@ -731,6 +727,9 @@ export class DieService {
               revisionNumber: next,
               ...this.revisionData(input, academic, eventTimeZone),
               correctedByIdentityUserId: context.principal.identityUserId,
+              correctedByDisplayLabel:
+                access.member?.displayLabelSnapshot ??
+                context.principal.identityUserId,
               correctionReason: input.reason,
             },
           });
@@ -1098,7 +1097,7 @@ export class DieService {
         .fontSize(9)
         .fillColor('#526777')
         .text(
-          `Categoría: ${revision.category} | Autor original: ${entry.originalAuthorIdentityUserId} | Creado: ${entry.createdAt}`,
+          `Categoría: ${revision.category} | Autor original: ${entry.originalAuthorDisplayLabel} | Creado: ${entry.createdAt}`,
         );
       if (
         revision.academicContext.courseLabel ||
@@ -1263,17 +1262,20 @@ export class DieService {
 
   private memberView(row: {
     id: string;
-    teacherId: string;
+    teacherId: string | null;
     identityUserId: string;
+    identityMembershipId: string;
+    displayLabelSnapshot: string;
     role: 'MEMBER' | 'COORDINATOR';
     addedAt: Date;
-    teacher: { firstName: string; lastName: string };
+    teacher: { firstName: string; lastName: string } | null;
   }) {
     return {
       id: row.id,
       teacherId: row.teacherId,
       identityUserId: row.identityUserId,
-      displayName: `${row.teacher.firstName} ${row.teacher.lastName}`,
+      identityMembershipId: row.identityMembershipId,
+      displayName: row.displayLabelSnapshot,
       role: row.role,
       addedAt: row.addedAt.toISOString(),
     };
@@ -1317,6 +1319,7 @@ export class DieService {
     studentId: string;
     supportEpisodeId: string;
     originalAuthorIdentityUserId: string;
+    originalAuthorDisplayLabel: string;
     currentRevisionNumber: number;
     status: 'CURRENT' | 'VOIDED';
     voidReason: string | null;
@@ -1341,6 +1344,7 @@ export class DieService {
       courseId: string | null;
       courseLabel: string | null;
       correctedByIdentityUserId: string;
+      correctedByDisplayLabel: string;
       correctionReason: string | null;
       createdAt: Date;
     }>;
@@ -1378,6 +1382,7 @@ export class DieService {
         courseLabel: revision.courseLabel,
       },
       correctedByIdentityUserId: revision.correctedByIdentityUserId,
+      correctedByDisplayLabel: revision.correctedByDisplayLabel,
       correctionReason: revision.correctionReason,
       createdAt: revision.createdAt.toISOString(),
     }));
@@ -1393,6 +1398,7 @@ export class DieService {
       studentId: entry.studentId,
       supportEpisodeId: entry.supportEpisodeId,
       originalAuthorIdentityUserId: entry.originalAuthorIdentityUserId,
+      originalAuthorDisplayLabel: entry.originalAuthorDisplayLabel,
       status: entry.status,
       voidReason: entry.voidReason,
       voidedByIdentityUserId: entry.voidedByIdentityUserId,

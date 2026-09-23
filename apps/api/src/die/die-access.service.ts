@@ -3,12 +3,16 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import type { AcademicRequestContext } from '../academic/academic-context';
 import { CurrentIdentityStatusService } from '../identity/current-identity-status.service';
 import { PrismaService } from '../persistence/prisma.service';
+import { DieIdentityMembershipVerifier } from './die-identity-membership.verifier';
 
 export type DieAccess = {
   readonly isTenantAdmin: boolean;
   readonly member: {
     readonly id: string;
     readonly role: 'MEMBER' | 'COORDINATOR';
+    readonly displayLabelSnapshot: string;
+    readonly identityUserId: string;
+    readonly identityMembershipId: string;
   } | null;
 };
 
@@ -17,6 +21,7 @@ export class DieAccessService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly identityStatus: CurrentIdentityStatusService,
+    private readonly identityMemberships: DieIdentityMembershipVerifier,
   ) {}
 
   async require(context: AcademicRequestContext): Promise<DieAccess> {
@@ -33,8 +38,22 @@ export class DieAccessService {
         identityMembershipId: context.tenant.membershipId,
         removedAt: null,
       },
-      select: { id: true, role: true },
+      select: {
+        id: true,
+        role: true,
+        displayLabelSnapshot: true,
+        identityUserId: true,
+        identityMembershipId: true,
+      },
     });
+    if (member) {
+      const verified = await this.identityMemberships.verify(context, member.identityUserId);
+      const eligible =
+        verified.membershipId === member.identityMembershipId &&
+        !verified.roles.some((role) => role === 'STUDENT' || role === 'GUARDIAN') &&
+        verified.roles.some((role) => ['STAFF', 'TEACHER', 'TENANT_ADMIN'].includes(role));
+      if (!eligible) this.deny();
+    }
     if (!isTenantAdmin && !member) this.deny();
     return { isTenantAdmin, member };
   }
