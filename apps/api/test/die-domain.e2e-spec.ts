@@ -602,6 +602,15 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .post(`/api/v1/die/members/${first.body.id}/remove`)
       .send({ reason: 'Cambio de funciones.' })
       .expect(409);
+    identity.setPersonnelRoles('die-tenant-a', 'second-user', ['STUDENT']);
+    await api(admin)
+      .post(`/api/v1/die/members/${first.body.id}/remove`)
+      .send({
+        reason: 'Cambio de funciones.',
+        reassignToMemberAssignmentId: second.body.id,
+      })
+      .expect(403);
+    identity.setPersonnelRoles('die-tenant-a', 'second-user', ['TEACHER']);
     await api(admin)
       .post(`/api/v1/die/members/${first.body.id}/remove`)
       .send({
