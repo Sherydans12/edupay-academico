@@ -60,19 +60,22 @@ Académico acepta como miembro DIE sólo una respuesta exacta del mismo usuario 
 - adjuntos privados, PDF filtrado/auditado y ninguna proyección DIE hacia BL;
 - no hay purga automática, legal hold ni eliminación definitiva habitual implementados.
 
-### Elecciones implementadas, pendientes de aceptación explícita
+### Política confirmada en esta revisión
 
 1. **Coordinación:** sólo `TENANT_ADMIN` concede o retira `COORDINATOR`.
-2. **Retiro:** admin o coordinador retira miembros ordinarios; sólo admin retira coordinadores; se impide auto-retiro. Acciones abiertas deben reasignarse en la misma transacción.
-3. **Revocación/reingreso:** cada autorización revalida sesión/membership en Identity y exige el `membershipId` exacto guardado en la asignación DIE. Una membership nueva no hereda acceso; un admin/coordinador/miembro debe incorporar nuevamente la identidad elegible.
-4. **Zona del hecho, medida transitoria:** fecha sin hora guarda `eventTimeZone = null`; si hay hora, se exige una zona IANA explícita y se imprime. No se deriva del servidor ni navegador. Esta entrada explícita todavía no prueba que sea la zona canónica del tenant.
+2. **Retiro:** admin o coordinador retira miembros ordinarios; sólo admin retira coordinadores; se impide auto-retiro. Acciones abiertas y responsabilidades de acompañamientos activos deben reasignarse en la misma transacción.
+3. **Revocación/reingreso:** cada autorización revalida sesión/membership en Identity y exige el `membershipId` exacto guardado en la asignación DIE. Una membership nueva no hereda acceso; un actor autorizado debe incorporar nuevamente la identidad elegible.
+4. **Perfil operativo:** Académico mantiene nombre institucional y zona IANA tenant-scoped, editables sólo por `TENANT_ADMIN`, con historial durable. El contrato y migración se definen en `docs/proposals/tenant-operational-profile.md`.
 
-### Decisiones abiertas que bloquean declarar el PDF plenamente conforme
+### Decisión nueva que requiere respuesta
 
-1. Fuente y dueño de `institutionDisplayName` y `canonicalTimeZone` por tenant. Recomendación: perfil operativo tenant-scoped en Académico, administrado por tenant admin y auditado; Identity continúa dueño de cuentas/memberships, no de identidad institucional académica.
-2. Comportamiento recomendado si falta ese perfil: bloquear exportación con 409 genérico y no crear hechos con hora hasta configurar zona; nunca sustituir nombre por UUID ni usar zona del host/browser.
+Identity no tiene hoy una categoría de personal no docente: una membership debe tener roles y los únicos roles tenant son `TENANT_ADMIN`, `TEACHER`, `STUDENT` y `GUARDIAN`. Crear un `Teacher` ficticio o conceder `TEACHER` violaría el alcance.
 
-Hoy el PDF dice expresamente `Tenant canónico (no equivale al nombre institucional)` y muestra el UUID. Por ello identifica el scope técnico, pero **no satisface todavía la identificación institucional requerida**. La exportación no se presenta como release-complete hasta resolver el punto anterior.
+Recomendación concreta pendiente de aceptación: agregar en Identity el rol tenant-scoped `STAFF`, sin capacidades académicas o administrativas implícitas, y permitir que `TENANT_ADMIN` lo provisione mediante el ciclo de cuentas existente. La membership de aplicación `STAFF` sólo declara que la cuenta corresponde a personal del tenant; la asignación local DIE en Académico continúa siendo la única concesión de acceso DIE. `STUDENT` y `GUARDIAN` siguen siendo inelegibles aunque alguien intente incorporarlos.
+
+Contrato mínimo adicional recomendado: resolución exacta server-to-server por `institutionalUsername`, no un listado. Identity revalida al actor y deriva su tenant; devuelve únicamente usuario/membership opacos y roles si el destino está ACTIVE y posee `STAFF`, `TEACHER` o `TENANT_ADMIN`. Desconocido, excluido y cross-tenant responden igual. Así el navegador no aporta IDs de Identity y no puede enumerar otros tenants. No se implementa este cambio transversal hasta aceptación explícita.
+
+Hasta desplegar y configurar el perfil, el PDF no se presenta como release-complete. La nueva API impedirá la exportación si falta el nombre en vez de sustituirlo por el UUID.
 
 Políticas futuras de purga o legal hold continúan fuera de alcance y no están implementadas.
 
