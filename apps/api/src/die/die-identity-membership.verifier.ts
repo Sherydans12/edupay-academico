@@ -70,6 +70,7 @@ export class DieIdentityMembershipVerifier {
       !parsed.success ||
       parsed.data.identityUserId !== targetIdentityUserId ||
       parsed.data.tenantId !== context.tenant.tenantId ||
+      parsed.data.roles.includes('STUDENT') ||
       !parsed.data.roles.some((role) =>
         ['TEACHER', 'TENANT_ADMIN'].includes(role),
       )

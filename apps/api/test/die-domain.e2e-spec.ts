@@ -318,7 +318,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .expect(404);
   });
 
-  it('rejects a same-tenant academic target whose current Identity membership has only an excluded role', async () => {
+  it('rejects a same-tenant target when its Identity membership contains an excluded role', async () => {
     const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
     const target = await teacher(
       'die-tenant-a',
@@ -335,6 +335,18 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       roles: ['STUDENT'],
     };
 
+    await api(admin)
+      .post('/api/v1/die/members')
+      .send({ teacherId: target.id })
+      .expect(403);
+    identity.membershipVerificationResponse = {
+      verified: true,
+      identityUserId: 'student-only-user',
+      membershipId: 'mixed-membership',
+      tenantId: 'die-tenant-a',
+      membershipStatus: 'ACTIVE',
+      roles: ['TEACHER', 'STUDENT'],
+    };
     await api(admin)
       .post('/api/v1/die/members')
       .send({ teacherId: target.id })

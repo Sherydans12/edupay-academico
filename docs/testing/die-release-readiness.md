@@ -44,7 +44,7 @@ No enumeración y aislamiento:
 - las pruebas `test/internal-academic.integration-spec.ts` cubren actor no administrador válido, destino exacto, destino cross-tenant/inactivo, actor revocado y rechazo de entradas con forma de directorio;
 - auditoría registra IDs opacos, categoría, cantidad de roles y request ID; no registra PII ni el service token.
 
-Académico acepta como miembro DIE sólo una respuesta exacta del mismo usuario y tenant, estado `ACTIVE` y al menos un rol vigente `TEACHER` o `TENANT_ADMIN`. Un destino `STUDENT`-only falla 403. `APODERADO` no existe como rol aceptado por el verificador JWT de Identity; cualquier rol desconocido se rechaza antes de establecer contexto. La incorporación siempre crea rol local DIE `MEMBER`: el cliente no puede pedir `COORDINATOR` ni un rol global.
+Académico acepta como miembro DIE sólo una respuesta exacta del mismo usuario y tenant, estado `ACTIVE`, al menos un rol vigente `TEACHER` o `TENANT_ADMIN` y ningún rol `STUDENT`. La exclusión prevalece: `TEACHER + STUDENT` también falla 403. `GUARDIAN` no existe como rol aceptado por el contrato cerrado de Académico; una respuesta que lo incluya se rechaza completa. La incorporación siempre crea rol local DIE `MEMBER`: el cliente no puede pedir `COORDINATOR` ni un rol global.
 
 ## 2. Decisiones y estado de aprobación
 
@@ -73,7 +73,7 @@ Identity no tiene hoy una categoría de personal no docente: una membership debe
 
 Recomendación concreta pendiente de aceptación: agregar en Identity el rol tenant-scoped `STAFF`, sin capacidades académicas o administrativas implícitas, y permitir que `TENANT_ADMIN` lo provisione mediante el ciclo de cuentas existente. La membership de aplicación `STAFF` sólo declara que la cuenta corresponde a personal del tenant; la asignación local DIE en Académico continúa siendo la única concesión de acceso DIE. `STUDENT` y `GUARDIAN` siguen siendo inelegibles aunque alguien intente incorporarlos.
 
-Contrato mínimo adicional recomendado: resolución exacta server-to-server por `institutionalUsername`, no un listado. Identity revalida al actor y deriva su tenant; devuelve únicamente usuario/membership opacos y roles si el destino está ACTIVE y posee `STAFF`, `TEACHER` o `TENANT_ADMIN`. Desconocido, excluido y cross-tenant responden igual. Así el navegador no aporta IDs de Identity y no puede enumerar otros tenants. No se implementa este cambio transversal hasta aceptación explícita.
+Contrato mínimo adicional recomendado: resolución exacta server-to-server por `institutionalUsername`, no un listado. Identity revalida al actor y deriva su tenant; devuelve únicamente usuario/membership opacos, username normalizado y roles si el destino está ACTIVE, posee `STAFF`, `TEACHER` o `TENANT_ADMIN` y no posee `STUDENT`/`GUARDIAN`. Desconocido, excluido y cross-tenant responden igual. Así el navegador no aporta IDs de Identity y no puede enumerar otros tenants. No se implementa este cambio transversal hasta aceptación explícita.
 
 Hasta desplegar y configurar el perfil, el PDF no se presenta como release-complete. La nueva API impedirá la exportación si falta el nombre en vez de sustituirlo por el UUID.
 
