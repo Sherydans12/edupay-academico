@@ -12,6 +12,7 @@ import { NotificationsApiModule } from './notifications/notifications-api.module
 import { SyncModule } from './sync/sync.module';
 import { FinancialProjectionContractModule } from './financial-projection/financial-projection-contract.module';
 import { DieModule } from './die/die.module';
+import { TenantOperationalProfileModule } from './tenant-profile/tenant-operational-profile.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { DieModule } from './die/die.module';
     SyncModule,
     FinancialProjectionContractModule,
     DieModule,
+    TenantOperationalProfileModule,
     HealthModule,
   ],
 })

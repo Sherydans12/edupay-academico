@@ -69,6 +69,12 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     await prisma.dieJournalEntry.deleteMany({ where: withinTestTenants });
     await prisma.dieSupportEpisode.deleteMany({ where: withinTestTenants });
     await prisma.dieMemberAssignment.deleteMany({ where: withinTestTenants });
+    await prisma.tenantOperationalProfileRevision.deleteMany({
+      where: withinTestTenants,
+    });
+    await prisma.tenantOperationalProfile.deleteMany({
+      where: { tenantId: { in: tenantIds } },
+    });
     await prisma.learningItem.deleteMany({ where: withinTestTenants });
     await prisma.learningUnit.deleteMany({ where: withinTestTenants });
     await prisma.courseSubjectTeacher.deleteMany({ where: withinTestTenants });
@@ -107,6 +113,12 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     await prisma.dieJournalEntry.deleteMany({ where: withinTestTenants });
     await prisma.dieSupportEpisode.deleteMany({ where: withinTestTenants });
     await prisma.dieMemberAssignment.deleteMany({ where: withinTestTenants });
+    await prisma.tenantOperationalProfileRevision.deleteMany({
+      where: withinTestTenants,
+    });
+    await prisma.tenantOperationalProfile.deleteMany({
+      where: withinTestTenants,
+    });
   });
 
   afterAll(async () => {
@@ -155,6 +167,126 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
         (item) => item.url === '/internal/v1/tenant-memberships/verify',
       ),
     ).toHaveLength(2);
+  });
+
+  it('keeps the operational profile tenant-scoped, admin-only for writes, and durably audited', async () => {
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const teacherActor = await token('die-tenant-a', 'teacher-a', ['TEACHER']);
+
+    const initial = await api(teacherActor)
+      .get('/api/v1/tenant/operational-profile')
+      .expect(200);
+    expect(initial.body).toMatchObject({
+      institutionDisplayName: 'Institución sintética die-tenant-a',
+      timeZone: 'America/Santiago',
+      version: 1,
+      complete: true,
+    });
+    await api(teacherActor)
+      .patch('/api/v1/tenant/operational-profile')
+      .send({ institutionDisplayName: 'No autorizado', expectedVersion: 1 })
+      .expect(403);
+    const changed = await api(admin)
+      .patch('/api/v1/tenant/operational-profile')
+      .send({
+        institutionDisplayName: 'Colegio Sintético Ágora',
+        timeZone: 'America/New_York',
+        expectedVersion: 1,
+      })
+      .expect(200);
+    expect(changed.body).toMatchObject({
+      institutionDisplayName: 'Colegio Sintético Ágora',
+      timeZone: 'America/New_York',
+      version: 2,
+    });
+    expect(
+      await prisma.tenantOperationalProfileRevision.count({
+        where: { tenantId: 'die-tenant-a', version: 2 },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.tenantOperationalProfile.findUniqueOrThrow({
+        where: { tenantId: 'die-tenant-b' },
+      }),
+    ).toMatchObject({
+      institutionDisplayName: 'Institución sintética die-tenant-b',
+      version: 1,
+    });
+  });
+
+  it('allows date-only facts without a tenant zone and snapshots zones for facts with time', async () => {
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const student = await studentRecord('die-tenant-a', 'Luz', 'Pérez');
+    const episode = await api(admin)
+      .post('/api/v1/die/support-episodes')
+      .send({
+        studentId: student.id,
+        startDate: '2026-09-01',
+        reason: 'Apoyo sintético.',
+      })
+      .expect(201);
+    await api(admin)
+      .patch('/api/v1/tenant/operational-profile')
+      .send({ timeZone: null, expectedVersion: 1 })
+      .expect(200);
+    const responsibleTeacher = await teacher(
+      'die-tenant-a',
+      'time-test-member',
+      'Zona',
+      'Sintética',
+    );
+    const responsible = await api(admin)
+      .post('/api/v1/die/members')
+      .send({ teacherId: responsibleTeacher.id })
+      .expect(201);
+    const actionWithoutZone = await api(admin)
+      .post('/api/v1/die/actions')
+      .send({
+        studentId: student.id,
+        title: 'Vencimiento sin zona',
+        assigneeMemberAssignmentId: responsible.body.id,
+        dueDate: '2026-09-02',
+      })
+      .expect(201);
+    expect(actionWithoutZone.body.overdue).toBeNull();
+    await api(admin).get('/api/v1/die/actions?overdue=true').expect(409);
+    await api(admin)
+      .post('/api/v1/die/journal-entries')
+      .send(journalBody(student.id, episode.body.id))
+      .expect(201);
+    await api(admin)
+      .post('/api/v1/die/journal-entries')
+      .send({
+        ...journalBody(student.id, episode.body.id),
+        eventTime: '09:30',
+      })
+      .expect(409);
+    await api(admin)
+      .patch('/api/v1/tenant/operational-profile')
+      .send({ timeZone: 'America/Santiago', expectedVersion: 2 })
+      .expect(200);
+    const timed = await api(admin)
+      .post('/api/v1/die/journal-entries')
+      .send({
+        ...journalBody(student.id, episode.body.id),
+        eventTime: '10:15',
+      })
+      .expect(201);
+    expect(timed.body.current.eventTimeZone).toBe('America/Santiago');
+    await api(admin)
+      .patch('/api/v1/tenant/operational-profile')
+      .send({ timeZone: 'America/New_York', expectedVersion: 3 })
+      .expect(200);
+    const sameTime = await api(admin)
+      .patch(`/api/v1/die/journal-entries/${timed.body.id}`)
+      .send(journalCorrection())
+      .expect(200);
+    expect(sameTime.body.current.eventTimeZone).toBe('America/Santiago');
+    const changedTime = await api(admin)
+      .patch(`/api/v1/die/journal-entries/${timed.body.id}`)
+      .send({ ...journalCorrection(), eventTime: '10:20' })
+      .expect(200);
+    expect(changedTime.body.current.eventTimeZone).toBe('America/New_York');
   });
 
   it('keeps coordination tenant-admin-only and never accepts a cross-tenant academic target', async () => {
@@ -373,6 +505,15 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .send({ teacherId: secondTeacher.id })
       .expect(201);
     const student = await studentRecord('die-tenant-a', 'Marta', 'Silva');
+    const episode = await api(admin)
+      .post('/api/v1/die/support-episodes')
+      .send({
+        studentId: student.id,
+        startDate: '2026-09-01',
+        reason: 'Acompañamiento sintético.',
+        responsibleMemberAssignmentId: first.body.id,
+      })
+      .expect(201);
     const action = await api(admin)
       .post('/api/v1/die/actions')
       .send({
@@ -399,6 +540,16 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       where: { tenantId_id: { tenantId: 'die-tenant-a', id: action.body.id } },
     });
     expect(stored.assigneeMemberAssignmentId).toBe(second.body.id);
+    expect(
+      await prisma.dieSupportEpisode.findUniqueOrThrow({
+        where: {
+          tenantId_id: {
+            tenantId: 'die-tenant-a',
+            id: episode.body.id,
+          },
+        },
+      }),
+    ).toMatchObject({ responsibleMemberAssignmentId: second.body.id });
     expect(
       await prisma.dieActionAssignment.count({
         where: { tenantId: 'die-tenant-a', actionId: action.body.id },
@@ -610,6 +761,20 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
         reason: 'Apoyo.',
       })
       .expect(201);
+    await api(adminA)
+      .patch('/api/v1/tenant/operational-profile')
+      .send({ institutionDisplayName: null, expectedVersion: 1 })
+      .expect(200);
+    await api(adminA)
+      .get(`/api/v1/die/students/${student.id}/export.pdf`)
+      .expect(409);
+    await api(adminA)
+      .patch('/api/v1/tenant/operational-profile')
+      .send({
+        institutionDisplayName: 'Colegio Sintético de Revisión',
+        expectedVersion: 2,
+      })
+      .expect(200);
     const entries: Array<{ id: string }> = [];
     for (let index = 0; index < 14; index += 1) {
       entries.push(
@@ -718,6 +883,14 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
 
   async function seedTenant(tenantId: string) {
     await prisma.tenant.create({ data: { id: tenantId } });
+    await prisma.tenantOperationalProfile.create({
+      data: {
+        tenantId,
+        institutionDisplayName: `Institución sintética ${tenantId}`,
+        timeZone: 'America/Santiago',
+        updatedByIdentityUserId: 'synthetic-test-setup',
+      },
+    });
   }
   async function teacher(
     tenantId: string,
@@ -772,7 +945,6 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       eventDate: '2026-09-03',
       eventTime: null,
       eventTimeApproximate: false,
-      eventTimeZone: null,
       place: 'Sala de clases',
       title: 'Observación durante actividad',
       description:
@@ -788,7 +960,6 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       eventDate: '2026-09-03',
       eventTime: '10:15',
       eventTimeApproximate: true,
-      eventTimeZone: 'America/Santiago',
       place: 'Biblioteca',
       title: 'Observación durante actividad',
       description:
@@ -796,6 +967,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       immediateAction: 'Se entregó una pauta visual.',
       informationSource: 'WITNESSED',
       thirdPartySource: null,
+      reason: null,
     };
   }
 });

@@ -20,6 +20,7 @@ import PDFDocument from 'pdfkit';
 import type { AcademicRequestContext } from '../academic/academic-context';
 import { Prisma, type DieActionStatus } from '../generated/prisma/client';
 import { PrismaService } from '../persistence/prisma.service';
+import { TenantOperationalProfileService } from '../tenant-profile/tenant-operational-profile.service';
 import { DieAccessService } from './die-access.service';
 import { DieIdentityMembershipVerifier } from './die-identity-membership.verifier';
 
@@ -54,6 +55,7 @@ export class DieService {
     private readonly prisma: PrismaService,
     private readonly access: DieAccessService,
     private readonly identityMemberships: DieIdentityMembershipVerifier,
+    private readonly tenantProfiles: TenantOperationalProfileService,
   ) {}
 
   async listMemberCandidates(context: AcademicRequestContext, search?: string) {
@@ -225,11 +227,18 @@ export class DieService {
             status: { in: OPEN_ACTION_STATUSES },
           },
         });
+        const activeResponsibilityCount = await tx.dieSupportEpisode.count({
+          where: {
+            tenantId,
+            responsibleMemberAssignmentId: currentMember.id,
+            endedAt: null,
+          },
+        });
         let replacement = null;
-        if (openCount > 0) {
+        if (openCount > 0 || activeResponsibilityCount > 0) {
           if (!input.reassignToMemberAssignmentId) {
             throw new ConflictException(
-              'Open actions must be reassigned before removing this member.',
+              'Open actions and active support responsibilities must be reassigned before removing this member.',
             );
           }
           replacement = await this.activeMemberIn(
@@ -243,6 +252,14 @@ export class DieService {
             );
         }
         if (replacement) {
+          await tx.dieSupportEpisode.updateMany({
+            where: {
+              tenantId,
+              responsibleMemberAssignmentId: currentMember.id,
+              endedAt: null,
+            },
+            data: { responsibleMemberAssignmentId: replacement.id },
+          });
           const actions = await tx.dieAction.findMany({
             where: {
               tenantId,
@@ -288,6 +305,7 @@ export class DieService {
           currentMember.id,
           {
             reassignedActionCount: openCount,
+            reassignedActiveResponsibilityCount: activeResponsibilityCount,
           },
         );
       },
@@ -541,6 +559,9 @@ export class DieService {
       tenantId,
       input.studentId,
     );
+    const eventTimeZone = input.eventTime
+      ? await this.tenantProfiles.requireTimeZone(tenantId)
+      : null;
     const entry = await this.prisma.$transaction(
       async (tx) => {
         const currentEpisode = await tx.dieSupportEpisode.findUnique({
@@ -567,7 +588,7 @@ export class DieService {
             tenantId,
             journalEntryId: row.id,
             revisionNumber: 1,
-            ...this.revisionData(input, academic),
+            ...this.revisionData(input, academic, eventTimeZone),
             correctedByIdentityUserId: context.principal.identityUserId,
           },
         });
@@ -686,6 +707,16 @@ export class DieService {
       academicYearLabel: previous.academicYearLabel,
       courseLabel: previous.courseLabel,
     };
+    const previousTime =
+      previous.eventTimeMinutes === null
+        ? null
+        : this.timeString(previous.eventTimeMinutes);
+    const eventTimeZone =
+      input.eventTime === null
+        ? null
+        : input.eventTime === previousTime && previous.eventTimeZone
+          ? previous.eventTimeZone
+          : await this.tenantProfiles.requireTimeZone(tenantId);
     try {
       await this.prisma.$transaction(
         async (tx) => {
@@ -698,7 +729,7 @@ export class DieService {
               tenantId,
               journalEntryId: entry.id,
               revisionNumber: next,
-              ...this.revisionData(input, academic),
+              ...this.revisionData(input, academic, eventTimeZone),
               correctedByIdentityUserId: context.principal.identityUserId,
               correctionReason: input.reason,
             },
@@ -817,7 +848,10 @@ export class DieService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-    return this.actionView(action);
+    return this.actionView(
+      action,
+      await this.tenantProfiles.today(context.tenant.tenantId),
+    );
   }
 
   async listActions(context: AcademicRequestContext, filters: ActionFilters) {
@@ -826,7 +860,13 @@ export class DieService {
       ? access.member?.id
       : filters.assigneeMemberAssignmentId;
     if (filters.mine && !assignee) return [];
-    const today = this.today();
+    const today = await this.tenantProfiles.today(context.tenant.tenantId);
+    if (filters.overdue && !today)
+      throw new ConflictException({
+        code: 'TENANT_TIME_ZONE_REQUIRED',
+        message:
+          'Configure the tenant time zone before filtering overdue actions.',
+      });
     const rows = await this.prisma.dieAction.findMany({
       where: {
         tenantId: context.tenant.tenantId,
@@ -834,12 +874,15 @@ export class DieService {
         ...(assignee ? { assigneeMemberAssignmentId: assignee } : {}),
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.overdue
-          ? { dueDate: { lt: today }, status: { in: OPEN_ACTION_STATUSES } }
+          ? {
+              dueDate: { lt: this.date(today!) },
+              status: { in: OPEN_ACTION_STATUSES },
+            }
           : {}),
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
     });
-    return rows.map((row) => this.actionView(row));
+    return rows.map((row) => this.actionView(row, today));
   }
 
   async updateAction(
@@ -903,7 +946,10 @@ export class DieService {
       });
       return row;
     });
-    return this.actionView(updated);
+    return this.actionView(
+      updated,
+      await this.tenantProfiles.today(context.tenant.tenantId),
+    );
   }
 
   async reassignAction(
@@ -965,7 +1011,10 @@ export class DieService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-    return this.actionView(updated);
+    return this.actionView(
+      updated,
+      await this.tenantProfiles.today(context.tenant.tenantId),
+    );
   }
 
   async exportStudentPdf(
@@ -975,6 +1024,12 @@ export class DieService {
   ): Promise<Buffer> {
     await this.access.require(context);
     const tenantId = context.tenant.tenantId;
+    const operationalProfile = await this.tenantProfiles.get(context);
+    if (!operationalProfile.institutionDisplayName)
+      throw new ConflictException({
+        code: 'TENANT_OPERATIONAL_PROFILE_INCOMPLETE',
+        message: 'Configure the institutional name before exporting a DIE PDF.',
+      });
     const student = await this.prisma.student.findUnique({
       where: { tenantId_id: { tenantId, id: studentId } },
     });
@@ -1004,7 +1059,10 @@ export class DieService {
       .text('Hoja de vida - Inclusión Educativa');
     document.moveDown(0.4).font('Helvetica').fontSize(10).fillColor('#263149');
     document.text(
-      `Tenant canónico (no equivale al nombre institucional): ${this.safePdfText(tenantId)}`,
+      `Institución: ${this.safePdfText(operationalProfile.institutionDisplayName)}`,
+    );
+    document.text(
+      `Zona operativa actual: ${this.safePdfText(operationalProfile.timeZone ?? 'no configurada')}`,
     );
     document.text(
       `Alumno: ${this.safePdfText(`${student.firstName} ${student.lastName}`)}`,
@@ -1089,7 +1147,7 @@ export class DieService {
         .font('Helvetica')
         .fontSize(9)
         .text(
-          `Estado: ${action.status} | Vencimiento: ${action.dueDate ?? 'sin fecha'}${action.overdue ? ' | VENCIDA' : ''}`,
+          `Estado: ${action.status} | Vencimiento: ${action.dueDate ?? 'sin fecha'}${action.overdue === true ? ' | VENCIDA' : action.overdue === null && action.dueDate ? ' | VENCIMIENTO NO EVALUADO: zona no configurada' : ''}`,
         );
       if (action.description)
         document.text(this.safePdfText(action.description));
@@ -1183,6 +1241,7 @@ export class DieService {
   private revisionData(
     input: Omit<CreateDieJournalEntry, 'studentId' | 'supportEpisodeId'>,
     academic: AcademicSnapshot,
+    eventTimeZone: string | null,
   ) {
     return {
       category: input.category,
@@ -1191,7 +1250,7 @@ export class DieService {
         ? this.timeMinutes(input.eventTime)
         : null,
       eventTimeApproximate: input.eventTimeApproximate,
-      eventTimeZone: input.eventTimeZone,
+      eventTimeZone,
       place: input.place,
       title: input.title,
       description: input.description,
@@ -1352,20 +1411,23 @@ export class DieService {
     };
   }
 
-  private actionView(row: {
-    id: string;
-    studentId: string;
-    journalEntryId: string | null;
-    title: string;
-    description: string | null;
-    assigneeMemberAssignmentId: string;
-    dueDate: Date | null;
-    status: DieActionStatus;
-    result: string | null;
-    cancellationReason: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }) {
+  private actionView(
+    row: {
+      id: string;
+      studentId: string;
+      journalEntryId: string | null;
+      title: string;
+      description: string | null;
+      assigneeMemberAssignmentId: string;
+      dueDate: Date | null;
+      status: DieActionStatus;
+      result: string | null;
+      cancellationReason: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+    today?: string | null,
+  ) {
     const dueDate = row.dueDate ? this.dateString(row.dueDate) : null;
     return {
       id: row.id,
@@ -1379,9 +1441,11 @@ export class DieService {
       result: row.result,
       cancellationReason: row.cancellationReason,
       overdue:
-        dueDate !== null &&
-        OPEN_ACTION_STATUSES.includes(row.status) &&
-        row.dueDate! < this.today(),
+        dueDate === null || !OPEN_ACTION_STATUSES.includes(row.status)
+          ? false
+          : today === undefined || today === null
+            ? null
+            : dueDate < today,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -1414,9 +1478,6 @@ export class DieService {
     if (Number.isNaN(parsed.getTime()))
       throw new BadRequestException('An invalid date was provided.');
     return parsed;
-  }
-  private today(): Date {
-    return this.date(new Date().toISOString().slice(0, 10));
   }
   private dateString(value: Date): string {
     return value.toISOString().slice(0, 10);

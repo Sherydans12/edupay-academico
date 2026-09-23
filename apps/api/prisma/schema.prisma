@@ -299,6 +299,8 @@ model Tenant {
   dieActions                      DieAction[]
   dieActionAssignments            DieActionAssignment[]
   dieAuditEvents                  DieAuditEvent[]
+  operationalProfile              TenantOperationalProfile?
+  operationalProfileRevisions     TenantOperationalProfileRevision[]
 
   @@map("tenants")
 }
@@ -1162,6 +1164,39 @@ model BlobDerivative {
   @@unique([tenantId, sourceBlobId, profile, profileVersion])
   @@index([tenantId, derivativeBlobId])
   @@map("blob_derivatives")
+}
+
+model TenantOperationalProfile {
+  tenantId                String   @id @map("tenant_id") @db.VarChar(128)
+  institutionDisplayName  String?  @map("institution_display_name") @db.VarChar(240)
+  timeZone                String?  @map("time_zone") @db.VarChar(80)
+  version                 Int      @default(1)
+  updatedByIdentityUserId String   @map("updated_by_identity_user_id") @db.VarChar(128)
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("tenant_operational_profiles")
+}
+
+model TenantOperationalProfileRevision {
+  id                     String   @default(uuid()) @db.Uuid
+  tenantId               String   @map("tenant_id") @db.VarChar(128)
+  version                Int
+  institutionDisplayName String?  @map("institution_display_name") @db.VarChar(240)
+  timeZone               String?  @map("time_zone") @db.VarChar(80)
+  actorIdentityUserId    String   @map("actor_identity_user_id") @db.VarChar(128)
+  actorMembershipId      String   @map("actor_membership_id") @db.VarChar(128)
+  requestId              String   @map("request_id") @db.VarChar(128)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, version])
+  @@index([tenantId, createdAt])
+  @@map("tenant_operational_profile_revisions")
 }
 
 model DieMemberAssignment {

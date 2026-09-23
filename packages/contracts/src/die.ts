@@ -138,7 +138,7 @@ export const dieJournalContentSchema = z
   .strict();
 
 const dieJournalInputSchema = dieJournalContentSchema
-  .omit({ academicContext: true })
+  .omit({ academicContext: true, eventTimeZone: true })
   .extend({ studentId: uuid, supportEpisodeId: uuid });
 
 const validateJournalInput = (
@@ -150,20 +150,6 @@ const validateJournalInput = (
       code: 'custom',
       path: ['eventTimeApproximate'],
       message: 'Approximation requires a known time.',
-    });
-  }
-  if (value.eventTime === null && value.eventTimeZone !== null) {
-    context.addIssue({
-      code: 'custom',
-      path: ['eventTimeZone'],
-      message: 'A date-only fact must not invent a time zone.',
-    });
-  }
-  if (value.eventTime !== null && value.eventTimeZone === null) {
-    context.addIssue({
-      code: 'custom',
-      path: ['eventTimeZone'],
-      message: 'A known time requires an explicit IANA time zone.',
     });
   }
   if (
@@ -281,7 +267,7 @@ export const dieActionSchema = z
     status: dieActionStatusSchema,
     result: z.string().nullable(),
     cancellationReason: z.string().nullable(),
-    overdue: z.boolean(),
+    overdue: z.boolean().nullable(),
     createdAt: timestamp,
     updatedAt: timestamp,
   })

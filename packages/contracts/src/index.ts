@@ -9,6 +9,7 @@ export * from './notifications.js';
 export * from './storage.js';
 export * from './submissions.js';
 export * from './sync.js';
+export * from './tenant-operational-profile.js';
 
 export const apiErrorDetailSchema = z
   .object({
