@@ -1,6 +1,6 @@
 # Inclusión Educativa (DIE) - alcance y plan verificable v1
 
-Estado: implementación completa en rama; pendiente ensayo PostgreSQL aislado  
+Estado: implementación completa en rama; migración y E2E PostgreSQL aislados verificados  
 Fecha de corte: 2026-09-22
 
 ## Requisitos confirmados
@@ -79,8 +79,9 @@ Matriz resumida:
 
 La migración es aditiva: enums de almacenamiento, tablas/índices DIE y relaciones
 opcionales. No renombra ni elimina columnas existentes. El API anterior conserva
-sus contratos; categorías/tipos nuevos sólo aparecen en rutas DIE. La migración se
-probará exclusivamente contra PostgreSQL aislado antes de proponer despliegue.
+sus contratos; categorías/tipos nuevos sólo aparecen en rutas DIE. CI aplicó las
+11 migraciones desde cero y ejecutó 257 pruebas API sobre PostgreSQL aislado el
+2026-09-22; no se ejecutó contra bases compartidas ni productivas.
 
 ## Cortes de implementación
 
@@ -110,12 +111,12 @@ probará exclusivamente contra PostgreSQL aislado antes de proponer despliegue.
   aprobados. La UI se inspeccionó en escritorio y a 390 px; el PDF sintético se
   renderizó a PNG y se revisó sin cortes ni desbordes.
 - La suite E2E PostgreSQL cubre dos tenants, roles positivos/negativos, revocación,
-  concurrencia, contexto histórico, versiones, cuotas/formatos y exportación. En
-  este host quedó omitida porque Docker Desktop no inicia su engine por un fallo
-  local al crear `dockerInference`; no se usó una base compartida como sustituto.
+  concurrencia, contexto histórico, versiones, cuotas/formatos y exportación. CI
+  la aprobó con almacenamiento temporal privado; en este host Docker Desktop no
+  inicia su engine por un fallo local al crear `dockerInference`.
 - No se ejecutó la migración fuera de un PostgreSQL aislado, ni se cambió BL, ni
   se activó despliegue alguno.
 
 Decisiones realmente pendientes: contrato transversal de nombre institucional y
-zona horaria por tenant; política de conservación, purga y legal hold; y ejecución
-del ensayo de migración/E2E cuando exista un PostgreSQL aislado saludable.
+zona horaria por tenant, además de la política de conservación, purga y legal hold.
+No bloquean la operación v1 y no se inventó una regla local para resolverlas.
