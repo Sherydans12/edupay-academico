@@ -180,3 +180,43 @@ Checkpoints aprobados:
 El PDF sintético se regeneró tras incorporar el perfil, mediante el endpoint/exportador real, con nombre `Colegio Sintético de Revisión`, zona `America/Santiago`, 14 registros extensos, acentos, fechas sin hora, un registro anulado, una acción relacionada y filtros explícitos. `pdfinfo` confirmó A4, 4 páginas, sin JavaScript ni cifrado. Se renderizaron todas las páginas a PNG y se revisaron visualmente: identificación institucional, zona, filtros, acentos, wrapping, marca roja de anulación, motivo, acciones y pies `Página n de 4` son legibles y no hay páginas duplicadas.
 
 Una solicitud equivalente con `institutionDisplayName=null` devolvió 409 y no produjo un documento presentado como completo. No se usó UUID de tenant como sustituto.
+
+## 6. Evidencia STAFF y candidato acumulado
+
+- Gate real Identity→Académico, con PostgreSQL separados y sintéticos: provisionó
+  y activó `STAFF`, inició sesión, incorporó por username exacto sin `Teacher`,
+  accedió DIE, recibió 403 en función administrativa y como miembro ordinario
+  incorporó otro `STAFF`. Resultado: PASS.
+- Identity: 22 pruebas afectadas pasan (login STAFF, exactitud, negativas uniformes,
+  cambio de username/roles, revocación y auditoría sin username).
+- Académico: 11 E2E DIE pasan (membership exacta, STAFF, cross-tenant, retiro con
+  reemplazo elegible, historial, archivos y PDF). Web: 13 pruebas afectadas pasan.
+- `die-cumulative-upgrade-gate.mjs`: secuencia única reproducible 10→13; preservó
+  ledger, alumno, archivo privado físico y outbox financiero sintético.
+- No se repitió ClamAV porque adaptador, formatos y gate aprobado no cambiaron.
+
+## 7. Orden y recuperación propuestos
+
+1. Aplicar `20260924000000_add_staff_role` y desplegar Identity nuevo; verificar
+   login existente, `verify` y resolución exacta. No crear aún STAFF productivo.
+2. Con backup verificado, aplicar migraciones Académico 11→12→13 y desplegar API.
+   La 13 vuelve `teacher_id` nullable y agrega etiquetas con backfill, sin cambiar
+   IDs, blobs ni outbox.
+3. Ejecutar probes negativos y publicar sólo FRONT. BL sigue apagado y sin DIE.
+4. Recién entonces habilitar provisión/alta STAFF del piloto.
+
+Identity nuevo es compatible con Académico anterior. Académico nuevo requiere el
+Identity nuevo para alta STAFF; con Identity anterior falla cerrado y no constituye
+un release funcional. El readiness del binario Académico anterior sobre esquema
+nuevo no prueba seguridad.
+
+Antes de existir datos DIE puede volverse a binarios anteriores dejando migraciones
+aditivas inactivas. Después, no hay rollback directo: congelar escrituras, bloquear
+en el borde `GET /api/v1/files/:fileObjectId/download` y
+`GET /api/v1/die/students/:studentId/export.pdf`, mantener storage privado y
+restaurar el candidato o corregir hacia adelante. El gate aislado obtuvo 500/404
+del binario antiguo y 503 deliberado para ambas rutas mediante la contención. No se
+borran archivos ni se ejecuta down migration. Tras crear memberships STAFF,
+Identity tampoco vuelve a un binario que desconozca ese enum.
+
+No se implementó purga, legal hold ni borrado automático.
