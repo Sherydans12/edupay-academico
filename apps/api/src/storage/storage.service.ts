@@ -675,18 +675,25 @@ export class StorageService implements LearningAttachmentPort {
       this.deny();
     }
     if (file.fileReferences.length === 0) this.deny();
+    const hasDieReference = file.fileReferences.some(
+      (reference) => reference.dieJournalEntry,
+    );
     let allowed = false;
-    for (const reference of file.fileReferences) {
-      if (reference.learningItem) {
-        allowed ||= await this.canReadLearningItem(context, reference.learningItem.id);
-      }
-      if (reference.submissionRevision) {
-        const submission = reference.submissionRevision.submission;
-        allowed ||= await this.canReadSubmission(context, submission);
-      }
-      if (reference.dieJournalEntry) {
-        await this.requireDieAccess(context);
-        allowed = true;
+    if (hasDieReference) {
+      await this.requireDieAccess(context);
+      allowed = true;
+    } else {
+      for (const reference of file.fileReferences) {
+        if (reference.learningItem) {
+          allowed ||= await this.canReadLearningItem(
+            context,
+            reference.learningItem.id,
+          );
+        }
+        if (reference.submissionRevision) {
+          const submission = reference.submissionRevision.submission;
+          allowed ||= await this.canReadSubmission(context, submission);
+        }
       }
     }
     if (!allowed) this.deny();
@@ -697,7 +704,7 @@ export class StorageService implements LearningAttachmentPort {
       resourceId: file.id,
       resourceType: 'FileObject',
     });
-    if (file.fileReferences.some((reference) => reference.dieJournalEntry)) {
+    if (hasDieReference) {
       await this.prisma.dieAuditEvent.create({
         data: {
           tenantId,

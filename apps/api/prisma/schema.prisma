@@ -1256,7 +1256,7 @@ model DieJournalRevision {
   eventDate                 DateTime             @map("event_date") @db.Date
   eventTimeMinutes          Int?                 @map("event_time_minutes") @db.SmallInt
   eventTimeApproximate      Boolean              @default(false) @map("event_time_approximate")
-  eventTimeZone             String               @map("event_time_zone") @db.VarChar(80)
+  eventTimeZone             String?              @map("event_time_zone") @db.VarChar(80)
   place                     String?              @db.VarChar(240)
   title                     String               @db.VarChar(240)
   description               String               @db.Text

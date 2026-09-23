@@ -1,6 +1,6 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -69,6 +69,11 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     await prisma.dieJournalEntry.deleteMany({ where: withinTestTenants });
     await prisma.dieSupportEpisode.deleteMany({ where: withinTestTenants });
     await prisma.dieMemberAssignment.deleteMany({ where: withinTestTenants });
+    await prisma.learningItem.deleteMany({ where: withinTestTenants });
+    await prisma.learningUnit.deleteMany({ where: withinTestTenants });
+    await prisma.courseSubjectTeacher.deleteMany({ where: withinTestTenants });
+    await prisma.courseSubject.deleteMany({ where: withinTestTenants });
+    await prisma.subject.deleteMany({ where: withinTestTenants });
     await prisma.courseEnrollment.deleteMany({ where: withinTestTenants });
     await prisma.teacher.deleteMany({ where: withinTestTenants });
     await prisma.student.deleteMany({ where: withinTestTenants });
@@ -122,9 +127,13 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       'Soto',
     );
     const ordinary = await token('die-tenant-a', 'teacher-one', ['TEACHER']);
+    const studentActor = await token('die-tenant-a', 'student-user', [
+      'STUDENT',
+    ]);
 
     await api(admin).get('/api/v1/die/access').expect(200);
     await api(ordinary).get('/api/v1/die/access').expect(403);
+    await api(studentActor).get('/api/v1/die/access').expect(403);
 
     await api(admin)
       .post('/api/v1/die/members')
@@ -177,6 +186,34 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .expect(404);
   });
 
+  it('rejects a same-tenant academic target whose current Identity membership has only an excluded role', async () => {
+    const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
+    const target = await teacher(
+      'die-tenant-a',
+      'student-only-user',
+      'Identidad',
+      'Excluida',
+    );
+    identity.membershipVerificationResponse = {
+      verified: true,
+      identityUserId: 'student-only-user',
+      membershipId: 'student-only-membership',
+      tenantId: 'die-tenant-a',
+      membershipStatus: 'ACTIVE',
+      roles: ['STUDENT'],
+    };
+
+    await api(admin)
+      .post('/api/v1/die/members')
+      .send({ teacherId: target.id })
+      .expect(403);
+    expect(
+      await prisma.dieMemberAssignment.count({
+        where: { tenantId: 'die-tenant-a' },
+      }),
+    ).toBe(0);
+  });
+
   it('serializes active support, preserves episode history, and captures course/year at the time of the fact', async () => {
     const admin = await token('die-tenant-a', 'admin-a', ['TENANT_ADMIN']);
     const student = await studentRecord('die-tenant-a', 'Ana', 'Pérez');
@@ -215,6 +252,12 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .post(`/api/v1/die/support-episodes/${episode.id}/finish`)
       .send({ endDate: '2026-09-10', reason: 'Objetivo de período cumplido.' })
       .expect(201);
+    await api(admin)
+      .get(`/api/v1/die/students/${student.id}/journal`)
+      .expect(200);
+    await api(admin)
+      .get(`/api/v1/die/students/${student.id}/export.pdf`)
+      .expect(200);
     await api(admin)
       .post('/api/v1/die/journal-entries')
       .send(journalBody(student.id, episode.id))
@@ -376,8 +419,20 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       .send({ teacherId: memberTeacher.id })
       .expect(201);
     const member = await token('die-tenant-a', 'member-user', ['TEACHER']);
+    const outsiderTeacher = await teacher(
+      'die-tenant-a',
+      'outsider-user',
+      'Docente',
+      'Sin DIE',
+    );
     const outsider = await token('die-tenant-a', 'outsider-user', ['TEACHER']);
     const student = await studentRecord('die-tenant-a', 'Sol', 'Reyes');
+    const { course } = await academicContext(
+      'die-tenant-a',
+      student.id,
+      '2026',
+      '6° B',
+    );
     const episode = await api(admin)
       .post('/api/v1/die/support-episodes')
       .send({
@@ -413,16 +468,130 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
     await api(outsider)
       .get(`/api/v1/files/${uploaded.body.id}/download`)
       .expect(403);
+
+    const subject = await prisma.subject.create({
+      data: { tenantId: 'die-tenant-a', name: 'Lenguaje' },
+    });
+    const courseSubject = await prisma.courseSubject.create({
+      data: {
+        tenantId: 'die-tenant-a',
+        courseId: course.id,
+        subjectId: subject.id,
+      },
+    });
+    await prisma.courseSubjectTeacher.create({
+      data: {
+        tenantId: 'die-tenant-a',
+        teacherId: outsiderTeacher.id,
+        courseSubjectId: courseSubject.id,
+      },
+    });
+    const unit = await prisma.learningUnit.create({
+      data: {
+        tenantId: 'die-tenant-a',
+        courseSubjectId: courseSubject.id,
+        title: 'Unidad visible al docente',
+        status: 'ACTIVE',
+      },
+    });
+    const learningItem = await prisma.learningItem.create({
+      data: {
+        tenantId: 'die-tenant-a',
+        courseSubjectId: courseSubject.id,
+        learningUnitId: unit.id,
+        type: 'MATERIAL',
+        title: 'Recurso académico',
+        publicationStatus: 'PUBLISHED',
+        publishedAt: new Date(),
+        publishedByIdentityUserId: 'admin-a',
+        createdByIdentityUserId: 'admin-a',
+      },
+    });
+    await prisma.fileReference.create({
+      data: {
+        tenantId: 'die-tenant-a',
+        fileObjectId: uploaded.body.id,
+        referenceType: 'LEARNING_ITEM',
+        category: 'LEARNING_MATERIAL',
+        learningItemId: learningItem.id,
+        createdByIdentityUserId: 'admin-a',
+      },
+    });
+
+    // A DIE reference dominates every broader academic reference on the same
+    // immutable file, so a teacher cannot bypass DIE through storage routes.
+    await api(outsider)
+      .get(`/api/v1/files/${uploaded.body.id}/download`)
+      .expect(403);
     const download = await api(member)
       .get(`/api/v1/files/${uploaded.body.id}/download`)
       .expect(200);
     expect(download.text).toBe('contenido seguro');
+    identity.sessionResponse = {
+      active: false,
+      identityUserId: 'member-user',
+      membershipActive: false,
+      membershipId: 'membership-die-tenant-a-member-user',
+      sessionActive: true,
+      sessionId: 'session-die-tenant-a-member-user',
+      tenantId: 'die-tenant-a',
+    };
+    await api(member)
+      .get(`/api/v1/files/${uploaded.body.id}/download`)
+      .expect(403);
+    await api(member)
+      .get(`/api/v1/die/students/${student.id}/export.pdf`)
+      .expect(403);
+    identity.sessionResponse = {
+      active: true,
+      identityUserId: 'member-user',
+      membershipActive: true,
+      membershipId: 'membership-die-tenant-a-member-user',
+      sessionActive: true,
+      sessionId: 'session-die-tenant-a-member-user',
+      tenantId: 'die-tenant-a',
+    };
+    const assignment = await prisma.dieMemberAssignment.findFirstOrThrow({
+      where: {
+        tenantId: 'die-tenant-a',
+        identityUserId: 'member-user',
+        removedAt: null,
+      },
+    });
+    identity.sessionResponse = {
+      active: true,
+      identityUserId: 'admin-a',
+      membershipActive: true,
+      membershipId: 'membership-die-tenant-a-admin-a',
+      sessionActive: true,
+      sessionId: 'session-die-tenant-a-admin-a',
+      tenantId: 'die-tenant-a',
+    };
+    await api(admin)
+      .post(`/api/v1/die/members/${assignment.id}/remove`)
+      .send({ reason: 'Salida sintética del equipo.' })
+      .expect(201);
+    await api(member)
+      .get(`/api/v1/files/${uploaded.body.id}/download`)
+      .expect(403);
+    await api(member)
+      .get(`/api/v1/die/students/${student.id}/export.pdf`)
+      .expect(403);
     const rejoined = await token(
       'die-tenant-a',
       'member-user',
       ['TEACHER'],
       'replacement-membership',
     );
+    identity.sessionResponse = {
+      active: true,
+      identityUserId: 'member-user',
+      membershipActive: true,
+      membershipId: 'replacement-membership',
+      sessionActive: true,
+      sessionId: 'session-die-tenant-a-member-user',
+      tenantId: 'die-tenant-a',
+    };
     await api(rejoined).get('/api/v1/die/access').expect(403);
     await api(rejoined)
       .get(`/api/v1/files/${uploaded.body.id}/download`)
@@ -441,16 +610,64 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
         reason: 'Apoyo.',
       })
       .expect(201);
+    const entries: Array<{ id: string }> = [];
+    for (let index = 0; index < 14; index += 1) {
+      entries.push(
+        (
+          await api(adminA)
+            .post('/api/v1/die/journal-entries')
+            .send({
+              ...journalBody(student.id, episode.body.id),
+              eventDate: `2026-09-${String(index + 1).padStart(2, '0')}`,
+              title: `Observación sintética ${index + 1}: acentos, inclusión y acompañamiento`,
+              description:
+                'Descripción objetiva extensa con información completamente sintética. '.repeat(
+                  12,
+                ),
+            })
+            .expect(201)
+        ).body,
+      );
+    }
     await api(adminA)
-      .post('/api/v1/die/journal-entries')
-      .send(journalBody(student.id, episode.body.id))
+      .post(`/api/v1/die/journal-entries/${entries[3]!.id}/void`)
+      .send({ reason: 'Anulación sintética para validar la marca visual.' })
+      .expect(201);
+    const responsibleTeacher = await teacher(
+      'die-tenant-a',
+      'responsible-user',
+      'José',
+      'Álvarez',
+    );
+    const responsibleMember = await api(adminA)
+      .post('/api/v1/die/members')
+      .send({ teacherId: responsibleTeacher.id })
+      .expect(201);
+    await api(adminA)
+      .post('/api/v1/die/actions')
+      .send({
+        studentId: student.id,
+        journalEntryId: entries[0]!.id,
+        title: 'Revisar adecuación de acceso sintética',
+        description: 'Acción de evidencia con acentos y estado pendiente.',
+        assigneeMemberAssignmentId: responsibleMember.body.id,
+        dueDate: '2026-10-01',
+      })
       .expect(201);
 
     const pdf = await api(adminA)
-      .get(`/api/v1/die/students/${student.id}/export.pdf?includeVoided=true`)
+      .get(
+        `/api/v1/die/students/${student.id}/export.pdf?includeVoided=true&from=2026-09-01&to=2026-09-14&category=OBSERVATION&authorIdentityUserId=admin-a`,
+      )
       .expect(200)
       .expect('Content-Type', /application\/pdf/);
     expect(pdf.body.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pdf.body.length).toBeGreaterThan(10_000);
+    const evidencePath = process.env.DIE_PDF_EVIDENCE_PATH;
+    if (evidencePath) {
+      await mkdir(dirname(evidencePath), { recursive: true });
+      await writeFile(evidencePath, pdf.body);
+    }
     expect(
       await prisma.dieAuditEvent.count({
         where: {
@@ -555,7 +772,7 @@ describe.runIf(testDatabaseUrl)('DIE domain (PostgreSQL e2e)', () => {
       eventDate: '2026-09-03',
       eventTime: null,
       eventTimeApproximate: false,
-      eventTimeZone: 'America/Santiago',
+      eventTimeZone: null,
       place: 'Sala de clases',
       title: 'Observación durante actividad',
       description:

@@ -35,7 +35,10 @@ const categories = [
 ] as const;
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  // The tenant's canonical time zone is not part of the current Academic
+  // tenant contract. Leave dates explicit instead of deriving a potentially
+  // different calendar day from the browser or server clock.
+  return '';
 }
 function message(error: unknown) {
   if (error instanceof AcademicApiError && error.status === 403)
@@ -508,6 +511,7 @@ function JournalPanel({
     useState<(typeof categories)[number][0]>('OBSERVATION');
   const [eventDate, setEventDate] = useState(today());
   const [eventTime, setEventTime] = useState('');
+  const [eventTimeZone, setEventTimeZone] = useState('');
   const [approximate, setApproximate] = useState(false);
   const [source, setSource] = useState<'WITNESSED' | 'REPORTED_BY_THIRD_PARTY'>(
     'WITNESSED',
@@ -563,6 +567,7 @@ function JournalPanel({
     setImmediateAction('');
     setPlace('');
     setEventTime('');
+    setEventTimeZone('');
     setApproximate(false);
     setReason('');
   };
@@ -572,6 +577,7 @@ function JournalPanel({
     setCategory(row.category);
     setEventDate(row.eventDate);
     setEventTime(row.eventTime ?? '');
+    setEventTimeZone(row.eventTimeZone ?? '');
     setApproximate(row.eventTimeApproximate);
     setSource(row.informationSource);
     setThirdParty(row.thirdPartySource ?? '');
@@ -591,7 +597,7 @@ function JournalPanel({
       eventDate,
       eventTime: eventTime || null,
       eventTimeApproximate: approximate,
-      eventTimeZone: 'America/Santiago' as const,
+      eventTimeZone: eventTime ? eventTimeZone || null : null,
       place: place || null,
       title,
       description,
@@ -797,9 +803,23 @@ function JournalPanel({
               <input
                 type="time"
                 value={eventTime}
-                onChange={(event) => setEventTime(event.target.value)}
+                onChange={(event) => {
+                  setEventTime(event.target.value);
+                  if (!event.target.value) setEventTimeZone('');
+                }}
               />
             </label>
+            {eventTime ? (
+              <label>
+                Zona horaria IANA
+                <input
+                  required
+                  value={eventTimeZone}
+                  onChange={(event) => setEventTimeZone(event.target.value)}
+                  placeholder="Ej.: America/Santiago"
+                />
+              </label>
+            ) : null}
             <label className="die-checkbox">
               <input
                 checked={approximate}
@@ -926,7 +946,7 @@ function JournalPanel({
                       <time>
                         {entry.current.eventDate}
                         {entry.current.eventTime
-                          ? ` · ${entry.current.eventTime}${entry.current.eventTimeApproximate ? ' aprox.' : ''}`
+                          ? ` · ${entry.current.eventTime}${entry.current.eventTimeApproximate ? ' aprox.' : ''} (${entry.current.eventTimeZone ?? 'zona no informada'})`
                           : ''}
                       </time>
                       <h3>{entry.current.title}</h3>

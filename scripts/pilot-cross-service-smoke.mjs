@@ -666,13 +666,23 @@ async function prepareRepositories(identityDatabaseUrl, academicDatabaseUrl) {
   const identityBranch = (
     await run('git', ['branch', '--show-current'], { cwd: identityRoot })
   ).stdout.trim();
-  assert.equal(identityBranch, 'main', 'EduPay Identity must be on main.');
+  const expectedIdentityBranch =
+    process.env.PILOT_IDENTITY_BRANCH?.trim() || 'main';
+  assert.equal(
+    identityBranch,
+    expectedIdentityBranch,
+    `EduPay Identity must be on ${expectedIdentityBranch}.`,
+  );
   const identityStatus = (
     await run('git', ['status', '--porcelain', '--untracked-files=all'], {
       cwd: identityRoot,
     })
   ).stdout.trim();
-  assert.equal(identityStatus, '', 'EduPay Identity main must be clean.');
+  assert.equal(
+    identityStatus,
+    '',
+    `EduPay Identity ${expectedIdentityBranch} must be clean.`,
+  );
 
   const academicBranch = (
     await run('git', ['branch', '--show-current'], { cwd: repositoryRoot })

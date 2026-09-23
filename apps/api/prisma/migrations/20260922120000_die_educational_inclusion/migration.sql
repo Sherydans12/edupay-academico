@@ -82,7 +82,7 @@ CREATE TABLE "die_journal_revisions" (
   "event_date" DATE NOT NULL,
   "event_time_minutes" SMALLINT,
   "event_time_approximate" BOOLEAN NOT NULL DEFAULT false,
-  "event_time_zone" VARCHAR(80) NOT NULL,
+  "event_time_zone" VARCHAR(80),
   "place" VARCHAR(240),
   "title" VARCHAR(240) NOT NULL,
   "description" TEXT NOT NULL,

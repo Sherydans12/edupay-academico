@@ -4,6 +4,19 @@ const uuid = z.string().uuid();
 const timestamp = z.iso.datetime({ offset: true });
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const trimmed = (max: number) => z.string().trim().min(1).max(max);
+const timeZone = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .refine((value) => {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0);
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Must be a valid IANA time zone.');
 
 export const dieMemberRoleSchema = z.enum(['MEMBER', 'COORDINATOR']);
 export const dieAccessSchema = z.object({ allowed: z.literal(true) }).strict();
@@ -113,7 +126,7 @@ export const dieJournalContentSchema = z
       .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
       .nullable(),
     eventTimeApproximate: z.boolean(),
-    eventTimeZone: z.literal('America/Santiago'),
+    eventTimeZone: timeZone.nullable(),
     place: z.string().max(240).nullable(),
     title: z.string().min(1).max(240),
     description: z.string().min(1).max(20_000),
@@ -137,6 +150,20 @@ const validateJournalInput = (
       code: 'custom',
       path: ['eventTimeApproximate'],
       message: 'Approximation requires a known time.',
+    });
+  }
+  if (value.eventTime === null && value.eventTimeZone !== null) {
+    context.addIssue({
+      code: 'custom',
+      path: ['eventTimeZone'],
+      message: 'A date-only fact must not invent a time zone.',
+    });
+  }
+  if (value.eventTime !== null && value.eventTimeZone === null) {
+    context.addIssue({
+      code: 'custom',
+      path: ['eventTimeZone'],
+      message: 'A known time requires an explicit IANA time zone.',
     });
   }
   if (

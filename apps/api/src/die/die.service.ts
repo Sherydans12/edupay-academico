@@ -987,7 +987,7 @@ export class DieService {
     const document = new PDFDocument({
       bufferPages: true,
       compress: false,
-      margin: 48,
+      margins: { bottom: 80, left: 48, right: 48, top: 48 },
       size: 'A4',
       info: { Title: 'Hoja de vida DIE', Author: 'EduPay Académico' },
     });
@@ -1004,7 +1004,7 @@ export class DieService {
       .text('Hoja de vida - Inclusión Educativa');
     document.moveDown(0.4).font('Helvetica').fontSize(10).fillColor('#263149');
     document.text(
-      `Institución (tenant canónico): ${this.safePdfText(tenantId)}`,
+      `Tenant canónico (no equivale al nombre institucional): ${this.safePdfText(tenantId)}`,
     );
     document.text(
       `Alumno: ${this.safePdfText(`${student.firstName} ${student.lastName}`)}`,
@@ -1033,7 +1033,7 @@ export class DieService {
         .fontSize(11)
         .fillColor(entry.status === 'VOIDED' ? '#b1444b' : '#263149');
       document.text(
-        `${revision.eventDate}${revision.eventTime ? ` ${revision.eventTime}${revision.eventTimeApproximate ? ' aprox.' : ''}` : ''} - ${this.safePdfText(revision.title)}${entry.status === 'VOIDED' ? ' [ANULADO]' : ''}`,
+        `${revision.eventDate}${revision.eventTime ? ` ${revision.eventTime}${revision.eventTimeApproximate ? ' aprox.' : ''} (${this.safePdfText(revision.eventTimeZone ?? 'zona no informada')})` : ''} - ${this.safePdfText(revision.title)}${entry.status === 'VOIDED' ? ' [ANULADO]' : ''}`,
       );
       document
         .font('Helvetica')
@@ -1103,6 +1103,8 @@ export class DieService {
     const pages = document.bufferedPageRange();
     for (let index = 0; index < pages.count; index += 1) {
       document.switchToPage(index);
+      const contentBottomMargin = document.page.margins.bottom;
+      document.page.margins.bottom = 0;
       document
         .font('Helvetica')
         .fontSize(8)
@@ -1110,9 +1112,10 @@ export class DieService {
         .text(
           `EduPay Académico - DIE | Página ${index + 1} de ${pages.count}`,
           48,
-          800,
-          { align: 'center', width: 499 },
+          810,
+          { align: 'center', lineBreak: false, width: 499 },
         );
+      document.page.margins.bottom = contentBottomMargin;
     }
     document.end();
     const pdf = await complete;
@@ -1267,7 +1270,7 @@ export class DieService {
       eventDate: Date;
       eventTimeMinutes: number | null;
       eventTimeApproximate: boolean;
-      eventTimeZone: string;
+      eventTimeZone: string | null;
       place: string | null;
       title: string;
       description: string;
