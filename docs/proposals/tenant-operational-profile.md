@@ -57,4 +57,3 @@ No se actualizan las filas existentes, el ledger financiero ni los objetos de al
 ## Auditoría y datos sensibles
 
 El historial guarda snapshots del nombre y zona, IDs opacos del actor y correlación. No guarda bitácoras DIE, descripciones, nombres de alumnos ni contenido de archivos. Los errores de validación identifican el campo, no repiten el valor recibido.
-
