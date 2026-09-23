@@ -1,6 +1,6 @@
 # Release DIE: corrección de migradores y bloqueo de destino productivo
 
-Fecha de registro: 2026-09-23T23:30:50Z  
+Fecha de registro: 2026-09-23T23:30:50Z
 Estado: **BLOCKED_PRODUCTION_DATABASE_TARGET_AND_LEDGER_MISMATCH**
 
 Este registro cubre el trabajo posterior al primer intento. No cambia SQL,
