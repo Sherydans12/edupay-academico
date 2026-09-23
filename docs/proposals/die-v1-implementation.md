@@ -1,6 +1,6 @@
 # Inclusión Educativa (DIE) - alcance y plan verificable v1
 
-Estado: implementación completa en rama; migración y E2E PostgreSQL aislados verificados  
+Estado: implementación funcional en rama; release condicionado por metadata institucional y zona canónica
 Fecha de corte: 2026-09-22
 
 ## Requisitos confirmados
@@ -111,12 +111,12 @@ sus contratos; categorías/tipos nuevos sólo aparecen en rutas DIE. CI aplicó 
   aprobados. La UI se inspeccionó en escritorio y a 390 px; el PDF sintético se
   renderizó a PNG y se revisó sin cortes ni desbordes.
 - La suite E2E PostgreSQL cubre dos tenants, roles positivos/negativos, revocación,
-  concurrencia, contexto histórico, versiones, cuotas/formatos y exportación. CI
-  la aprobó con almacenamiento temporal privado; en este host Docker Desktop no
-  inicia su engine por un fallo local al crear `dockerInference`.
+  concurrencia, contexto histórico, versiones, cuotas/formatos y exportación. El
+  gate local desechable aprobó con PostgreSQL y ClamAV reales.
 - No se ejecutó la migración fuera de un PostgreSQL aislado, ni se cambió BL, ni
   se activó despliegue alguno.
 
 Decisiones realmente pendientes: contrato transversal de nombre institucional y
-zona horaria por tenant, además de la política de conservación, purga y legal hold.
-No bloquean la operación v1 y no se inventó una regla local para resolverlas.
+zona horaria canónica por tenant; política exacta de coordinación/retiro/reingreso;
+y, fuera de esta versión, conservación, purga y legal hold. La primera bloquea
+declarar plenamente conforme la exportación PDF. No se inventó borrado automático.
