@@ -76,6 +76,13 @@ describe.runIf(testDatabaseUrl)(
       await prisma.notificationEvent.deleteMany();
       await prisma.review.deleteMany();
       await prisma.fileReference.deleteMany();
+      await prisma.dieAuditEvent.deleteMany();
+      await prisma.dieActionAssignment.deleteMany();
+      await prisma.dieAction.deleteMany();
+      await prisma.dieJournalRevision.deleteMany();
+      await prisma.dieJournalEntry.deleteMany();
+      await prisma.dieSupportEpisode.deleteMany();
+      await prisma.dieMemberAssignment.deleteMany();
       await prisma.fileObject.deleteMany();
       await prisma.uploadIntent.deleteMany();
       await prisma.blobDerivative.deleteMany();

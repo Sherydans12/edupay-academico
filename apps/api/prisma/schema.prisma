@@ -101,6 +101,7 @@ enum StorageCategory {
   ASSESSMENT_SOURCE
   STUDENT_SUBMISSION
   GENERATED_DERIVATIVE
+  DIE_ATTACHMENT
   OTHER_SYSTEM
 }
 
@@ -136,6 +137,39 @@ enum FileObjectLifecycle {
 enum FileReferenceType {
   LEARNING_ITEM
   SUBMISSION_REVISION
+  DIE_JOURNAL_ENTRY
+}
+
+enum DieMemberRole {
+  MEMBER
+  COORDINATOR
+}
+
+enum DieJournalCategory {
+  BEHAVIOR_SITUATION
+  OBSERVATION
+  INTERVENTION_OR_ATTENTION
+  INTERVIEW_OR_MEETING
+  AGREEMENT
+  PROGRESS_OR_RECOGNITION
+  OTHER
+}
+
+enum DieInformationSource {
+  WITNESSED
+  REPORTED_BY_THIRD_PARTY
+}
+
+enum DieJournalEntryStatus {
+  CURRENT
+  VOIDED
+}
+
+enum DieActionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
 
 enum UploadIntentStatus {
@@ -224,40 +258,49 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  academicYears             AcademicYear[]
-  courses                   Course[]
-  students                  Student[]
-  teachers                  Teacher[]
-  subjects                  Subject[]
-  courseSubjects            CourseSubject[]
-  courseEnrollments         CourseEnrollment[]
-  studentSubjectEnrollments StudentSubjectEnrollment[]
-  courseSubjectTeachers     CourseSubjectTeacher[]
-  learningUnits             LearningUnit[]
-  learningItems             LearningItem[]
-  storageQuotaPolicies      StorageQuotaPolicy[]
-  storageUsageAccounts      StorageUsageAccount[]
-  storedBlobs                StoredBlob[]
-  fileObjects                FileObject[]
-  fileReferences             FileReference[]
-  uploadIntents              UploadIntent[]
-  submissions                Submission[]
-  submissionRevisions        SubmissionRevision[]
-  reviews                    Review[]
-  notificationEvents         NotificationEvent[]
-  notificationDeliveries     NotificationDelivery[]
-  inAppNotifications         InAppNotification[]
-  syncConfigurations         SyncConfiguration[]
-  syncStates                 SyncState[]
-  syncRuns                   SyncRun[]
-  syncItemResults            SyncItemResult[]
-  syncFullPresences          SyncFullPresence[]
-  syncLeases                 SyncLease[]
-  contentRevisions           ContentRevision[]
-  learningItemDrafts         LearningItemDraft[]
-  commandReceipts            CommandReceipt[]
+  academicYears                   AcademicYear[]
+  courses                         Course[]
+  students                        Student[]
+  teachers                        Teacher[]
+  subjects                        Subject[]
+  courseSubjects                  CourseSubject[]
+  courseEnrollments               CourseEnrollment[]
+  studentSubjectEnrollments       StudentSubjectEnrollment[]
+  courseSubjectTeachers           CourseSubjectTeacher[]
+  learningUnits                   LearningUnit[]
+  learningItems                   LearningItem[]
+  storageQuotaPolicies            StorageQuotaPolicy[]
+  storageUsageAccounts            StorageUsageAccount[]
+  storedBlobs                     StoredBlob[]
+  fileObjects                     FileObject[]
+  fileReferences                  FileReference[]
+  uploadIntents                   UploadIntent[]
+  submissions                     Submission[]
+  submissionRevisions             SubmissionRevision[]
+  reviews                         Review[]
+  notificationEvents              NotificationEvent[]
+  notificationDeliveries          NotificationDelivery[]
+  inAppNotifications              InAppNotification[]
+  syncConfigurations              SyncConfiguration[]
+  syncStates                      SyncState[]
+  syncRuns                        SyncRun[]
+  syncItemResults                 SyncItemResult[]
+  syncFullPresences               SyncFullPresence[]
+  syncLeases                      SyncLease[]
+  contentRevisions                ContentRevision[]
+  learningItemDrafts              LearningItemDraft[]
+  commandReceipts                 CommandReceipt[]
   financialProjectionOutboxEvents FinancialProjectionOutboxEvent[]
   financialProjectionSnapshots    FinancialProjectionSnapshot[]
+  dieMemberAssignments            DieMemberAssignment[]
+  dieSupportEpisodes              DieSupportEpisode[]
+  dieJournalEntries               DieJournalEntry[]
+  dieJournalRevisions             DieJournalRevision[]
+  dieActions                      DieAction[]
+  dieActionAssignments            DieActionAssignment[]
+  dieAuditEvents                  DieAuditEvent[]
+  operationalProfile              TenantOperationalProfile?
+  operationalProfileRevisions     TenantOperationalProfileRevision[]
 
   @@map("tenants")
 }
@@ -273,9 +316,11 @@ model AcademicYear {
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  courses Course[]
-  syncConfigurations SyncConfiguration[]
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  courses             Course[]
+  syncConfigurations  SyncConfiguration[]
+  dieSupportEpisodes  DieSupportEpisode[]
+  dieJournalRevisions DieJournalRevision[]
 
   @@id([tenantId, id])
   @@unique([tenantId, label])
@@ -284,26 +329,28 @@ model AcademicYear {
 }
 
 model Course {
-  id              String       @default(uuid()) @db.Uuid
-  tenantId        String       @map("tenant_id") @db.VarChar(128)
-  academicYearId  String       @map("academic_year_id") @db.Uuid
-  paginationToken String       @unique @default(uuid()) @map("pagination_token") @db.Uuid
-  source          String       @default("MANUAL") @db.VarChar(80)
-  externalReference String?    @map("external_reference") @db.VarChar(200)
-  label           String       @db.VarChar(160)
-  status          CourseStatus @default(DRAFT)
-  sourceUpdatedAt DateTime?    @map("source_updated_at") @db.Timestamptz(3)
-  lastSyncedAt    DateTime?    @map("last_synced_at") @db.Timestamptz(3)
-  sourceStatus    String?      @map("source_status") @db.VarChar(32)
-  lastSeenFullGeneration Int?  @map("last_seen_full_generation")
-  consecutiveAbsences Int      @default(0) @map("consecutive_absences")
-  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                     String       @default(uuid()) @db.Uuid
+  tenantId               String       @map("tenant_id") @db.VarChar(128)
+  academicYearId         String       @map("academic_year_id") @db.Uuid
+  paginationToken        String       @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  source                 String       @default("MANUAL") @db.VarChar(80)
+  externalReference      String?      @map("external_reference") @db.VarChar(200)
+  label                  String       @db.VarChar(160)
+  status                 CourseStatus @default(DRAFT)
+  sourceUpdatedAt        DateTime?    @map("source_updated_at") @db.Timestamptz(3)
+  lastSyncedAt           DateTime?    @map("last_synced_at") @db.Timestamptz(3)
+  sourceStatus           String?      @map("source_status") @db.VarChar(32)
+  lastSeenFullGeneration Int?         @map("last_seen_full_generation")
+  consecutiveAbsences    Int          @default(0) @map("consecutive_absences")
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  academicYear   AcademicYear       @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
-  courseSubjects CourseSubject[]
-  enrollments    CourseEnrollment[]
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  academicYear        AcademicYear         @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
+  courseSubjects      CourseSubject[]
+  enrollments         CourseEnrollment[]
+  dieSupportEpisodes  DieSupportEpisode[]
+  dieJournalRevisions DieJournalRevision[]
 
   @@id([tenantId, id])
   @@unique([tenantId, source, externalReference])
@@ -312,28 +359,31 @@ model Course {
 }
 
 model Student {
-  id                String       @default(uuid()) @db.Uuid
-  tenantId          String       @map("tenant_id") @db.VarChar(128)
-  paginationToken   String       @unique @default(uuid()) @map("pagination_token") @db.Uuid
-  identityUserId    String?      @map("identity_user_id") @db.VarChar(128)
-  source            String       @default("MANUAL") @db.VarChar(80)
-  externalReference String?      @map("external_reference") @db.VarChar(200)
-  firstName         String       @map("first_name") @db.VarChar(120)
-  lastName          String       @map("last_name") @db.VarChar(120)
-  email             String?      @db.VarChar(320)
-  status            PersonStatus @default(ACTIVE)
-  sourceUpdatedAt   DateTime?    @map("source_updated_at") @db.Timestamptz(3)
-  lastSyncedAt      DateTime?    @map("last_synced_at") @db.Timestamptz(3)
-  sourceStatus      String?      @map("source_status") @db.VarChar(32)
-  lastSeenFullGeneration Int?    @map("last_seen_full_generation")
-  consecutiveAbsences Int        @default(0) @map("consecutive_absences")
-  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                     String       @default(uuid()) @db.Uuid
+  tenantId               String       @map("tenant_id") @db.VarChar(128)
+  paginationToken        String       @unique @default(uuid()) @map("pagination_token") @db.Uuid
+  identityUserId         String?      @map("identity_user_id") @db.VarChar(128)
+  source                 String       @default("MANUAL") @db.VarChar(80)
+  externalReference      String?      @map("external_reference") @db.VarChar(200)
+  firstName              String       @map("first_name") @db.VarChar(120)
+  lastName               String       @map("last_name") @db.VarChar(120)
+  email                  String?      @db.VarChar(320)
+  status                 PersonStatus @default(ACTIVE)
+  sourceUpdatedAt        DateTime?    @map("source_updated_at") @db.Timestamptz(3)
+  lastSyncedAt           DateTime?    @map("last_synced_at") @db.Timestamptz(3)
+  sourceStatus           String?      @map("source_status") @db.VarChar(32)
+  lastSeenFullGeneration Int?         @map("last_seen_full_generation")
+  consecutiveAbsences    Int          @default(0) @map("consecutive_absences")
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant             Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   courseEnrollments  CourseEnrollment[]
   subjectEnrollments StudentSubjectEnrollment[]
-  submissions         Submission[]
+  submissions        Submission[]
+  dieSupportEpisodes DieSupportEpisode[]
+  dieJournalEntries  DieJournalEntry[]
+  dieActions         DieAction[]
 
   @@id([tenantId, id])
   @@unique([tenantId, identityUserId])
@@ -356,9 +406,10 @@ model Teacher {
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  assignments CourseSubjectTeacher[]
-  reviews     Review[]
+  tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  assignments          CourseSubjectTeacher[]
+  reviews              Review[]
+  dieMemberAssignments DieMemberAssignment[]
 
   @@id([tenantId, id])
   @@unique([tenantId, identityUserId])
@@ -412,19 +463,19 @@ model CourseSubject {
 }
 
 model CourseEnrollment {
-  id        String             @default(uuid()) @db.Uuid
-  tenantId  String             @map("tenant_id") @db.VarChar(128)
-  studentId String             @map("student_id") @db.Uuid
-  courseId  String             @map("course_id") @db.Uuid
-  source    String             @default("MANUAL") @db.VarChar(80)
-  externalReference String?    @map("external_reference") @db.VarChar(420)
-  status    RelationshipStatus @default(ACTIVE)
-  lastSyncedAt DateTime?       @map("last_synced_at") @db.Timestamptz(3)
-  financialProjectionVersion BigInt @default(1) @map("financial_projection_version")
-  financialProjectionEffectiveFrom DateTime @default(now()) @map("financial_projection_effective_from") @db.Timestamptz(3)
-  financialProjectionEffectiveTo DateTime? @map("financial_projection_effective_to") @db.Timestamptz(3)
-  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                               String             @default(uuid()) @db.Uuid
+  tenantId                         String             @map("tenant_id") @db.VarChar(128)
+  studentId                        String             @map("student_id") @db.Uuid
+  courseId                         String             @map("course_id") @db.Uuid
+  source                           String             @default("MANUAL") @db.VarChar(80)
+  externalReference                String?            @map("external_reference") @db.VarChar(420)
+  status                           RelationshipStatus @default(ACTIVE)
+  lastSyncedAt                     DateTime?          @map("last_synced_at") @db.Timestamptz(3)
+  financialProjectionVersion       BigInt             @default(1) @map("financial_projection_version")
+  financialProjectionEffectiveFrom DateTime           @default(now()) @map("financial_projection_effective_from") @db.Timestamptz(3)
+  financialProjectionEffectiveTo   DateTime?          @map("financial_projection_effective_to") @db.Timestamptz(3)
+  createdAt                        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   student Student @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
@@ -440,24 +491,24 @@ model CourseEnrollment {
 /// Transactional outbound-event log for Academic Financial Projection v1.
 /// It intentionally carries only the reviewed financial projection payload.
 model FinancialProjectionOutboxEvent {
-  id                String                         @id @default(uuid()) @db.Uuid
-  sequence          BigInt                         @unique @default(autoincrement())
-  tenantId          String                         @map("tenant_id") @db.VarChar(128)
-  eventType         String                         @map("event_type") @db.VarChar(120)
-  schemaVersion     String                         @map("schema_version") @db.VarChar(16)
-  aggregateId       String                         @map("aggregate_id") @db.Uuid
-  entityVersion     BigInt                         @map("entity_version")
-  occurredAt        DateTime                       @map("occurred_at") @db.Timestamptz(3)
-  correlationId     String?                        @map("correlation_id") @db.VarChar(128)
-  payload           Json
-  status            FinancialProjectionOutboxStatus @default(PENDING)
-  attemptCount      Int                            @default(0) @map("attempt_count")
-  nextAttemptAt     DateTime                       @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
-  publishingAt      DateTime?                      @map("publishing_at") @db.Timestamptz(3)
-  publishedAt       DateTime?                      @map("published_at") @db.Timestamptz(3)
-  lastErrorCode     String?                        @map("last_error_code") @db.VarChar(80)
-  createdAt         DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id            String                          @id @default(uuid()) @db.Uuid
+  sequence      BigInt                          @unique @default(autoincrement())
+  tenantId      String                          @map("tenant_id") @db.VarChar(128)
+  eventType     String                          @map("event_type") @db.VarChar(120)
+  schemaVersion String                          @map("schema_version") @db.VarChar(16)
+  aggregateId   String                          @map("aggregate_id") @db.Uuid
+  entityVersion BigInt                          @map("entity_version")
+  occurredAt    DateTime                        @map("occurred_at") @db.Timestamptz(3)
+  correlationId String?                         @map("correlation_id") @db.VarChar(128)
+  payload       Json
+  status        FinancialProjectionOutboxStatus @default(PENDING)
+  attemptCount  Int                             @default(0) @map("attempt_count")
+  nextAttemptAt DateTime                        @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  publishingAt  DateTime?                       @map("publishing_at") @db.Timestamptz(3)
+  publishedAt   DateTime?                       @map("published_at") @db.Timestamptz(3)
+  lastErrorCode String?                         @map("last_error_code") @db.VarChar(80)
+  createdAt     DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
@@ -470,17 +521,17 @@ model FinancialProjectionOutboxEvent {
 /// A materialized, tenant-bound snapshot boundary. Items are copied at start so
 /// pages remain consistent even when later academic mutations occur.
 model FinancialProjectionSnapshot {
-  id                String   @id @default(uuid()) @db.Uuid
-  tenantId          String   @map("tenant_id") @db.VarChar(128)
-  token             String   @unique @default(uuid()) @db.Uuid
-  capturedAt        DateTime @map("captured_at") @db.Timestamptz(3)
-  watermark         String   @db.VarChar(256)
-  itemCount         Int      @default(0) @map("item_count")
-  completedAt       DateTime? @map("completed_at") @db.Timestamptz(3)
-  expiresAt         DateTime @map("expires_at") @db.Timestamptz(3)
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.VarChar(128)
+  token       String    @unique @default(uuid()) @db.Uuid
+  capturedAt  DateTime  @map("captured_at") @db.Timestamptz(3)
+  watermark   String    @db.VarChar(256)
+  itemCount   Int       @default(0) @map("item_count")
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   items  FinancialProjectionSnapshotItem[]
 
   @@index([tenantId, expiresAt])
@@ -488,12 +539,12 @@ model FinancialProjectionSnapshot {
 }
 
 model FinancialProjectionSnapshotItem {
-  snapshotId     String   @map("snapshot_id") @db.Uuid
-  ordinal        Int
-  enrollmentId   String   @map("enrollment_id") @db.Uuid
-  entityVersion  BigInt   @map("entity_version")
-  payload        Json
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  snapshotId    String   @map("snapshot_id") @db.Uuid
+  ordinal       Int
+  enrollmentId  String   @map("enrollment_id") @db.Uuid
+  entityVersion BigInt   @map("entity_version")
+  payload       Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   snapshot FinancialProjectionSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 
@@ -527,13 +578,13 @@ model SyncConfiguration {
 }
 
 model SyncState {
-  tenantId     String     @map("tenant_id") @db.VarChar(128)
-  source       String     @db.VarChar(80)
-  entity       SyncEntity
-  watermark    String?    @db.Text
-  lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz(3)
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenantId      String     @map("tenant_id") @db.VarChar(128)
+  source        String     @db.VarChar(80)
+  entity        SyncEntity
+  watermark     String?    @db.Text
+  lastSuccessAt DateTime?  @map("last_success_at") @db.Timestamptz(3)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
@@ -542,30 +593,30 @@ model SyncState {
 }
 
 model SyncRun {
-  id                    String        @db.Uuid
-  tenantId              String        @map("tenant_id") @db.VarChar(128)
-  source                String        @db.VarChar(80)
-  mode                  SyncMode
-  trigger               SyncTrigger
-  status                SyncRunStatus @default(RUNNING)
-  correlationId         String        @map("correlation_id") @db.VarChar(128)
-  sourceSchemaVersion   String        @map("source_schema_version") @db.VarChar(16)
-  sourceTenantId        String        @map("source_tenant_id") @db.VarChar(200)
-  seenCount             Int           @default(0) @map("seen_count")
-  createdCount          Int           @default(0) @map("created_count")
-  updatedCount          Int           @default(0) @map("updated_count")
-  unchangedCount        Int           @default(0) @map("unchanged_count")
-  deactivatedCount      Int           @default(0) @map("deactivated_count")
-  conflictedCount       Int           @default(0) @map("conflicted_count")
-  failedCount           Int           @default(0) @map("failed_count")
-  pageCount             Int           @default(0) @map("page_count")
-  watermarkAdvanced     Boolean       @default(false) @map("watermark_advanced")
-  snapshotComplete      Boolean       @default(false) @map("snapshot_complete")
-  evidenceTruncated     Boolean       @default(false) @map("evidence_truncated")
-  errorCode             String?       @map("error_code") @db.VarChar(80)
-  retryable             Boolean       @default(false)
-  startedAt             DateTime      @default(now()) @map("started_at") @db.Timestamptz(3)
-  finishedAt            DateTime?     @map("finished_at") @db.Timestamptz(3)
+  id                  String        @db.Uuid
+  tenantId            String        @map("tenant_id") @db.VarChar(128)
+  source              String        @db.VarChar(80)
+  mode                SyncMode
+  trigger             SyncTrigger
+  status              SyncRunStatus @default(RUNNING)
+  correlationId       String        @map("correlation_id") @db.VarChar(128)
+  sourceSchemaVersion String        @map("source_schema_version") @db.VarChar(16)
+  sourceTenantId      String        @map("source_tenant_id") @db.VarChar(200)
+  seenCount           Int           @default(0) @map("seen_count")
+  createdCount        Int           @default(0) @map("created_count")
+  updatedCount        Int           @default(0) @map("updated_count")
+  unchangedCount      Int           @default(0) @map("unchanged_count")
+  deactivatedCount    Int           @default(0) @map("deactivated_count")
+  conflictedCount     Int           @default(0) @map("conflicted_count")
+  failedCount         Int           @default(0) @map("failed_count")
+  pageCount           Int           @default(0) @map("page_count")
+  watermarkAdvanced   Boolean       @default(false) @map("watermark_advanced")
+  snapshotComplete    Boolean       @default(false) @map("snapshot_complete")
+  evidenceTruncated   Boolean       @default(false) @map("evidence_truncated")
+  errorCode           String?       @map("error_code") @db.VarChar(80)
+  retryable           Boolean       @default(false)
+  startedAt           DateTime      @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt          DateTime?     @map("finished_at") @db.Timestamptz(3)
 
   tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   itemResults  SyncItemResult[]
@@ -615,11 +666,11 @@ model SyncFullPresence {
 }
 
 model SyncLease {
-  tenantId   String   @map("tenant_id") @db.VarChar(128)
-  source     String   @db.VarChar(80)
-  ownerRunId String   @map("owner_run_id") @db.Uuid
+  tenantId    String   @map("tenant_id") @db.VarChar(128)
+  source      String   @db.VarChar(80)
+  ownerRunId  String   @map("owner_run_id") @db.Uuid
   lockedUntil DateTime @map("locked_until") @db.Timestamptz(3)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
@@ -667,22 +718,22 @@ model CourseSubjectTeacher {
 }
 
 model LearningUnit {
-  id              String            @default(uuid()) @db.Uuid
-  tenantId        String            @map("tenant_id") @db.VarChar(128)
-  courseSubjectId String            @map("course_subject_id") @db.Uuid
-  title           String            @db.VarChar(160)
-  description     String?           @db.Text
-  sortOrder       Int               @default(0) @map("sort_order")
-  startAt         DateTime?         @map("start_at") @db.Timestamptz(3)
-  endAt           DateTime?         @map("end_at") @db.Timestamptz(3)
+  id              String             @default(uuid()) @db.Uuid
+  tenantId        String             @map("tenant_id") @db.VarChar(128)
+  courseSubjectId String             @map("course_subject_id") @db.Uuid
+  title           String             @db.VarChar(160)
+  description     String?            @db.Text
+  sortOrder       Int                @default(0) @map("sort_order")
+  startAt         DateTime?          @map("start_at") @db.Timestamptz(3)
+  endAt           DateTime?          @map("end_at") @db.Timestamptz(3)
   status          LearningUnitStatus @default(DRAFT)
-  version         Int               @default(1)
-  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version         Int                @default(1)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  courseSubject CourseSubject @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
-  items        LearningItem[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  courseSubject CourseSubject  @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
+  items         LearningItem[]
 
   @@id([tenantId, id])
   @@unique([tenantId, id, courseSubjectId], map: "learning_units_tenant_id_id_course_subject_id_key")
@@ -691,32 +742,32 @@ model LearningUnit {
 }
 
 model LearningItem {
-  id                        String                       @default(uuid()) @db.Uuid
-  tenantId                  String                       @map("tenant_id") @db.VarChar(128)
-  courseSubjectId           String                       @map("course_subject_id") @db.Uuid
-  learningUnitId            String                       @map("learning_unit_id") @db.Uuid
+  id                        String                        @default(uuid()) @db.Uuid
+  tenantId                  String                        @map("tenant_id") @db.VarChar(128)
+  courseSubjectId           String                        @map("course_subject_id") @db.Uuid
+  learningUnitId            String                        @map("learning_unit_id") @db.Uuid
   type                      LearningItemType
-  title                     String                       @db.VarChar(160)
-  description               String?                      @db.Text
-  content                   String?                      @db.Text
-  instructions              String?                      @db.Text
-  body                      String?                      @db.Text
-  bodyDocument              Json?                        @map("body_document") @db.JsonB
-  sortOrder                 Int                          @default(0) @map("sort_order")
+  title                     String                        @db.VarChar(160)
+  description               String?                       @db.Text
+  content                   String?                       @db.Text
+  instructions              String?                       @db.Text
+  body                      String?                       @db.Text
+  bodyDocument              Json?                         @map("body_document") @db.JsonB
+  sortOrder                 Int                           @default(0) @map("sort_order")
   publicationStatus         LearningItemPublicationStatus @default(DRAFT) @map("publication_status")
-  publishAt                 DateTime?                    @map("publish_at") @db.Timestamptz(3)
-  publishedAt               DateTime?                    @map("published_at") @db.Timestamptz(3)
-  publishedByIdentityUserId String?                      @map("published_by_identity_user_id") @db.VarChar(128)
-  dueAt                     DateTime?                    @map("due_at") @db.Timestamptz(3)
-  createdByIdentityUserId   String                       @map("created_by_identity_user_id") @db.VarChar(128)
-  updatedByIdentityUserId   String?                      @map("updated_by_identity_user_id") @db.VarChar(128)
-  version                   Int                          @default(1)
-  createdAt                 DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                 DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  publishAt                 DateTime?                     @map("publish_at") @db.Timestamptz(3)
+  publishedAt               DateTime?                     @map("published_at") @db.Timestamptz(3)
+  publishedByIdentityUserId String?                       @map("published_by_identity_user_id") @db.VarChar(128)
+  dueAt                     DateTime?                     @map("due_at") @db.Timestamptz(3)
+  createdByIdentityUserId   String                        @map("created_by_identity_user_id") @db.VarChar(128)
+  updatedByIdentityUserId   String?                       @map("updated_by_identity_user_id") @db.VarChar(128)
+  version                   Int                           @default(1)
+  createdAt                 DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  courseSubject CourseSubject @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
-  learningUnit LearningUnit @relation(fields: [tenantId, learningUnitId, courseSubjectId], references: [tenantId, id, courseSubjectId], onDelete: Restrict)
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  courseSubject  CourseSubject      @relation(fields: [tenantId, courseSubjectId], references: [tenantId, id], onDelete: Restrict)
+  learningUnit   LearningUnit       @relation(fields: [tenantId, learningUnitId, courseSubjectId], references: [tenantId, id, courseSubjectId], onDelete: Restrict)
   fileReferences FileReference[]
   submissions    Submission[]
   draft          LearningItemDraft?
@@ -859,15 +910,15 @@ model StoredBlob {
   detectedExtension String                  @map("detected_extension") @db.VarChar(16)
   lifecycle         StoredBlobLifecycle     @default(PENDING)
   validationStatus  StorageValidationStatus @default(NOT_VALIDATED) @map("validation_status")
-  scanStatus        StorageScanStatus      @default(NOT_SCANNED) @map("scan_status")
+  scanStatus        StorageScanStatus       @default(NOT_SCANNED) @map("scan_status")
   createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   validatedAt       DateTime?               @map("validated_at") @db.Timestamptz(3)
   availableAt       DateTime?               @map("available_at") @db.Timestamptz(3)
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  fileObjects FileObject[]
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  fileObjects       FileObject[]
   sourceDerivatives BlobDerivative[] @relation("source_blob")
-  derivativeOf BlobDerivative[] @relation("derivative_blob")
+  derivativeOf      BlobDerivative[] @relation("derivative_blob")
 
   @@id([tenantId, id])
   @@unique([tenantId, sha256, storedSizeBytes])
@@ -904,46 +955,49 @@ model FileObject {
 }
 
 model FileReference {
-  id                       String              @default(uuid()) @db.Uuid
-  tenantId                 String              @map("tenant_id") @db.VarChar(128)
-  fileObjectId             String              @map("file_object_id") @db.Uuid
-  referenceType            FileReferenceType   @map("reference_type")
-  category                 StorageCategory
-  learningItemId           String?             @map("learning_item_id") @db.Uuid
-  submissionRevisionId     String?             @map("submission_revision_id") @db.Uuid
-  displayOrder             Int                 @default(0) @map("display_order")
-  createdByIdentityUserId  String              @map("created_by_identity_user_id") @db.VarChar(128)
-  createdAt                DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                      String            @default(uuid()) @db.Uuid
+  tenantId                String            @map("tenant_id") @db.VarChar(128)
+  fileObjectId            String            @map("file_object_id") @db.Uuid
+  referenceType           FileReferenceType @map("reference_type")
+  category                StorageCategory
+  learningItemId          String?           @map("learning_item_id") @db.Uuid
+  submissionRevisionId    String?           @map("submission_revision_id") @db.Uuid
+  dieJournalEntryId       String?           @map("die_journal_entry_id") @db.Uuid
+  displayOrder            Int               @default(0) @map("display_order")
+  createdByIdentityUserId String            @map("created_by_identity_user_id") @db.VarChar(128)
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   fileObject         FileObject          @relation(fields: [tenantId, fileObjectId], references: [tenantId, id], onDelete: Restrict)
   learningItem       LearningItem?       @relation(fields: [tenantId, learningItemId], references: [tenantId, id], onDelete: Restrict)
   submissionRevision SubmissionRevision? @relation(fields: [tenantId, submissionRevisionId], references: [tenantId, id], onDelete: Restrict)
+  dieJournalEntry    DieJournalEntry?    @relation(fields: [tenantId, dieJournalEntryId], references: [tenantId, id], onDelete: Restrict)
 
   @@id([tenantId, id])
   @@index([tenantId, fileObjectId])
   @@index([tenantId, learningItemId])
   @@index([tenantId, submissionRevisionId])
+  @@index([tenantId, dieJournalEntryId])
   @@map("file_references")
 }
 
 model UploadIntent {
-  id                       String             @default(uuid()) @db.Uuid
-  tenantId                 String             @map("tenant_id") @db.VarChar(128)
-  createdByIdentityUserId  String             @map("created_by_identity_user_id") @db.VarChar(128)
-  parentType               FileReferenceType  @map("parent_type")
-  parentId                 String             @map("parent_id") @db.Uuid
-  category                 StorageCategory
-  expectedFilename         String             @map("expected_filename") @db.VarChar(255)
-  expectedSizeBytes        BigInt             @map("expected_size_bytes")
-  expectedMime             String             @map("expected_mime") @db.VarChar(160)
-  reservedBytes            BigInt             @map("reserved_bytes")
-  stagingKey               String             @unique @map("staging_key") @db.VarChar(500)
-  status                   UploadIntentStatus @default(RESERVED)
-  expiresAt                DateTime           @map("expires_at") @db.Timestamptz(3)
-  createdAt                DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  finalizedAt              DateTime?          @map("finalized_at") @db.Timestamptz(3)
-  finalizedFileObjectId    String?            @map("finalized_file_object_id") @db.Uuid
+  id                      String             @default(uuid()) @db.Uuid
+  tenantId                String             @map("tenant_id") @db.VarChar(128)
+  createdByIdentityUserId String             @map("created_by_identity_user_id") @db.VarChar(128)
+  parentType              FileReferenceType  @map("parent_type")
+  parentId                String             @map("parent_id") @db.Uuid
+  category                StorageCategory
+  expectedFilename        String             @map("expected_filename") @db.VarChar(255)
+  expectedSizeBytes       BigInt             @map("expected_size_bytes")
+  expectedMime            String             @map("expected_mime") @db.VarChar(160)
+  reservedBytes           BigInt             @map("reserved_bytes")
+  stagingKey              String             @unique @map("staging_key") @db.VarChar(500)
+  status                  UploadIntentStatus @default(RESERVED)
+  expiresAt               DateTime           @map("expires_at") @db.Timestamptz(3)
+  createdAt               DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  finalizedAt             DateTime?          @map("finalized_at") @db.Timestamptz(3)
+  finalizedFileObjectId   String?            @map("finalized_file_object_id") @db.Uuid
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
@@ -962,8 +1016,8 @@ model Submission {
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  student      Student             @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  student      Student              @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
   learningItem LearningItem         @relation(fields: [tenantId, learningItemId], references: [tenantId, id], onDelete: Restrict)
   revisions    SubmissionRevision[]
 
@@ -975,19 +1029,19 @@ model Submission {
 }
 
 model SubmissionRevision {
-  id                       String   @default(uuid()) @db.Uuid
-  tenantId                 String   @map("tenant_id") @db.VarChar(128)
-  submissionId             String   @map("submission_id") @db.Uuid
-  revisionNumber           Int      @map("revision_number")
-  studentComment           String?  @map("student_comment") @db.Text
-  submittedAt              DateTime @map("submitted_at") @db.Timestamptz(3)
-  effectiveDueAt           DateTime @map("effective_due_at") @db.Timestamptz(3)
-  isLate                   Boolean  @map("is_late")
-  createdByIdentityUserId  String   @map("created_by_identity_user_id") @db.VarChar(128)
-  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                      String   @default(uuid()) @db.Uuid
+  tenantId                String   @map("tenant_id") @db.VarChar(128)
+  submissionId            String   @map("submission_id") @db.Uuid
+  revisionNumber          Int      @map("revision_number")
+  studentComment          String?  @map("student_comment") @db.Text
+  submittedAt             DateTime @map("submitted_at") @db.Timestamptz(3)
+  effectiveDueAt          DateTime @map("effective_due_at") @db.Timestamptz(3)
+  isLate                  Boolean  @map("is_late")
+  createdByIdentityUserId String   @map("created_by_identity_user_id") @db.VarChar(128)
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  submission     Submission          @relation(fields: [tenantId, submissionId], references: [tenantId, id], onDelete: Restrict)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  submission     Submission      @relation(fields: [tenantId, submissionId], references: [tenantId, id], onDelete: Restrict)
   fileReferences FileReference[]
   reviews        Review[]
 
@@ -998,14 +1052,14 @@ model SubmissionRevision {
 }
 
 model Review {
-  id                       String       @default(uuid()) @db.Uuid
-  tenantId                 String       @map("tenant_id") @db.VarChar(128)
-  submissionRevisionId     String       @map("submission_revision_id") @db.Uuid
-  reviewerTeacherId        String?      @map("reviewer_teacher_id") @db.Uuid
-  reviewerIdentityUserId   String       @map("reviewer_identity_user_id") @db.VarChar(128)
-  action                   ReviewAction
-  comment                  String?      @db.Text
-  createdAt                DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                     String       @default(uuid()) @db.Uuid
+  tenantId               String       @map("tenant_id") @db.VarChar(128)
+  submissionRevisionId   String       @map("submission_revision_id") @db.Uuid
+  reviewerTeacherId      String?      @map("reviewer_teacher_id") @db.Uuid
+  reviewerIdentityUserId String       @map("reviewer_identity_user_id") @db.VarChar(128)
+  action                 ReviewAction
+  comment                String?      @db.Text
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   submissionRevision SubmissionRevision @relation(fields: [tenantId, submissionRevisionId], references: [tenantId, id], onDelete: Restrict)
@@ -1017,16 +1071,16 @@ model Review {
 }
 
 model NotificationEvent {
-  id            String               @db.VarChar(220)
-  tenantId      String               @map("tenant_id") @db.VarChar(128)
+  id            String                @db.VarChar(220)
+  tenantId      String                @map("tenant_id") @db.VarChar(128)
   eventType     NotificationEventType @map("event_type")
-  aggregateType String               @map("aggregate_type") @db.VarChar(80)
-  aggregateId   String               @map("aggregate_id") @db.VarChar(128)
-  payload       Json                 @db.JsonB
-  occurredAt    DateTime             @map("occurred_at") @db.Timestamptz(3)
-  notBefore     DateTime             @map("not_before") @db.Timestamptz(3)
-  requestId     String?              @map("request_id") @db.VarChar(128)
-  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  aggregateType String                @map("aggregate_type") @db.VarChar(80)
+  aggregateId   String                @map("aggregate_id") @db.VarChar(128)
+  payload       Json                  @db.JsonB
+  occurredAt    DateTime              @map("occurred_at") @db.Timestamptz(3)
+  notBefore     DateTime              @map("not_before") @db.Timestamptz(3)
+  requestId     String?               @map("request_id") @db.VarChar(128)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   deliveries NotificationDelivery[]
@@ -1038,31 +1092,31 @@ model NotificationEvent {
 }
 
 model NotificationDelivery {
-  id                      String                    @db.Uuid
-  tenantId                String                    @map("tenant_id") @db.VarChar(128)
-  eventId                 String                    @map("event_id") @db.VarChar(220)
-  recipientKey            String                    @map("recipient_key") @db.VarChar(220)
-  recipientIdentityUserId String?                   @map("recipient_identity_user_id") @db.VarChar(128)
-  recipientEmail          String?                   @map("recipient_email") @db.VarChar(320)
+  id                      String                     @db.Uuid
+  tenantId                String                     @map("tenant_id") @db.VarChar(128)
+  eventId                 String                     @map("event_id") @db.VarChar(220)
+  recipientKey            String                     @map("recipient_key") @db.VarChar(220)
+  recipientIdentityUserId String?                    @map("recipient_identity_user_id") @db.VarChar(128)
+  recipientEmail          String?                    @map("recipient_email") @db.VarChar(320)
   channel                 NotificationChannel
-  templateVersion         String                    @map("template_version") @db.VarChar(40)
-  idempotencyKey          String                    @unique @map("idempotency_key") @db.VarChar(500)
+  templateVersion         String                     @map("template_version") @db.VarChar(40)
+  idempotencyKey          String                     @unique @map("idempotency_key") @db.VarChar(500)
   status                  NotificationDeliveryStatus @default(PENDING)
-  attemptCount            Int                       @default(0) @map("attempt_count")
-  nextAttemptAt           DateTime                  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
-  lockedAt                DateTime?                 @map("locked_at") @db.Timestamptz(3)
-  lastAttemptAt           DateTime?                 @map("last_attempt_at") @db.Timestamptz(3)
-  sentAt                  DateTime?                 @map("sent_at") @db.Timestamptz(3)
-  providerMessageId       String?                   @map("provider_message_id") @db.VarChar(200)
-  lastErrorCategory       String?                   @map("last_error_category") @db.VarChar(80)
-  lastErrorMessage        String?                   @map("last_error_message") @db.VarChar(500)
-  skipReason              String?                   @map("skip_reason") @db.VarChar(120)
-  createdAt               DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt               DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  attemptCount            Int                        @default(0) @map("attempt_count")
+  nextAttemptAt           DateTime                   @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedAt                DateTime?                  @map("locked_at") @db.Timestamptz(3)
+  lastAttemptAt           DateTime?                  @map("last_attempt_at") @db.Timestamptz(3)
+  sentAt                  DateTime?                  @map("sent_at") @db.Timestamptz(3)
+  providerMessageId       String?                    @map("provider_message_id") @db.VarChar(200)
+  lastErrorCategory       String?                    @map("last_error_category") @db.VarChar(80)
+  lastErrorMessage        String?                    @map("last_error_message") @db.VarChar(500)
+  skipReason              String?                    @map("skip_reason") @db.VarChar(120)
+  createdAt               DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  event       NotificationEvent  @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Restrict)
-  inApp       InAppNotification?
+  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  event  NotificationEvent  @relation(fields: [tenantId, eventId], references: [tenantId, id], onDelete: Restrict)
+  inApp  InAppNotification?
 
   @@id([tenantId, id])
   @@unique([tenantId, eventId, recipientKey, channel, templateVersion])
@@ -1072,19 +1126,19 @@ model NotificationDelivery {
 }
 
 model InAppNotification {
-  id                   String   @db.Uuid
-  tenantId             String   @map("tenant_id") @db.VarChar(128)
-  notificationDeliveryId String @map("notification_delivery_id") @db.Uuid
-  recipientIdentityUserId String @map("recipient_identity_user_id") @db.VarChar(128)
-  type                 NotificationEventType
-  title                String   @db.VarChar(200)
-  body                 String   @db.VarChar(500)
-  targetPath           String   @map("target_path") @db.VarChar(500)
-  eventId              String   @map("event_id") @db.VarChar(220)
-  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  readAt               DateTime? @map("read_at") @db.Timestamptz(3)
+  id                      String                @db.Uuid
+  tenantId                String                @map("tenant_id") @db.VarChar(128)
+  notificationDeliveryId  String                @map("notification_delivery_id") @db.Uuid
+  recipientIdentityUserId String                @map("recipient_identity_user_id") @db.VarChar(128)
+  type                    NotificationEventType
+  title                   String                @db.VarChar(200)
+  body                    String                @db.VarChar(500)
+  targetPath              String                @map("target_path") @db.VarChar(500)
+  eventId                 String                @map("event_id") @db.VarChar(220)
+  createdAt               DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  readAt                  DateTime?             @map("read_at") @db.Timestamptz(3)
 
-  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   delivery NotificationDelivery @relation(fields: [tenantId, notificationDeliveryId], references: [tenantId, id], onDelete: Restrict)
 
   @@id([tenantId, id])
@@ -1110,4 +1164,228 @@ model BlobDerivative {
   @@unique([tenantId, sourceBlobId, profile, profileVersion])
   @@index([tenantId, derivativeBlobId])
   @@map("blob_derivatives")
+}
+
+model TenantOperationalProfile {
+  tenantId                String   @id @map("tenant_id") @db.VarChar(128)
+  institutionDisplayName  String?  @map("institution_display_name") @db.VarChar(240)
+  timeZone                String?  @map("time_zone") @db.VarChar(80)
+  version                 Int      @default(1)
+  updatedByIdentityUserId String   @map("updated_by_identity_user_id") @db.VarChar(128)
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("tenant_operational_profiles")
+}
+
+model TenantOperationalProfileRevision {
+  id                     String   @default(uuid()) @db.Uuid
+  tenantId               String   @map("tenant_id") @db.VarChar(128)
+  version                Int
+  institutionDisplayName String?  @map("institution_display_name") @db.VarChar(240)
+  timeZone               String?  @map("time_zone") @db.VarChar(80)
+  actorIdentityUserId    String   @map("actor_identity_user_id") @db.VarChar(128)
+  actorMembershipId      String   @map("actor_membership_id") @db.VarChar(128)
+  requestId              String   @map("request_id") @db.VarChar(128)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, version])
+  @@index([tenantId, createdAt])
+  @@map("tenant_operational_profile_revisions")
+}
+
+model DieMemberAssignment {
+  id                      String        @default(uuid()) @db.Uuid
+  tenantId                String        @map("tenant_id") @db.VarChar(128)
+  teacherId               String?       @map("teacher_id") @db.Uuid
+  identityUserId          String        @map("identity_user_id") @db.VarChar(128)
+  identityMembershipId    String        @map("identity_membership_id") @db.VarChar(128)
+  displayLabelSnapshot    String        @map("display_label_snapshot") @db.VarChar(241)
+  role                    DieMemberRole @default(MEMBER)
+  addedByIdentityUserId   String        @map("added_by_identity_user_id") @db.VarChar(128)
+  addedAt                 DateTime      @default(now()) @map("added_at") @db.Timestamptz(3)
+  removedByIdentityUserId String?       @map("removed_by_identity_user_id") @db.VarChar(128)
+  removedAt               DateTime?     @map("removed_at") @db.Timestamptz(3)
+  removalReason           String?       @map("removal_reason") @db.VarChar(500)
+
+  tenant                  Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  teacher                 Teacher?              @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Restrict)
+  responsibleEpisodes     DieSupportEpisode[]
+  assignedActions         DieAction[]           @relation("die_action_current_assignee")
+  actionAssignmentPeriods DieActionAssignment[]
+
+  @@id([tenantId, id])
+  @@index([tenantId, identityUserId, removedAt])
+  @@index([tenantId, teacherId, removedAt])
+  @@map("die_member_assignments")
+}
+
+model DieSupportEpisode {
+  id                            String    @default(uuid()) @db.Uuid
+  tenantId                      String    @map("tenant_id") @db.VarChar(128)
+  studentId                     String    @map("student_id") @db.Uuid
+  startDate                     DateTime  @map("start_date") @db.Date
+  reason                        String    @db.Text
+  responsibleMemberAssignmentId String?   @map("responsible_member_assignment_id") @db.Uuid
+  academicYearId                String?   @map("academic_year_id") @db.Uuid
+  courseId                      String?   @map("course_id") @db.Uuid
+  academicYearLabel             String?   @map("academic_year_label") @db.VarChar(160)
+  courseLabel                   String?   @map("course_label") @db.VarChar(160)
+  endedAt                       DateTime? @map("ended_at") @db.Date
+  endReason                     String?   @map("end_reason") @db.Text
+  createdByIdentityUserId       String    @map("created_by_identity_user_id") @db.VarChar(128)
+  endedByIdentityUserId         String?   @map("ended_by_identity_user_id") @db.VarChar(128)
+  createdAt                     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant            Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  student           Student              @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
+  responsibleMember DieMemberAssignment? @relation(fields: [tenantId, responsibleMemberAssignmentId], references: [tenantId, id], onDelete: Restrict)
+  academicYear      AcademicYear?        @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
+  course            Course?              @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  journalEntries    DieJournalEntry[]
+
+  @@id([tenantId, id])
+  @@index([tenantId, studentId, startDate])
+  @@index([tenantId, responsibleMemberAssignmentId, endedAt])
+  @@map("die_support_episodes")
+}
+
+model DieJournalEntry {
+  id                           String                @default(uuid()) @db.Uuid
+  tenantId                     String                @map("tenant_id") @db.VarChar(128)
+  studentId                    String                @map("student_id") @db.Uuid
+  supportEpisodeId             String                @map("support_episode_id") @db.Uuid
+  originalAuthorIdentityUserId String                @map("original_author_identity_user_id") @db.VarChar(128)
+  originalAuthorDisplayLabel   String                @map("original_author_display_label") @db.VarChar(241)
+  currentRevisionNumber        Int                   @default(1) @map("current_revision_number")
+  status                       DieJournalEntryStatus @default(CURRENT)
+  voidReason                   String?               @map("void_reason") @db.VarChar(1000)
+  voidedByIdentityUserId       String?               @map("voided_by_identity_user_id") @db.VarChar(128)
+  voidedAt                     DateTime?             @map("voided_at") @db.Timestamptz(3)
+  createdAt                    DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  student        Student              @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
+  supportEpisode DieSupportEpisode    @relation(fields: [tenantId, supportEpisodeId], references: [tenantId, id], onDelete: Restrict)
+  revisions      DieJournalRevision[]
+  fileReferences FileReference[]
+  actions        DieAction[]
+
+  @@id([tenantId, id])
+  @@index([tenantId, studentId, createdAt])
+  @@index([tenantId, originalAuthorIdentityUserId, createdAt])
+  @@map("die_journal_entries")
+}
+
+model DieJournalRevision {
+  id                        String               @default(uuid()) @db.Uuid
+  tenantId                  String               @map("tenant_id") @db.VarChar(128)
+  journalEntryId            String               @map("journal_entry_id") @db.Uuid
+  revisionNumber            Int                  @map("revision_number")
+  category                  DieJournalCategory
+  eventDate                 DateTime             @map("event_date") @db.Date
+  eventTimeMinutes          Int?                 @map("event_time_minutes") @db.SmallInt
+  eventTimeApproximate      Boolean              @default(false) @map("event_time_approximate")
+  eventTimeZone             String?              @map("event_time_zone") @db.VarChar(80)
+  place                     String?              @db.VarChar(240)
+  title                     String               @db.VarChar(240)
+  description               String               @db.Text
+  immediateAction           String?              @map("immediate_action") @db.Text
+  informationSource         DieInformationSource @map("information_source")
+  thirdPartySource          String?              @map("third_party_source") @db.VarChar(240)
+  academicYearId            String?              @map("academic_year_id") @db.Uuid
+  courseId                  String?              @map("course_id") @db.Uuid
+  academicYearLabel         String?              @map("academic_year_label") @db.VarChar(160)
+  courseLabel               String?              @map("course_label") @db.VarChar(160)
+  correctedByIdentityUserId String               @map("corrected_by_identity_user_id") @db.VarChar(128)
+  correctedByDisplayLabel   String               @map("corrected_by_display_label") @db.VarChar(241)
+  correctionReason          String?              @map("correction_reason") @db.VarChar(1000)
+  createdAt                 DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  journalEntry DieJournalEntry @relation(fields: [tenantId, journalEntryId], references: [tenantId, id], onDelete: Restrict)
+  academicYear AcademicYear?   @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
+  course       Course?         @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, journalEntryId, revisionNumber])
+  @@index([tenantId, eventDate, category])
+  @@map("die_journal_revisions")
+}
+
+model DieAction {
+  id                                   String          @default(uuid()) @db.Uuid
+  tenantId                             String          @map("tenant_id") @db.VarChar(128)
+  studentId                            String          @map("student_id") @db.Uuid
+  journalEntryId                       String?         @map("journal_entry_id") @db.Uuid
+  title                                String          @db.VarChar(240)
+  description                          String?         @db.Text
+  assigneeMemberAssignmentId           String          @map("assignee_member_assignment_id") @db.Uuid
+  dueDate                              DateTime?       @map("due_date") @db.Date
+  status                               DieActionStatus @default(PENDING)
+  result                               String?         @db.Text
+  cancellationReason                   String?         @map("cancellation_reason") @db.Text
+  createdByIdentityUserId              String          @map("created_by_identity_user_id") @db.VarChar(128)
+  completedOrCancelledByIdentityUserId String?         @map("closed_by_identity_user_id") @db.VarChar(128)
+  closedAt                             DateTime?       @map("closed_at") @db.Timestamptz(3)
+  createdAt                            DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  student      Student               @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict)
+  journalEntry DieJournalEntry?      @relation(fields: [tenantId, journalEntryId], references: [tenantId, id], onDelete: Restrict)
+  assignee     DieMemberAssignment   @relation("die_action_current_assignee", fields: [tenantId, assigneeMemberAssignmentId], references: [tenantId, id], onDelete: Restrict)
+  assignments  DieActionAssignment[]
+
+  @@id([tenantId, id])
+  @@index([tenantId, studentId, status, dueDate])
+  @@index([tenantId, assigneeMemberAssignmentId, status, dueDate])
+  @@map("die_actions")
+}
+
+model DieActionAssignment {
+  id                       String    @default(uuid()) @db.Uuid
+  tenantId                 String    @map("tenant_id") @db.VarChar(128)
+  actionId                 String    @map("action_id") @db.Uuid
+  memberAssignmentId       String    @map("member_assignment_id") @db.Uuid
+  assignedByIdentityUserId String    @map("assigned_by_identity_user_id") @db.VarChar(128)
+  reason                   String?   @db.VarChar(1000)
+  assignedAt               DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  unassignedAt             DateTime? @map("unassigned_at") @db.Timestamptz(3)
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  action           DieAction           @relation(fields: [tenantId, actionId], references: [tenantId, id], onDelete: Restrict)
+  memberAssignment DieMemberAssignment @relation(fields: [tenantId, memberAssignmentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, actionId, assignedAt])
+  @@index([tenantId, memberAssignmentId, unassignedAt])
+  @@map("die_action_assignments")
+}
+
+model DieAuditEvent {
+  id                  String   @default(uuid()) @db.Uuid
+  tenantId            String   @map("tenant_id") @db.VarChar(128)
+  action              String   @db.VarChar(100)
+  actorIdentityUserId String   @map("actor_identity_user_id") @db.VarChar(128)
+  membershipId        String   @map("membership_id") @db.VarChar(128)
+  resourceType        String   @map("resource_type") @db.VarChar(80)
+  resourceId          String   @map("resource_id") @db.VarChar(128)
+  requestId           String   @map("request_id") @db.VarChar(128)
+  metadata            Json?    @db.JsonB
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, id])
+  @@index([tenantId, resourceType, resourceId, createdAt])
+  @@index([tenantId, actorIdentityUserId, createdAt])
+  @@map("die_audit_events")
 }

@@ -74,6 +74,8 @@ function roleWorkspace(
     return { workspace: 'tenant-admin', roleLabel: 'Administración académica' };
   if (roles.includes('TEACHER'))
     return { workspace: 'teacher', roleLabel: 'Docente' };
+  if (roles.includes('STAFF'))
+    return { workspace: 'staff', roleLabel: 'Personal especialista' };
   if (roles.includes('STUDENT'))
     return { workspace: 'student', roleLabel: 'Estudiante' };
   return null;
@@ -82,6 +84,7 @@ function roleWorkspace(
 export function destinationForRoles(roles: readonly string[]): string {
   if (roles.includes('TENANT_ADMIN')) return '/administracion';
   if (roles.includes('TEACHER')) return '/docente';
+  if (roles.includes('STAFF')) return '/die';
   if (roles.includes('STUDENT')) return '/estudiante';
   return '/login';
 }
@@ -96,7 +99,7 @@ function displayTenant(handle: string): string {
 
 function supportedRoles(roles: readonly string[]): IdentityRole[] {
   return roles.filter((role): role is IdentityRole =>
-    ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'TEACHER', 'STUDENT'].includes(role),
+    ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'STAFF', 'TEACHER', 'STUDENT', 'GUARDIAN'].includes(role),
   );
 }
 

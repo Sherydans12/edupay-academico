@@ -11,6 +11,14 @@ interface SessionContext {
   tenantId: string;
 }
 
+interface PersonnelContext {
+  identityUserId: string;
+  membershipId: string;
+  roles: string[];
+  tenantId: string;
+  username: string;
+}
+
 export interface IdentityInternalRequest {
   body: unknown;
   headers: IncomingMessage['headers'];
@@ -25,10 +33,14 @@ export class IdentityInternalFixture {
   delayMs = 0;
   forcedStatus: number | undefined;
   identityLinkResponse: unknown | typeof NO_OVERRIDE = NO_OVERRIDE;
+  membershipVerificationResponse: unknown | typeof NO_OVERRIDE = NO_OVERRIDE;
+  personnelResolutionResponse: unknown | typeof NO_OVERRIDE = NO_OVERRIDE;
   sessionResponse: unknown | typeof NO_OVERRIDE = NO_OVERRIDE;
 
   private baseUrlValue!: string;
   private readonly sessions = new Map<string, SessionContext>();
+  private readonly personnel = new Map<string, PersonnelContext>();
+  private readonly revokedPersonnel = new Set<string>();
   private readonly server = createServer((request, response) => {
     void this.handle(request, response);
   });
@@ -55,13 +67,33 @@ export class IdentityInternalFixture {
     this.delayMs = 0;
     this.forcedStatus = undefined;
     this.identityLinkResponse = NO_OVERRIDE;
+    this.membershipVerificationResponse = NO_OVERRIDE;
+    this.personnelResolutionResponse = NO_OVERRIDE;
     this.requests.length = 0;
     this.sessionResponse = NO_OVERRIDE;
     this.sessions.clear();
+    this.personnel.clear();
+    this.revokedPersonnel.clear();
   }
 
   registerSession(context: SessionContext): void {
     this.sessions.set(context.sessionId, context);
+  }
+
+  registerPersonnel(context: PersonnelContext): void {
+    this.personnel.set(`${context.tenantId}\0${context.username.normalize('NFKC').trim().toLocaleLowerCase('en-US')}`, context);
+  }
+
+  revokePersonnel(tenantId: string, identityUserId: string): void {
+    this.revokedPersonnel.add(`${tenantId}\0${identityUserId}`);
+  }
+
+  setPersonnelRoles(tenantId: string, identityUserId: string, roles: string[]): void {
+    for (const target of this.personnel.values()) {
+      if (target.tenantId === tenantId && target.identityUserId === identityUserId) {
+        target.roles = roles;
+      }
+    }
   }
 
   environment(timeoutMs = 3_000): Record<string, string> {
@@ -154,6 +186,70 @@ export class IdentityInternalFixture {
               roles: [requestBody.expectedRole],
             }
           : this.identityLinkResponse,
+      );
+      return;
+    }
+
+    if (
+      request.method === 'POST' &&
+      request.url === '/internal/v1/tenant-memberships/resolve-eligible-personnel'
+    ) {
+      if (this.personnelResolutionResponse !== NO_OVERRIDE) {
+        this.json(response, 200, this.personnelResolutionResponse);
+        return;
+      }
+      const requestBody = body as {
+        actor?: { tenantId?: string };
+        institutionalUsername?: string;
+      };
+      const username = requestBody.institutionalUsername?.normalize('NFKC').trim().toLocaleLowerCase('en-US') ?? '';
+      const target = this.personnel.get(`${requestBody.actor?.tenantId ?? ''}\0${username}`);
+      if (!target) {
+        this.json(response, 404, { error: { code: 'IDENTITY_LINK_NOT_VERIFIED' } });
+        return;
+      }
+      this.json(response, 200, {
+        verified: true,
+        identityUserId: target.identityUserId,
+        membershipId: target.membershipId,
+        tenantId: target.tenantId,
+        membershipStatus: 'ACTIVE',
+        institutionalUsername: username,
+        roles: target.roles,
+      });
+      return;
+    }
+
+    if (
+      request.method === 'POST' &&
+      request.url === '/internal/v1/tenant-memberships/verify'
+    ) {
+      const requestBody = body as {
+        actor?: { tenantId?: unknown };
+        targetIdentityUserId?: unknown;
+      };
+      const target = [...this.personnel.values()].find(
+        (item) =>
+          item.tenantId === requestBody.actor?.tenantId &&
+          item.identityUserId === requestBody.targetIdentityUserId,
+      );
+      if (this.revokedPersonnel.has(`${String(requestBody.actor?.tenantId)}\0${String(requestBody.targetIdentityUserId)}`)) {
+        this.json(response, 404, { error: { code: 'IDENTITY_LINK_NOT_VERIFIED' } });
+        return;
+      }
+      this.json(
+        response,
+        200,
+        this.membershipVerificationResponse === NO_OVERRIDE
+          ? {
+              verified: true,
+              identityUserId: requestBody.targetIdentityUserId,
+              membershipId: target?.membershipId ?? `membership-${String(requestBody.actor?.tenantId)}-${String(requestBody.targetIdentityUserId)}`,
+              tenantId: requestBody.actor?.tenantId,
+              membershipStatus: 'ACTIVE',
+              roles: target?.roles ?? ['TEACHER'],
+            }
+          : this.membershipVerificationResponse,
       );
       return;
     }

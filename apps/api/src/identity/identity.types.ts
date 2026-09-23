@@ -1,8 +1,10 @@
 export const identityRoles = [
   'SYSTEM_ADMIN',
   'TENANT_ADMIN',
+  'STAFF',
   'TEACHER',
   'STUDENT',
+  'GUARDIAN',
 ] as const;
 
 export type IdentityRole = (typeof identityRoles)[number];

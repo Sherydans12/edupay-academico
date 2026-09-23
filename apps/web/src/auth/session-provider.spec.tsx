@@ -224,6 +224,33 @@ describe('IdentitySessionProvider', () => {
     expect(await screen.findByText('membership-1')).toBeTruthy();
   });
 
+  it('restores STAFF into the DIE workspace without a teacher workspace', async () => {
+    navigation.pathname = '/';
+    const staffMembership = {
+      ...membership,
+      membershipId: 'membership-staff',
+      roles: ['STAFF'],
+    };
+    const staffToken = { ...token, activeMembership: staffMembership };
+    const staffProfile = {
+      ...profile,
+      session: { ...profile.session, activeMembership: staffMembership },
+    };
+    render(
+      <IdentitySessionProvider
+        client={fakeClient({
+          refresh: vi.fn(async () => staffToken),
+          me: vi.fn(async () => staffProfile),
+          memberships: vi.fn(async () => [staffMembership]),
+        })}
+      >
+        <Probe />
+      </IdentitySessionProvider>,
+    );
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/die'));
+    expect(await screen.findByText('membership-staff')).toBeTruthy();
+  });
+
   it('does not reveal teacher content to a restored student session', async () => {
     navigation.pathname = '/docente';
     render(

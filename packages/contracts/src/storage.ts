@@ -9,6 +9,7 @@ export const storageCategorySchema = z.enum([
   'ASSESSMENT_SOURCE',
   'STUDENT_SUBMISSION',
   'GENERATED_DERIVATIVE',
+  'DIE_ATTACHMENT',
   'OTHER_SYSTEM',
 ]);
 
