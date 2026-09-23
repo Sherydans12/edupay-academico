@@ -1,0 +1,100 @@
+name: Publish academico migration runner
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+      SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+      IMAGE: ghcr.io/sherydans12/edupay-academico-migrate
+    steps:
+      - name: Check out the exact dispatched revision
+        uses: actions/checkout@fbcf3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify source provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$SOURCE_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "RUNNER_OS=$RUNNER_OS"
+          echo "RUNNER_ARCH=$RUNNER_ARCH"
+          echo "RUNNER_NAME=$RUNNER_NAME"
+          echo "SOURCE_SHA=$SOURCE_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Authenticate to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify migration runner image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --platform linux/amd64 --file deploy/Dockerfile.api --target migrate \
+            --label "org.opencontainers.image.source=$SOURCE_URL" \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" \
+            --tag local/academico-migrate-proof .
+          test "$(docker image inspect local/academico-migrate-proof --format '{{json .Config.Cmd}}')" = '["pnpm","--filter","@edupay/api","db:migrate:deploy"]'
+          test "$(docker image inspect local/academico-migrate-proof --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+          test -z "$(docker image inspect local/academico-migrate-proof --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -Ei 'DATABASE_URL|TOKEN|SECRET|PASSWORD|PRIVATE_KEY' || true)"
+          docker run --rm --env DATABASE_URL=postgresql://build.invalid/academico --entrypoint sh local/academico-migrate-proof -lc '
+            pnpm --filter @edupay/api exec prisma --version
+            schema_engine="$(find node_modules -type f -name "schema-engine*" -perm /111 -print -quit)"
+            test -n "$schema_engine"
+            test -x "$schema_engine"
+            "$schema_engine" --version
+          '
+
+      - name: Build and publish the immutable migration artifact
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/Dockerfile.api
+          target: migrate
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.SOURCE_SHA }}
+          labels: |
+            org.opencontainers.image.source=${{ env.SOURCE_URL }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.title=EduPay Academico migration runner
+          provenance: mode=max
+          sbom: true
+
+      - name: Verify published digest, labels, and provenance
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$IMAGE_DIGEST"
+          test "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$
+          IMMUTABLE_REFERENCE="$IMAGE@$IMAGE_DIGEST"
+          docker buildx imagetools inspect "$IMMUTABLE_REFERENCE"
+          docker buildx imagetools inspect --raw "$IMMUTABLE_REFERENCE" > /tmp/academico-migrate-manifest.json
+          jq -e '[.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest")] | length > 0' /tmp/academico-migrate-manifest.json
+          docker pull "$IMMUTABLE_REFERENCE"
+          test "$(docker inspect "$IMMUTABLE_REFERENCE" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "$SOURCE_URL"
+          test "$(docker inspect "$IMMUTABLE_REFERENCE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+          test "$(docker inspect "$IMMUTABLE_REFERENCE" --format '{{json .Config.Cmd}}')" = '["pnpm","--filter","@edupay/api","db:migrate:deploy"]'
+          echo "MIGRATION_IMAGE=$IMMUTABLE_REFERENCE"
+          echo "MIGRATION_IMAGE_DIGEST=$IMAGE_DIGEST"
+          echo "MIGRATION_SOURCE_SHA=$SOURCE_SHA"
+          echo "MIGRATION_PROVENANCE=BuildKit mode=max + SBOM verified"
