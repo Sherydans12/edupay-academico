@@ -6,6 +6,7 @@ import type {
   DieJournalEntry,
   DieMember,
   DieStudentSummary,
+  TenantOperationalProfile,
 } from '@edupay/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -23,7 +24,7 @@ import { Icon } from '@/components/icons';
 import { PageHeading } from '@/components/page-primitives';
 import { demoSessions } from '@/demo/demo-data';
 
-type View = 'students' | 'journal' | 'actions' | 'members';
+type View = 'students' | 'journal' | 'actions' | 'members' | 'profile';
 const categories = [
   ['OBSERVATION', 'Observación'],
   ['BEHAVIOR_SITUATION', 'Situación de conducta'],
@@ -34,11 +35,17 @@ const categories = [
   ['OTHER', 'Otro'],
 ] as const;
 
-function today() {
-  // The tenant's canonical time zone is not part of the current Academic
-  // tenant contract. Leave dates explicit instead of deriving a potentially
-  // different calendar day from the browser or server clock.
-  return '';
+function today(timeZone: string | null) {
+  if (!timeZone) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 function message(error: unknown) {
   if (error instanceof AcademicApiError && error.status === 403)
@@ -64,6 +71,7 @@ export function DieWorkspace({
   const [students, setStudents] = useState<DieStudentSummary[]>([]);
   const [actions, setActions] = useState<DieAction[]>([]);
   const [journal, setJournal] = useState<DieJournalEntry[]>([]);
+  const [profile, setProfile] = useState<TenantOperationalProfile | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [loadedContextKey, setLoadedContextKey] = useState('');
@@ -75,18 +83,22 @@ export function DieWorkspace({
     setError(null);
     setLoadedContextKey('');
     setJournal([]);
+    setProfile(null);
     setSelectedStudentId('');
     try {
       await client.getDieAccess();
-      const [nextMembers, nextStudents, nextActions] = await Promise.all([
-        client.listDieMembers(),
-        client.listDieStudents(),
-        client.listDieActions(),
-      ]);
+      const [nextMembers, nextStudents, nextActions, nextProfile] =
+        await Promise.all([
+          client.listDieMembers(),
+          client.listDieStudents(),
+          client.listDieActions(),
+          client.getTenantOperationalProfile(),
+        ]);
       if (loadRequest.current !== requestId) return;
       setMembers(nextMembers);
       setStudents(nextStudents);
       setActions(nextActions);
+      setProfile(nextProfile);
       setSelectedStudentId(nextStudents[0]?.studentId || '');
       setLoadedContextKey(contextKey);
     } catch (nextError) {
@@ -153,6 +165,23 @@ export function DieWorkspace({
           {message(error)}
         </Alert>
       ) : null}
+      {!error && profile && !profile.complete ? (
+        <Alert
+          title="Falta configurar el perfil institucional"
+          tone="warning"
+          action={
+            session.roles.includes('TENANT_ADMIN') ? (
+              <Button variant="secondary" onClick={() => setView('profile')}>
+                Configurar perfil
+              </Button>
+            ) : undefined
+          }
+        >
+          {profile.timeZone
+            ? 'La exportación PDF permanecerá bloqueada hasta configurar el nombre institucional.'
+            : 'No se usará la zona del navegador o servidor. Los hechos sin hora siguen disponibles; un administrador debe configurar la zona para horas y vencimientos.'}
+        </Alert>
+      ) : null}
       {loading || !contextIsCurrent ? (
         <div className="die-loading">
           <Skeleton />
@@ -171,6 +200,9 @@ export function DieWorkspace({
                 ['journal', 'Hoja de vida', 'history'],
                 ['actions', 'Pendientes', 'clipboard'],
                 ['members', 'Equipo', 'review'],
+                ...(session.roles.includes('TENANT_ADMIN')
+                  ? ([['profile', 'Perfil', 'settings']] as const)
+                  : []),
               ] as const
             ).map(([id, label, icon]) => (
               <button
@@ -189,6 +221,7 @@ export function DieWorkspace({
             <StudentsPanel
               api={client}
               members={members}
+              timeZone={profile?.timeZone ?? null}
               onChanged={load}
               onSelect={(id) => {
                 setSelectedStudentId(id);
@@ -207,6 +240,7 @@ export function DieWorkspace({
               }}
               selectedStudent={selectedStudent}
               sessionUserId={session.identityUserId}
+              profile={profile}
             />
           ) : null}
           {view === 'actions' ? (
@@ -228,6 +262,9 @@ export function DieWorkspace({
               tenantAdmin={session.roles.includes('TENANT_ADMIN')}
             />
           ) : null}
+          {view === 'profile' && profile ? (
+            <ProfilePanel api={client} onChanged={load} profile={profile} />
+          ) : null}
         </div>
       ) : null}
     </AppShell>
@@ -240,23 +277,25 @@ function StudentsPanel({
   onChanged,
   onSelect,
   students,
+  timeZone,
 }: {
   api: AcademicApiClient;
   members: DieMember[];
   onChanged: () => Promise<void>;
   onSelect: (id: string) => void;
   students: DieStudentSummary[];
+  timeZone: string | null;
 }) {
   const [candidates, setCandidates] = useState<
     Awaited<ReturnType<AcademicApiClient['listDieStudentCandidates']>>
   >([]);
   const [search, setSearch] = useState('');
   const [studentId, setStudentId] = useState('');
-  const [startDate, setStartDate] = useState(today());
+  const [startDate, setStartDate] = useState(today(timeZone));
   const [reason, setReason] = useState('');
   const [responsible, setResponsible] = useState('');
   const [finishing, setFinishing] = useState<DieStudentSummary | null>(null);
-  const [finishDate, setFinishDate] = useState(today());
+  const [finishDate, setFinishDate] = useState(today(timeZone));
   const [finishReason, setFinishReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -393,7 +432,7 @@ function StudentsPanel({
                       variant="ghost"
                       onClick={() => {
                         setFinishing(student);
-                        setFinishDate(today());
+                        setFinishDate(today(timeZone));
                         setFinishReason('');
                       }}
                     >
@@ -499,19 +538,20 @@ function JournalPanel({
   onChanged,
   selectedStudent,
   sessionUserId,
+  profile,
 }: {
   api: AcademicApiClient;
   entries: DieJournalEntry[];
   onChanged: () => Promise<void>;
   selectedStudent: DieStudentSummary | undefined;
   sessionUserId: string;
+  profile: TenantOperationalProfile | null;
 }) {
   const [editing, setEditing] = useState<DieJournalEntry | null>(null);
   const [category, setCategory] =
     useState<(typeof categories)[number][0]>('OBSERVATION');
-  const [eventDate, setEventDate] = useState(today());
+  const [eventDate, setEventDate] = useState(today(profile?.timeZone ?? null));
   const [eventTime, setEventTime] = useState('');
-  const [eventTimeZone, setEventTimeZone] = useState('');
   const [approximate, setApproximate] = useState(false);
   const [source, setSource] = useState<'WITNESSED' | 'REPORTED_BY_THIRD_PARTY'>(
     'WITNESSED',
@@ -567,7 +607,6 @@ function JournalPanel({
     setImmediateAction('');
     setPlace('');
     setEventTime('');
-    setEventTimeZone('');
     setApproximate(false);
     setReason('');
   };
@@ -577,7 +616,6 @@ function JournalPanel({
     setCategory(row.category);
     setEventDate(row.eventDate);
     setEventTime(row.eventTime ?? '');
-    setEventTimeZone(row.eventTimeZone ?? '');
     setApproximate(row.eventTimeApproximate);
     setSource(row.informationSource);
     setThirdParty(row.thirdPartySource ?? '');
@@ -597,7 +635,6 @@ function JournalPanel({
       eventDate,
       eventTime: eventTime || null,
       eventTimeApproximate: approximate,
-      eventTimeZone: eventTime ? eventTimeZone || null : null,
       place: place || null,
       title,
       description,
@@ -693,7 +730,11 @@ function JournalPanel({
           <h2>{selectedStudent.displayName}</h2>
           <p>Hoja de vida cronológica compartida por el equipo.</p>
         </div>
-        <Button variant="secondary" onClick={() => void exportPdf()}>
+        <Button
+          disabled={!profile?.institutionDisplayName}
+          variant="secondary"
+          onClick={() => void exportPdf()}
+        >
           <Icon name="download" />
           Exportar PDF
         </Button>
@@ -801,24 +842,26 @@ function JournalPanel({
             <label>
               Hora <span>(opcional)</span>
               <input
+                disabled={!profile?.timeZone && !editing?.current.eventTime}
                 type="time"
                 value={eventTime}
                 onChange={(event) => {
                   setEventTime(event.target.value);
-                  if (!event.target.value) setEventTimeZone('');
                 }}
               />
             </label>
             {eventTime ? (
-              <label>
-                Zona horaria IANA
-                <input
-                  required
-                  value={eventTimeZone}
-                  onChange={(event) => setEventTimeZone(event.target.value)}
-                  placeholder="Ej.: America/Santiago"
-                />
-              </label>
+              <p className="die-field-note">
+                Zona conservada por el servidor:{' '}
+                {editing?.current.eventTime === eventTime
+                  ? editing.current.eventTimeZone
+                  : profile?.timeZone}
+              </p>
+            ) : !profile?.timeZone ? (
+              <p className="die-field-note">
+                Configura la zona institucional para registrar una hora. La
+                fecha sin hora sigue disponible.
+              </p>
             ) : null}
             <label className="die-checkbox">
               <input
@@ -1689,6 +1732,85 @@ function MembersPanel({
           </p>
         </div>
       </div>
+    </section>
+  );
+}
+
+function ProfilePanel({
+  api,
+  onChanged,
+  profile,
+}: {
+  api: AcademicApiClient;
+  onChanged: () => Promise<void>;
+  profile: TenantOperationalProfile;
+}) {
+  const [institutionDisplayName, setInstitutionDisplayName] = useState(
+    profile.institutionDisplayName ?? '',
+  );
+  const [timeZone, setTimeZone] = useState(profile.timeZone ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.updateTenantOperationalProfile({
+        institutionDisplayName: institutionDisplayName.trim() || null,
+        timeZone: timeZone.trim() || null,
+        expectedVersion: profile.version,
+      });
+      await onChanged();
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="die-section">
+      <div className="die-split-heading">
+        <div>
+          <h2>Perfil institucional operativo</h2>
+          <p>
+            Estos datos se usan sólo en documentos y fechas de Académico. No
+            cambian la identidad ni el identificador del tenant en Identity.
+          </p>
+        </div>
+      </div>
+      {error ? (
+        <Alert title="No pudimos guardar el perfil" tone="error">
+          {error}
+        </Alert>
+      ) : null}
+      <form className="die-form-panel" onSubmit={(event) => void save(event)}>
+        <label>
+          Nombre institucional para documentos
+          <input
+            value={institutionDisplayName}
+            onChange={(event) => setInstitutionDisplayName(event.target.value)}
+            placeholder="Ej.: Colegio Ejemplo"
+          />
+        </label>
+        <label>
+          Zona horaria IANA
+          <input
+            value={timeZone}
+            onChange={(event) => setTimeZone(event.target.value)}
+            placeholder="Ej.: America/Santiago"
+          />
+        </label>
+        <p className="die-field-note">
+          Sin nombre no se habilita una exportación completa. Sin zona se
+          admiten hechos sólo con fecha y no se calcula vencimiento.
+        </p>
+        <Button disabled={busy} type="submit">
+          {busy ? 'Guardando…' : 'Guardar perfil'}
+        </Button>
+      </form>
     </section>
   );
 }

@@ -149,6 +149,10 @@ import {
   type RemoveDieMember,
   type StartDieSupport,
   type UpdateDieAction,
+  tenantOperationalProfileSchema,
+  updateTenantOperationalProfileSchema,
+  type TenantOperationalProfile,
+  type UpdateTenantOperationalProfile,
 } from '@edupay/contracts';
 import { apiErrorEnvelopeSchema, type ApiErrorDetail } from '@edupay/contracts';
 import { z } from 'zod';
@@ -573,6 +577,24 @@ export class AcademicApiClient {
 
   getDieAccess() {
     return this.request('die/access', dieAccessSchema);
+  }
+  getTenantOperationalProfile(): Promise<TenantOperationalProfile> {
+    return this.request(
+      'tenant/operational-profile',
+      tenantOperationalProfileSchema,
+    );
+  }
+  updateTenantOperationalProfile(
+    input: UpdateTenantOperationalProfile,
+  ): Promise<TenantOperationalProfile> {
+    return this.request(
+      'tenant/operational-profile',
+      tenantOperationalProfileSchema,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(updateTenantOperationalProfileSchema.parse(input)),
+      },
+    );
   }
   listDieMemberCandidates(search?: string) {
     return this.request(

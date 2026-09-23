@@ -28,6 +28,14 @@ const timestamp = '2026-09-22T12:00:00+00:00';
 function api(overrides: Partial<AcademicApiClient> = {}) {
   return {
     getDieAccess: vi.fn().mockResolvedValue({ allowed: true }),
+    getTenantOperationalProfile: vi.fn().mockResolvedValue({
+      institutionDisplayName: 'Colegio Sintético',
+      timeZone: 'America/Santiago',
+      version: 1,
+      updatedAt: timestamp,
+      complete: true,
+      missingFields: [],
+    }),
     listDieMembers: vi.fn().mockResolvedValue([]),
     listDieStudents: vi.fn().mockResolvedValue([
       {
@@ -106,6 +114,33 @@ describe('DIE workspace', () => {
       ).toBeTruthy(),
     );
     expect(screen.queryByText('Ana Pérez')).toBeNull();
+  });
+
+  it('shows an explicit tenant-admin action when the operational profile is incomplete', async () => {
+    const incompleteApi = api({
+      getTenantOperationalProfile: vi.fn().mockResolvedValue({
+        institutionDisplayName: null,
+        timeZone: null,
+        version: 0,
+        updatedAt: null,
+        complete: false,
+        missingFields: ['institutionDisplayName', 'timeZone'],
+      }),
+    });
+    render(<DieWorkspace api={incompleteApi} session={demoSessions.admin} />);
+    const configure = await screen.findByRole('button', {
+      name: 'Configurar perfil',
+    });
+    fireEvent.click(configure);
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Perfil institucional operativo',
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText('Nombre institucional para documentos'),
+    ).toBeTruthy();
+    expect(screen.getByLabelText('Zona horaria IANA')).toBeTruthy();
   });
 
   it('hides the previous tenant data immediately when membership context changes', async () => {
