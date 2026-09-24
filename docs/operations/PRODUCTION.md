@@ -1,66 +1,56 @@
 # Topología productiva EduPay
 
-Verificado: **2026-09-14**, después de remediación, recuperación del frontend y
-validación del release con flags apagados. Estado funcional:
-**RELEASE_DEPLOYED_FLAGS_OFF**.
-Esta es la referencia operativa vigente. Los ADR aceptados conservan autoridad
-sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica.
+Verificado: **2026-09-24**. Estado: **módulo DIE desplegado; piloto sin configurar ni validar por el usuario; BL flags apagados**. Esta sección y el inventario estructurado representan el estado operativo más reciente. Las observaciones posteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 
-## Reconciliación documental vigente — 2026-09-22
+## Estado operativo vigente — 2026-09-24
 
-Esta sección separa integración en Git, despliegue observado y validación del
-usuario. El `main` de Académico integra PR #7 (merge
-`10b84fd12ddc76221c862589267067d5fb7e5cbd`) y PR #8 (merge
-`8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`); CI de `main` fue aprobado. Eso no
-prueba que Coolify haya reconstruido el FRONT. El código realmente desplegado
-no se sustituye en esta fotografía por el SHA de `main`.
+PR #10 de Académico y PR #12 de Identity se integraron después de aprobarse sus CI. El recovery point conjunto y las migraciones autorizadas se completaron. No se crearon usuarios STAFF, memberships, perfiles institucionales ni expedientes DIE reales.
 
-| Componente | Integrado / referencia de código | Despliegue o artefacto conocido | Estado de validación |
+| Componente | Código de release | Recurso / artefacto activo | Validación |
 |---|---|---|---|
-| Académico FRONT | `main` en `8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`; PR #7 y Onboarding 2 integrados | Evidencia de Cut 1: fuente `e844f5b54291af7c7027498c8972fa90cb46783d`, imagen `qf65r4ltig6jhb6t8dmv2qyw:e844f5b54291af7c7027498c8972fa90cb46783d`, manifiesto `sha256:ae93b9646016860af02fcc332ff6e0b0fedd9de548e428b427c462a7bcdf1a13`; la fotografía base también conserva deployment Coolify `wxgimhdhkeolqstf35psgwvh` y SHA estable `4f5ad2839e08e561e0335f6e4fdedfe448f15415` | Integrado; FRONT de PR #8 pendiente de redeploy y validación de usuario |
-| Académico API | Hotfix y primer corte ya integrados en `main` | Último inventario canónico: código `ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7`, imagen `ghcr.io/sherydans12/edupay-academico@sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767`; Cut 1 documentó además `sha256:89bb5a7a54100a0bcd1d1fc239b2c56309a243f7914105fb4e245a7ee2732c18` | Desplegado previamente; este cierre no autoriza ni requiere redeploy API |
-| Académico workers | Código `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` | `ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a` | Desplegado; fuera del corte documental |
-| Identity | Referencia de `origin/main` `0616adbd3226b97f84381f65f3bb9fe5fe03cee1`; recuperación/plantilla documentadas en sus merges | Evidencia posterior de plantilla: `ghcr.io/sherydans12/edupay-identity@sha256:6733d04b53c87145429927b2d9a37e2fe7d44d73314d857c6a03bd8e67f64103`; el inventario histórico conserva `b38849be78fee492f68f2d0e99cff3b69a08415a` / `sha256:eb35930f4fb0358d891c50c57e301d47fb033b9d9a0b53284fea0b68e73aa7f8` | Recuperación y plantilla confirmadas por el usuario; no modificar Identity |
-| BL-002 | `origin/main` consultado en `d3e40da0bcf893e8d02f2c23d7c79a4d46b8071f` | Mapping desplegado desde `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c`; BACK manifest `sha256:4b0f403a51bc45b3ce229bf01d97e108804d3326765f1e3f4e788834bac76a1a`, FRONT manifest `sha256:9b2193b1783b764ae2ff304f7ccd14154af6cb37277359d23cb0215301e3b2d9`; 0 escrituras de mapping | Acceso confirmado; sin asignaciones reales; fuera de este cambio |
-| Registry | No es un SHA de aplicación | GHCR privado operativo para los artefactos runtime fijados por digest; no se registran credenciales. El candidato histórico `sha256:c19015e02821bcb5ede62b837ab33eba542d947f0de9a70d93bde89f5c5e1cf4` sigue sin equivaler a despliegue | Operativo; no confundir disponibilidad del registry con promoción de una imagen |
+| Académico FRONT | `bd413666ebb3674dc791d8cb735bcea1aadbed62` (PR #10) | `cct0rtf5iku6fkd3t9hldnv4`; `ghcr.io/sherydans12/edupay-academico-web@sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81` | Running/healthy; dominio canónico y `/login` verificados; piloto no configurado |
+| Académico API | `bd413666ebb3674dc791d8cb735bcea1aadbed62` (PR #10) | `iobfkpujjoa2kj5urbpnjvzi`; `ghcr.io/sherydans12/edupay-academico@sha256:902c5e2ed1aa59d4e2ca7e6a558aaa113585b3737fc6ed4346bb6597531ac393` | Running/healthy; ready/database/storage/malwareScanner OK; ledger 13 |
+| Identity API | `93418b68eaf41976b4bc695039afcbc8eab4fdbc` (PR #12) | `0vrvqepcukwcubxga0narorf`; `ghcr.io/sherydans12/edupay-identity@sha256:960d326a9199881d54c7fc9611d052be77c0fbdceae4badebfe1208febe5aa01` | Running/healthy; health, JWKS y S2S comprobados; ledger 4, con tres migraciones históricas preservadas |
+| Académico workers | Sin cambio | Recursos inventoryados; detenidos antes de la ventana DIE | Se conservaron detenidos; no se modificaron |
+| BL-002 | Sin cambio por este release | Artefactos y flags existentes | Fuera de alcance; proyección BL apagada |
 
-La diferencia entre el registro histórico del FRONT (`4f5ad283…`/deployment
-`wxgim…`) y el artefacto explícito de Cut 1 (`e844f5b…`/manifiesto
-`ae93…`) queda conservada como evidencia separada. Antes de un rollback se debe
-confirmar en Coolify cuál es el deployment vigente y su imagen; ninguno de esos
-identificadores se reemplaza por `8b9805af…` sin evidencia de despliegue.
+El cierre con ledger, checksums, recovery point y verificaciones es
+[die-release-closeout-2026-09-24.md](die-release-closeout-2026-09-24.md). La guía de
+primer uso está en [DIE-PILOT-GUIDE.md](DIE-PILOT-GUIDE.md).
 
-Onboarding 1 fue desplegado y el usuario confirmó el indicador en lectura. Su
-`READY` sigue significando únicamente estructura base preparada. PR #7 y
-Onboarding 2 están integrados, pero el FRONT de ese corte sigue pendiente de
-redeploy y de comprobación de navegación/lectura.
+## FRONT Académico activo y rollback conservado
 
-## Instrucción concreta para el redeploy pendiente del FRONT
+El dominio canónico `academico.edupay.baselogic.cl` pertenece al recurso activo
+`cct0rtf5iku6fkd3t9hldnv4`. El recurso previo `qf65r4ltig6jhb6t8dmv2qyw` quedó
+`Exited`, sin dominios, retenido como rollback. El FRONT nuevo usa una imagen
+preconstruida inmutable por digest, puerto 3000 y red compartida `coolify`; el
+auto deploy permanece manual (`autoDeploy: false`). Es stateless y Coolify no
+muestra almacenamiento persistente asociado.
 
-El usuario debe actuar sólo sobre el recurso Coolify
-`qf65r4ltig6jhb6t8dmv2qyw` (`academico.edupay.baselogic.cl`):
+La imagen `/deploy/Dockerfile.web` configura Docker `HEALTHCHECK` a
+`GET http://127.0.0.1:3000/api/health`. `/login` es el smoke externo. La pantalla
+Healthcheck de Coolify mostraba `Enable`, así que no hay healthcheck HTTP extra
+de Coolify habilitado. La variante `www` aparece con DNS mismatch; el host
+canónico tiene DNS OK.
 
-1. Seleccionar `main` en el candidato aprobado
-   `8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`; no conservar un pin anterior ni
-   confundir el SHA Git con un deployment o un digest.
-2. Mantener `/deploy/Dockerfile.web`, target `runtime`, puerto `3000` y health
-   `GET /login`.
-3. Conservar exactamente `NEXT_PUBLIC_API_BASE_URL=https://academico-api.edupay.baselogic.cl/api/v1`
-   y `NEXT_PUBLIC_IDENTITY_BASE_URL=https://identity.edupay.baselogic.cl`.
-4. Ejecutar sólo FRONT, sin migraciones ni cambios en API, workers, Identity,
-   BL, mappings, flags o secretos. Auto deploy permanece manual.
-5. Tras el deploy, comprobar sólo lecturas: `/login`, navegación a
-   `/docente/asignaturas/.../estudiantes`, `/administracion/estructura`, el
-   indicador autorizado de TENANT_ADMIN y cambio de contexto. No crear ni
-   activar años, cursos, asignaturas o asociaciones reales.
+Durante la lectura de Coolify, General mostró el aviso de formulario
+`You have changes that haven't been saved yet` en ambos recursos. No se pulsó
+`Save changes` ni `Reset`. Antes de un redeploy o rollback, revisar y reconciliar
+esa pantalla con el estado desplegado; no guardar cambios en bloque. Para
+recuperar el recurso anterior, primero retirar el host del candidato; después
+asignarlo al anterior desde Coolify y confirmar un solo router/upstream Traefik
+para el host. No ejecutar ambos recursos con el mismo dominio ni eliminar el
+rollback.
 
-Para rollback, identificar tres cosas por separado: deployment Coolify UUID
-`wxgimhdhkeolqstf35psgwvh` (registro histórico del FRONT), SHA de código
-`4f5ad2839e08e561e0335f6e4fdedfe448f15415` y, como artefacto conocido de Cut 1,
-manifiesto `sha256:ae93b9646016860af02fcc332ff6e0b0fedd9de548e428b427c462a7bcdf1a13`
-de la imagen etiquetada con `e844f5b…`. Confirmar en Coolify que esa relación
-sigue disponible antes de usarla; no llamar “deployment” a un SHA Git y no
-hacer rollback cruzado si sólo falla FRONT.
+## Referencia actual de Identity
+
+Académico consume los endpoints internos de Identity a través de la red privada
+Coolify. El digest desplegado de Identity es
+`ghcr.io/sherydans12/edupay-identity@sha256:960d326a9199881d54c7fc9611d052be77c0fbdceae4badebfe1208febe5aa01`,
+con base de artefacto `93418b68eaf41976b4bc695039afcbc8eab4fdbc`. Su ledger tiene
+cuatro migraciones: las tres históricas, incluida la migración de recibos de
+idempotencia ya aplicada, y `20260924000000_add_staff_role`. No reaplicar ni
+resolver la migración histórica.
 
 ## Observación de release — 2026-09-14
 
@@ -93,8 +83,8 @@ o un contenedor healthy por sí solos no identifican al producto correcto.
 | Repositorio | Responsabilidad | Código productivo al cierre |
 |---|---|---|
 | [Sherydans12/BL-002-EduPay](https://github.com/Sherydans12/BL-002-EduPay) | Administración de pagos, alumnos/cursos de origen, autenticación administrativa y API de integración | FRONT: `502e6463464de0a54b440362a64da0c31450818f`; BACK: `16e208af6a50e5703bc8f6edd51d7ff11b9c6381` |
-| [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | FRONT: `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; API: `ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7`; workers: `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` |
-| [Sherydans12/edupay-identity](https://github.com/Sherydans12/edupay-identity) | Credenciales, sesiones, membresías, roles, activación, recuperación y auditoría de autenticación | OCI `b38849be78fee492f68f2d0e99cff3b69a08415a` |
+| [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | Release DIE: FRONT/API `bd413666ebb3674dc791d8cb735bcea1aadbed62`; workers sin cambio y detenidos |
+| [Sherydans12/edupay-identity](https://github.com/Sherydans12/edupay-identity) | Credenciales, sesiones, membresías, roles, activación, recuperación y auditoría de autenticación | Release DIE: fuente `93418b68eaf41976b4bc695039afcbc8eab4fdbc`; GHCR `sha256:960d326a9199881d54c7fc9611d052be77c0fbdceae4badebfe1208febe5aa01` |
 
 BL-002 conserva su dominio de autenticación propio. No valida sesiones
 administrativas con Identity ni debe consumir la API Académico como backend.
@@ -119,7 +109,8 @@ Académico usa Identity para autenticación y su propia API para datos académic
 |---|---|---|---|
 | Aplicación EDUPAY FRONT | `ktgdely86kx0by10p9cb91os` | `edupay.baselogic.cl` | 3000 |
 | Aplicación EDUPAY BACK | `km0aljzabdiqtaixj9dsequu` | `api-edupay.baselogic.cl` | 3001 |
-| Aplicación edupay-academico-web | `qf65r4ltig6jhb6t8dmv2qyw` | `academico.edupay.baselogic.cl` | 3000 |
+| Aplicación edupay-academico-web DIE | `cct0rtf5iku6fkd3t9hldnv4` | `academico.edupay.baselogic.cl` | 3000 |
+| Aplicación edupay-academico-web (rollback retenido) | `qf65r4ltig6jhb6t8dmv2qyw` | Ninguno; detenido | 3000 |
 | Servicio edupay-academico-pinned | `iobfkpujjoa2kj5urbpnjvzi` | `academico-api.edupay.baselogic.cl` | 3001 |
 | Servicio edupay-identity-pinned | `0vrvqepcukwcubxga0narorf` | `identity.edupay.baselogic.cl` | 3000 |
 | Servicio edupay-academico-notification-worker-pinned | `nn8yrhitex2r6squev0auwrs` | Ninguno | Sin publicación |
@@ -139,7 +130,11 @@ host para resolver fallos de comunicación privada.
 
 La API Académico ejecuta exactamente:
 
-`ghcr.io/sherydans12/edupay-academico@sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767`
+`ghcr.io/sherydans12/edupay-academico@sha256:902c5e2ed1aa59d4e2ca7e6a558aaa113585b3737fc6ed4346bb6597531ac393`
+
+El Academic FRONT ejecuta el artefacto inmutable:
+
+`ghcr.io/sherydans12/edupay-academico-web@sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81`
 
 Ambos workers conservan exactamente:
 
@@ -153,9 +148,9 @@ etiquetada con `502e6463464de0a54b440362a64da0c31450818f`. El acceso al
 artefacto GHCR `c19015…` queda como pendiente operativo y no se registran
 credenciales.
 
-Identity conserva exactamente:
+Identity ejecuta exactamente:
 
-`ghcr.io/sherydans12/edupay-identity@sha256:eb35930f4fb0358d891c50c57e301d47fb033b9d9a0b53284fea0b68e73aa7f8`
+`ghcr.io/sherydans12/edupay-identity@sha256:960d326a9199881d54c7fc9611d052be77c0fbdceae4badebfe1208febe5aa01`
 
 Un digest de manifiesto, el ID local de imagen y un SHA Git son identificadores
 distintos. No sustituirlos entre sí ni cambiar el pinned a `latest`.
@@ -164,12 +159,11 @@ distintos. No sustituirlos entre sí ni cambiar el pinned a `latest`.
 |---|---|---|---|
 | BL-002 FRONT | `main`, SHA fijado arriba | `/frontend` + `/Dockerfile` | `runner`; HTTP 127.0.0.1:3000/login |
 | BL-002 BACK | `main`, SHA fijado arriba | `/backend` + `/Dockerfile` | Etapa final; health público /api/v1/health |
-| Academic FRONT | `codex/production-latest-web-recovery`, SHA fijado arriba | `/` + `/deploy/Dockerfile.web` | `runtime`; HTTP 127.0.0.1:3000/login |
+| Academic FRONT activo | Imagen GHCR fijada por digest | aplicación stateless; no monta volumen | Docker healthcheck `GET 127.0.0.1:3000/api/health`; smoke externo `/login` |
 
-Conservar los comandos del recurso validado. Academic FRONT escucha en todas
-las interfaces dentro del contenedor mediante HOSTNAME; su health usa loopback.
-No vaciar el target sin verificar persistencia: Coolify conservó un target
-anterior al intentar hacerlo.
+El Academic FRONT activo escucha en todas las interfaces dentro del contenedor
+mediante HOSTNAME; el healthcheck incluido en la imagen usa loopback. El recurso
+anterior conserva su configuración de build como ruta de rollback.
 
 ## Bases y persistencia
 
@@ -192,10 +186,12 @@ reales antes de recrear el servicio. ClamAV es una dependencia de la API para
 análisis de archivos; sus originales de evidencia mantienen la política del ADR
 de almacenamiento. No reemplazar ni inicializar volúmenes en un redeploy.
 
-El inventario completo incluye **11 contenedores de aplicación/dependencia
-EduPay healthy**, contando PostgreSQL BL-002. Los anteriores recuentos de 10
-tras la limpieza cubrían los recursos de la remediación y omitían esa base
-preexistente. Coolify, su base, proxy y otros proyectos son infraestructura
+La fotografía histórica del 2026-09-14 incluía **11 contenedores de
+aplicación/dependencia EduPay healthy**, contando PostgreSQL BL-002. Los
+anteriores recuentos de 10 tras la limpieza cubrían los recursos de la
+remediación y omitían esa base preexistente. Para el estado actual, usar el
+inventario fechado; los workers Académico se mantuvieron detenidos durante el
+release DIE. Coolify, su base, proxy y otros proyectos son infraestructura
 adicional, no instancias duplicadas de EduPay.
 
 ## Cómo se conectan
