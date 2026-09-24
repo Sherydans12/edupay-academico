@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "verifiedDate": "2026-09-17",
+  "verifiedDate": "2026-09-24",
   "scope": "EduPay production only; not a full inventory of unrelated VPS projects",
-  "status": "RELEASE_DEPLOYED_FLAGS_OFF",
+  "status": "DIE_MODULE_DEPLOYED_PILOT_UNCONFIGURED; BL_FLAGS_OFF",
   "project": {
     "name": "My first project",
     "uuid": "p5gswqrr8ot1oaoxwytrpsho"
@@ -63,13 +63,30 @@
       "repository": "Sherydans12/edupay-academico",
       "sha": "4f5ad2839e08e561e0335f6e4fdedfe448f15415",
       "branch": "codex/production-latest-web-recovery",
-      "domain": "academico.edupay.baselogic.cl",
+      "domain": null,
       "port": 3000,
       "baseDirectory": "/",
       "dockerfile": "/deploy/Dockerfile.web",
       "target": "runtime",
       "health": "/login",
       "autoDeploy": false,
+      "dependsOn": [
+        "iobfkpujjoa2kj5urbpnjvzi",
+        "0vrvqepcukwcubxga0narorf"
+      ],
+      "observedState": "stopped; retained; route transferred to immutable candidate"
+    },
+    {
+      "uuid": "cct0rtf5iku6fkd3t9hldnv4",
+      "name": "edupay-academico-web-die-20260924",
+      "type": "application",
+      "image": "ghcr.io/sherydans12/edupay-academico-web@sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81",
+      "sourceSha": "bd413666ebb3674dc791d8cb735bcea1aadbed62",
+      "domain": "academico.edupay.baselogic.cl",
+      "port": 3000,
+      "health": "/login",
+      "autoDeploy": false,
+      "network": "coolify",
       "dependsOn": [
         "iobfkpujjoa2kj5urbpnjvzi",
         "0vrvqepcukwcubxga0narorf"
@@ -81,8 +98,10 @@
       "name": "edupay-academico-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-academico",
-      "sha": "ade7e6a6d831be94fd16ce2f0f4d95dce7d710c7",
-      "image": "ghcr.io/sherydans12/edupay-academico@sha256:3eeb72cc73c314b1df72936dcfaaf5d3ce5873c1d81a08c8d23f3dfaafb37767",
+      "sha": "bd413666ebb3674dc791d8cb735bcea1aadbed62",
+      "image": "ghcr.io/sherydans12/edupay-academico@sha256:902c5e2ed1aa59d4e2ca7e6a558aaa113585b3737fc6ed4346bb6597531ac393",
+      "migrationCount": 13,
+      "identityInternalBaseUrl": "http://identity-0vrvqepcukwcubxga0narorf:3000",
       "domain": "academico-api.edupay.baselogic.cl",
       "port": 3001,
       "health": [
@@ -101,8 +120,9 @@
       "name": "edupay-identity-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-identity",
-      "sha": "b38849be78fee492f68f2d0e99cff3b69a08415a",
-      "image": "ghcr.io/sherydans12/edupay-identity@sha256:eb35930f4fb0358d891c50c57e301d47fb033b9d9a0b53284fea0b68e73aa7f8",
+      "sha": "93418b68eaf41976b4bc695039afcbc8eab4fdbc",
+      "image": "ghcr.io/sherydans12/edupay-identity@sha256:960d326a9199881d54c7fc9611d052be77c0fbdceae4badebfe1208febe5aa01",
+      "migrationCount": 4,
       "domain": "identity.edupay.baselogic.cl",
       "port": 3000,
       "health": "/api/v1/identity/health",
@@ -123,7 +143,7 @@
       "dependsOn": [
         "v5w9hacwtftulf4m46l1rn2g"
       ],
-      "observedState": "running:healthy"
+      "observedState": "stopped before DIE release window; unchanged"
     },
     {
       "uuid": "r8mtn1xqtex96j4a8wu5hae6",
@@ -138,7 +158,7 @@
         "km0aljzabdiqtaixj9dsequu",
         "0vrvqepcukwcubxga0narorf"
       ],
-      "observedState": "running:healthy"
+      "observedState": "stopped before DIE release window; unchanged"
     },
     {
       "uuid": "ttrrmrkod9hmqo68er6q2ghs",
@@ -168,6 +188,9 @@
       "domain": null,
       "volume": "postgres-data-v5w9hacwtftulf4m46l1rn2g",
       "mount": "/var/lib/postgresql/data",
+      "database": "postgres",
+      "schema": "public",
+      "migrationCount": 13,
       "dependsOn": [],
       "observedState": "running:healthy"
     },
@@ -179,6 +202,9 @@
       "domain": null,
       "volume": "postgres-data-bluypktxta8uisbrfzu6p9pw",
       "mount": "/var/lib/postgresql/data",
+      "database": "postgres",
+      "schema": "public",
+      "migrationCount": 4,
       "dependsOn": [],
       "observedState": "running:healthy"
     }
@@ -212,6 +238,26 @@
     "preRepairPoint": "20260911T130031Z",
     "postRepairPoint": "20260911T130501Z",
     "remoteVerified": true,
+    "latestDieReleaseRecoveryPoint": {
+      "id": "20260924T010020Z",
+      "capturedBeforeMigrations": true,
+      "identity": {
+        "resourceUuid": "bluypktxta8uisbrfzu6p9pw",
+        "database": "postgres",
+        "schema": "public",
+        "ledgerRows": 3
+      },
+      "academic": {
+        "resourceUuid": "v5w9hacwtftulf4m46l1rn2g",
+        "database": "postgres",
+        "schema": "public",
+        "ledgerRows": 10
+      },
+      "privateAcademicStorageIncluded": true,
+      "localChecksumVerified": true,
+      "remoteR2ChecksumVerified": true,
+      "isolatedRestoreCorrespondedToActiveDestinations": true
+    },
     "bl002RecoveryVerified": true,
     "bl002RecoveryVerifiedDate": "2026-09-14",
     "bl002RecoveryScope": "Protected real backup restore verified; live database consistency and uploads coverage remain limited"
