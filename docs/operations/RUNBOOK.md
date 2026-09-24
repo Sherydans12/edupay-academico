@@ -74,6 +74,40 @@ ni se normalizaron o alteraron checksums aplicados.
   no asumir que publicar documentación no genera un webhook.
   Las ramas documentales y baselines no sustituyen la configuración de release.
 
+## Gate del destino PostgreSQL antes de mantenimiento
+
+Antes de pausar escritores, tomar un recovery point, abrir mantenimiento o
+ejecutar un migrador, confirma que el API activo y el ledger que se va a migrar
+apuntan a la misma base PostgreSQL. Un `migrate status` verde aislado no demuestra
+que sea la base usada por el servicio.
+
+En el servidor, proyecta solamente los campos no secretos del `DATABASE_URL`
+efectivo del contenedor API. No ejecutes `printenv`, `docker inspect` sin formato
+ni imprimas la URL completa:
+
+```sh
+docker exec "$API_CONTAINER" node -e 'const u=new URL(process.env.DATABASE_URL); console.log(JSON.stringify({host:u.hostname,port:u.port||"5432",database:decodeURIComponent(u.pathname.slice(1)),schema:u.searchParams.get("schema")},null,2))'
+```
+
+Verifica por conexión de solo lectura a esa misma combinación host/puerto/base:
+
+- `current_database()` y el esquema Prisma seleccionado;
+- todas las filas de `_prisma_migrations`, sus checksums y estados;
+- el catálogo que debe existir después de cada migración histórica;
+- que la base corresponde al recurso Coolify e identidad de aplicación previstos.
+
+Compara el ledger con los checksums y nombres versionados del paquete de release.
+No consultes una base vecina del mismo servidor y no trates la base por defecto
+`postgres` como destino por conveniencia. Si falta el ledger, hay migraciones
+históricas ausentes, el catálogo y el ledger no concuerdan, o el nombre de base
+del API difiere del destino cuya historia se verificó, detén el release antes de
+pausar procesos o abrir mantenimiento. No ejecutes `migrate resolve`, no apliques
+migraciones históricas a ciegas y no cambies `DATABASE_URL` suponiendo que la
+otra base es la correcta. Conserva ambos servicios disponibles y solicita una
+reconciliación del destino basada en la configuración guardada, el catálogo y la
+procedencia de los datos. Repite este gate después de corregir el destino y antes
+de obtener un recovery point nuevo.
+
 ## Gates por recurso
 
 | Recurso | Gate obligatorio |
