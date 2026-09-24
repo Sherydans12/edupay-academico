@@ -22,8 +22,6 @@
       "name": "EDUPAY FRONT",
       "type": "application",
       "repository": "Sherydans12/BL-002-EduPay",
-      "sha": "502e6463464de0a54b440362a64da0c31450818f",
-      "branch": "main",
       "domain": "edupay.baselogic.cl",
       "port": 3000,
       "baseDirectory": "/frontend",
@@ -34,16 +32,16 @@
       "dependsOn": [
         "km0aljzabdiqtaixj9dsequu"
       ],
-      "observedState": "running:healthy"
+      "observedState": "running:healthy",
+      "buildSourceSha": "502e6463464de0a54b440362a64da0c31450818f",
+      "configuredBranch": "main"
     },
     {
       "uuid": "km0aljzabdiqtaixj9dsequu",
       "name": "EDUPAY BACK",
       "type": "application",
       "repository": "Sherydans12/BL-002-EduPay",
-      "sha": "16e208af6a50e5703bc8f6edd51d7ff11b9c6381",
       "image": "km0aljzabdiqtaixj9dsequu@sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f",
-      "branch": "main",
       "domain": "api-edupay.baselogic.cl",
       "port": 3001,
       "baseDirectory": "/backend",
@@ -54,15 +52,16 @@
       "dependsOn": [
         "dms5i3e0i5t4kyh7h683mi7v"
       ],
-      "observedState": "running:healthy"
+      "observedState": "running:healthy",
+      "buildSourceSha": "16e208af6a50e5703bc8f6edd51d7ff11b9c6381",
+      "artifactDigest": "sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f",
+      "configuredBranch": "main"
     },
     {
       "uuid": "qf65r4ltig6jhb6t8dmv2qyw",
       "name": "edupay-academico-web",
       "type": "application",
       "repository": "Sherydans12/edupay-academico",
-      "sha": "4f5ad2839e08e561e0335f6e4fdedfe448f15415",
-      "branch": "codex/production-latest-web-recovery",
       "domain": null,
       "port": 3000,
       "baseDirectory": "/",
@@ -74,14 +73,15 @@
         "iobfkpujjoa2kj5urbpnjvzi",
         "0vrvqepcukwcubxga0narorf"
       ],
-      "observedState": "stopped; retained; route transferred to immutable candidate"
+      "observedState": "stopped; retained; route transferred to immutable candidate",
+      "buildSourceSha": "4f5ad2839e08e561e0335f6e4fdedfe448f15415",
+      "configuredBranch": "codex/production-latest-web-recovery"
     },
     {
       "uuid": "cct0rtf5iku6fkd3t9hldnv4",
       "name": "edupay-academico-web-die-20260924",
       "type": "application",
       "image": "ghcr.io/sherydans12/edupay-academico-web@sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81",
-      "sourceSha": "bd413666ebb3674dc791d8cb735bcea1aadbed62",
       "domain": "academico.edupay.baselogic.cl",
       "port": 3000,
       "health": "/login",
@@ -94,14 +94,16 @@
         "iobfkpujjoa2kj5urbpnjvzi",
         "0vrvqepcukwcubxga0narorf"
       ],
-      "observedState": "running:healthy"
+      "observedState": "running:healthy",
+      "buildSourceSha": "bd413666ebb3674dc791d8cb735bcea1aadbed62",
+      "artifactDigest": "sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81",
+      "repository": "Sherydans12/edupay-academico"
     },
     {
       "uuid": "iobfkpujjoa2kj5urbpnjvzi",
       "name": "edupay-academico-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-academico",
-      "sha": "bd413666ebb3674dc791d8cb735bcea1aadbed62",
       "image": "ghcr.io/sherydans12/edupay-academico@sha256:902c5e2ed1aa59d4e2ca7e6a558aaa113585b3737fc6ed4346bb6597531ac393",
       "migrationCount": 13,
       "identityInternalBaseUrl": "http://identity-0vrvqepcukwcubxga0narorf:3000",
@@ -116,14 +118,15 @@
         "0vrvqepcukwcubxga0narorf",
         "ttrrmrkod9hmqo68er6q2ghs"
       ],
-      "observedState": "running:healthy"
+      "observedState": "running:healthy",
+      "buildSourceSha": "bd413666ebb3674dc791d8cb735bcea1aadbed62",
+      "artifactDigest": "sha256:902c5e2ed1aa59d4e2ca7e6a558aaa113585b3737fc6ed4346bb6597531ac393"
     },
     {
       "uuid": "0vrvqepcukwcubxga0narorf",
       "name": "edupay-identity-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-identity",
-      "sha": "93418b68eaf41976b4bc695039afcbc8eab4fdbc",
       "image": "ghcr.io/sherydans12/edupay-identity@sha256:960d326a9199881d54c7fc9611d052be77c0fbdceae4badebfe1208febe5aa01",
       "migrationCount": 4,
       "domain": "identity.edupay.baselogic.cl",
@@ -133,27 +136,29 @@
       "dependsOn": [
         "bluypktxta8uisbrfzu6p9pw"
       ],
-      "observedState": "running:healthy"
+      "observedState": "running:healthy",
+      "buildSourceSha": "93418b68eaf41976b4bc695039afcbc8eab4fdbc",
+      "artifactDigest": "sha256:960d326a9199881d54c7fc9611d052be77c0fbdceae4badebfe1208febe5aa01"
     },
     {
       "uuid": "nn8yrhitex2r6squev0auwrs",
       "name": "edupay-academico-notification-worker-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-academico",
-      "sha": "b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9",
       "image": "ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a",
       "domain": null,
       "dependsOn": [
         "v5w9hacwtftulf4m46l1rn2g"
       ],
-      "observedState": "stopped before DIE release window; unchanged"
+      "observedState": "stopped before DIE release window; unchanged",
+      "buildSourceSha": "b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9",
+      "artifactDigest": "sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a"
     },
     {
       "uuid": "r8mtn1xqtex96j4a8wu5hae6",
       "name": "edupay-academico-sync-worker-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-academico",
-      "sha": "b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9",
       "image": "ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a",
       "domain": null,
       "dependsOn": [
@@ -161,7 +166,9 @@
         "km0aljzabdiqtaixj9dsequu",
         "0vrvqepcukwcubxga0narorf"
       ],
-      "observedState": "stopped before DIE release window; unchanged"
+      "observedState": "stopped before DIE release window; unchanged",
+      "buildSourceSha": "b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9",
+      "artifactDigest": "sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a"
     },
     {
       "uuid": "ttrrmrkod9hmqo68er6q2ghs",
@@ -265,5 +272,6 @@
     "bl002RecoveryVerifiedDate": "2026-09-14",
     "bl002RecoveryScope": "Protected real backup restore verified; live database consistency and uploads coverage remain limited"
   },
-  "nextSchemaChangeRequiresReconciliation": true
+  "nextSchemaChangeRequiresReconciliation": true,
+  "verificationSource": "Read-only Coolify review and release evidence dated 2026-09-24; see docs/operations/die-release-closeout-2026-09-24.md. Runtime values are not rechecked by later Git-only edits."
 }

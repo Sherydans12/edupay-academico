@@ -1,18 +1,25 @@
 # EduPay Academico
 
-## Estado operativo vigente
+## Estado y entrada rápida
 
-Fase de remediación y limpieza cerrada el **2026-09-11**. Consultar primero:
+El [mapa transversal EduPay](docs/architecture/edupay-ecosystem-architecture.md)
+resume ownership, integraciones desplegadas, estado DIE, pendientes y límites
+entre Identity, Académico y BL-002. Su runtime más reciente documentado se
+verificó el **2026-09-24**; esta fecha no equivale a una comprobación en vivo
+posterior. Para cambios, empieza por el [índice de documentación](docs/README.md)
+y las instrucciones de [AGENTS.md](AGENTS.md).
 
-- [Topología, repositorios, conexiones y recursos Coolify](docs/operations/PRODUCTION.md).
-- [Runbook de despliegue, rollback y entornos aislados](docs/operations/RUNBOOK.md).
-- [Cierre de fase, versiones verificadas y pendientes delimitados](docs/operations/PHASE-CLOSEOUT.md).
-- [Inventario estructurado sin secretos](docs/operations/coolify-inventory.json).
+- [Topología y artefactos productivos](docs/operations/PRODUCTION.md)
+- [Runbook de despliegue, rollback y entornos aislados](docs/operations/RUNBOOK.md)
+- [Cierre DIE, migraciones y último runtime verificado](docs/operations/die-release-closeout-2026-09-24.md)
+- [Guía pendiente del piloto DIE](docs/operations/DIE-PILOT-GUIDE.md)
+- [Inventario Coolify estructurado](docs/operations/coolify-inventory.json)
 
-El frontend productivo está en **4f5ad28** y API/workers permanecen pinned a
-**b2f489f**. `main` integra el código de ambos artefactos y la documentación.
-Para nuevas mejoras usar un worktree propio desde `origin/main`, siguiendo
-el runbook. Las instrucciones locales siguientes no se ejecutan sobre producción.
+El FRONT productivo actual se sirve desde un recurso Coolify de imagen
+inmutable. No infieras su artefacto por el SHA de `main`; mira el inventario y
+el cierre fechados. Los despliegues son manuales. Para mejoras, crea un worktree
+propio desde `origin/main` actualizado; las instrucciones locales siguientes
+son sólo desarrollo y no se ejecutan contra producción.
 
 EduPay Academico is a multi-tenant academic service. This repository contains
 the approved platform bootstrap, Identity-consumer and tenant-authorization
@@ -69,6 +76,29 @@ The web application defaults to `http://localhost:3000`. The API defaults to
 `http://localhost:3001/api/v1`, its health endpoint is
 `http://localhost:3001/api/v1/health`, and OpenAPI is exposed at
 `http://localhost:3001/api/docs`.
+
+### Main configuration names
+
+Use `apps/api/.env.example` and `apps/web/.env.example` as the complete local
+reference. The main API groups are `DATABASE_URL` (Académico PostgreSQL),
+`IDENTITY_ISSUER`, `IDENTITY_AUDIENCE`, `IDENTITY_JWKS_URI` (public token
+validation), `IDENTITY_INTERNAL_BASE_URL` and
+`IDENTITY_INTERNAL_SERVICE_TOKEN` (restricted server-to-server Identity
+checks), `EDUPAY_INTEGRATION_BASE_URL` and `EDUPAY_INTEGRATION_TOKEN` (legacy
+BL roster pull), `ACADEMIC_FINANCIAL_PROJECTION_ENABLED` and
+`ACADEMIC_FINANCIAL_PROJECTION_PUBLISHER_ENABLED` (both false by default),
+`STORAGE_ROOT`, `ACADEMIC_MALWARE_SCANNER`, and `ACADEMIC_TRUSTED_WEB_ORIGINS`.
+The web bundle only needs `NEXT_PUBLIC_API_BASE_URL` and
+`NEXT_PUBLIC_IDENTITY_BASE_URL`; these are public routing values, never
+credentials or tenant authorization. Production-only value and purpose groups
+are in the [environment matrix](docs/deployment/environment-matrix.md).
+
+Do not reuse secrets across Identity, Académico or BL. The older migration
+chain and the production ledger have known historical differences; follow the
+[Prisma reconciliation procedure](docs/deployment/prisma-reconciliation-rehearsal.md)
+before proposing a schema change. The deployment uses native Coolify
+PostgreSQL resources; `deploy/compose.pilot.yml` is for isolated tests, not the
+production database.
 
 ### Quality commands
 

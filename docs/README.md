@@ -1,24 +1,22 @@
 # EduPay Académico documentation
 
-Estado actual: implementación y remediación productiva cerradas en su alcance el 2026-09-11.
-La descripción de repositorio vacío corresponde al bootstrap histórico.
+La documentación siguiente distingue decisiones aceptadas, propuestas e
+historial de operación. El runtime más reciente documentado se verificó el
+**2026-09-24**; esta entrada no representa una comprobación en vivo posterior.
 
-Leer primero [topología vigente](operations/PRODUCTION.md),
-[runbook](operations/RUNBOOK.md), [cierre y pendientes](operations/PHASE-CLOSEOUT.md)
-y [el inventario de Coolify](operations/coolify-inventory.json).
-Los ADR aceptados mantienen autoridad sobre arquitectura y seguridad; los
-runbooks anteriores no sustituyen la fotografía operativa actual.
+## Empieza aquí
 
-## Cierre documental vigente — 2026-09-22
+1. [Mapa transversal del ecosistema y pendientes](architecture/edupay-ecosystem-architecture.md)
+2. [Topología y último estado de producción](operations/PRODUCTION.md)
+3. [Runbook de cambio, release y rollback](operations/RUNBOOK.md)
+4. [Cierre de release DIE del 24/09](operations/die-release-closeout-2026-09-24.md)
+5. [Guía de primer uso del piloto DIE](operations/DIE-PILOT-GUIDE.md); configuración y validación por usuario siguen pendientes.
+6. [Inventario Coolify](operations/coolify-inventory.json), [reconciliación del destino PostgreSQL](operations/die-database-target-reconciliation-2026-09-24.md) y [respaldo/restauración](deployment/backup-restore.md)
 
-La integración de PR #7 y PR #8 está en `main` (`8b9805af417635a7ebe3c3ac2e1f23f3b2f16ead`)
-y CI de `main` está aprobado. El FRONT de este corte aún no tiene confirmación
-de despliegue: leer [topología y estado reconciliado](operations/PRODUCTION.md),
-[cierre de fase y redeploy FRONT](operations/PHASE-CLOSEOUT.md),
-[Onboarding 1](operations/2026-09-21-academic-onboarding-cut-1-deployment.md),
-[Onboarding 2](operations/2026-09-21-academic-onboarding-cut-2-subjects.md) y
-[la ruta docente/favicon](operations/2026-09-21-frontend-404-fixes.md).
-El módulo DIE sólo tiene inicio documental pendiente; no está implementado.
+`main` de Académico e Identity integra los cierres documentales #15 y #16,
+respectivamente. Para el estado exacto de cada recurso, usa el inventario y
+separa commit fuente, artefacto/digest y fecha de verificación. Los ADR
+aceptados mantienen autoridad sobre arquitectura y seguridad.
 
 ## Reading order
 
@@ -30,8 +28,8 @@ El módulo DIE sólo tiene inicio documental pendiente; no está implementado.
 6. [Identity model](architecture/identity-model.md) and [roles and authorization](architecture/roles-and-authorization.md)
 7. [Academic model](architecture/academic-model.md), [learning model](architecture/learning-model.md), and [submissions workflow](architecture/submissions-workflow.md)
 8. [Cross-cutting architecture](architecture/file-storage.md), [notifications](architecture/notifications.md), [EduPay integration](architecture/edupay-integration.md), and [API conventions](architecture/api-conventions.md)
-9. [EduPay ecosystem architecture](architecture/edupay-ecosystem-architecture.md) for the audited cross-service ownership proposal and no-big-bang transition
-10. [Academic → Financial Projection](integration/academic-financial-projection.md) for the 1B contract and 1C-A producer; activation remains explicitly disabled by default
+9. [EduPay ecosystem architecture](architecture/edupay-ecosystem-architecture.md) for current ownership, deployed connections, state, backlog, and the separately labeled target direction
+10. [Academic → Financial Projection](integration/academic-financial-projection.md) for its contract and producer; activation remains explicitly disabled by default
 11. [Frontend architecture](architecture/frontend-architecture.md) and [design system](architecture/design-system.md)
 12. [Pilot production deployment runbook](deployment/pilot-production-runbook.md), [environment matrix](deployment/environment-matrix.md), [backup/restore](deployment/backup-restore.md), [release checklist](deployment/release-checklist.md), the [Phase 1 financial projection release decision](deployment/phase1-financial-projection-release-decision.md), and the [final disabled-feature release proposal](deployment/phase1-financial-projection-release-proposal.md)
 13. [Security](architecture/security.md), [audit strategy](architecture/audit-strategy.md), [testing strategy](architecture/testing-strategy.md), [deployment](architecture/deployment.md), and [definition of done](architecture/definition-of-done.md)
