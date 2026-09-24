@@ -15,9 +15,10 @@ This file governs every future agent working in this repository. It applies to i
 - main contains the deployed application source and closeout documentation.
   Start a new isolated feature worktree from updated origin/main.
   API and workers remain digest-pinned; a web change must not redeploy the monorepo.
-- No blanket production migration authorization exists. The additive repair is
-  recorded in the closeout; reconcile the existing Prisma ledger on a clone and
-  verify backup before proposing another schema change.
+- No blanket production migration authorization exists. The prior reconciliation
+  is complete; the DIE release verified the ledger of 13 Academic migrations.
+  Before future schema changes, verify ledger/checksums and rehearse the update
+  in a clone with recovery verified.
 - Preserve dirty worktrees and independent WIP. Never reset, clean or force-push
   other work to manufacture a clean release. Update the operational inventory in
   both repositories when changing a cross-product connection.
