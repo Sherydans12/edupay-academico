@@ -9,6 +9,7 @@ historial de operación. El runtime más reciente documentado se verificó el
 1. [Mapa transversal del ecosistema y pendientes](architecture/edupay-ecosystem-architecture.md)
 2. [Topología y último estado de producción](operations/PRODUCTION.md)
 3. [Runbook de cambio, release y rollback](operations/RUNBOOK.md)
+   - [Estado de publicación del primer corte frontend Académico](operations/academic-frontend-first-cut-release-2026-09-24.md)
 4. [Cierre de release DIE del 24/09](operations/die-release-closeout-2026-09-24.md)
 5. [Guía de primer uso del piloto DIE](operations/DIE-PILOT-GUIDE.md); configuración y validación por usuario siguen pendientes.
 6. [Inventario Coolify](operations/coolify-inventory.json), [reconciliación del destino PostgreSQL](operations/die-database-target-reconciliation-2026-09-24.md) y [respaldo/restauración](deployment/backup-restore.md)
