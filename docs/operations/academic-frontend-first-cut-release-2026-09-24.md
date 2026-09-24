@@ -24,8 +24,11 @@
 - No hubo despliegue ni cambio de configuración en Coolify. Por tanto, no hay
   digest nuevo desplegado. El inventario del repositorio registra como último
   artefacto previo `ghcr.io/sherydans12/edupay-academico-web@sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81`; no se
-  reconfirmó que sea el digest activo en Coolify durante esta revisión y no se
-  presenta como rollback capturado ahora.
+  reconfirmó que sea el digest activo en Coolify durante esta revisión. El
+  manifiesto todavía existe en GHCR (`docker buildx imagetools inspect`, con
+  plataforma `linux/amd64` y su manifiesto de attestation), así que es un
+  candidato de rollback disponible, pero su relación con el recurso vivo y su
+  configuración no se capturó en esta revisión.
 
 ## Validación disponible
 
