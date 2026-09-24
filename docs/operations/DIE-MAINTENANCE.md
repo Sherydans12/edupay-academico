@@ -152,9 +152,15 @@ El orden de la ventana es:
    el scheduler/outbox ni workers internos.
 3. Comprobar transacciones abiertas y trabajos activos; repetir la comprobación
    justo antes del backup para detectar carreras.
-4. Ejecutar el launcher de backup aprobado una sola vez. Verificar en el mismo
-   recovery point los dumps de ambas bases, el almacenamiento privado, los
-   checksums y su presencia remota. Detenerse ante cualquier discrepancia.
+4. Ejecutar una sola vez el launcher y uploader protegidos documentados en
+   [RUNBOOK.md, sección de backups](RUNBOOK.md#backups-y-cambios-de-esquema),
+   desde el contexto soportado del host. No asumir que las credenciales faltan
+   porque `/etc/edupay/backup-r2.env` no esté montado en otro contexto; no crear
+   esa ruta, volcar variables ni copiar secretos. Verificar que el manifiesto
+   del recovery point identifique los recursos PostgreSQL, base/schema, ledger
+   y checksums históricos de ambas bases, e incluya el storage privado. Exigir
+   integridad local y R2 y correspondencia de restauración aislada antes de
+   continuar. Detenerse ante cualquier discrepancia.
 5. Correr preflights de ledger/esquema. Sólo después de verificar los
    checksums históricos se pueden aplicar las migraciones exactas autorizadas.
    No usar `migrate resolve`, SQL manual ni una migración de reconciliación para
