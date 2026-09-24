@@ -1,7 +1,16 @@
-# Release DIE: corrección de migradores y bloqueo de destino productivo
+# Release DIE: corrección de migradores y reconciliación del destino productivo
 
 Fecha de registro: 2026-09-23T23:30:50Z
-Estado: **BLOCKED_PRODUCTION_DATABASE_TARGET_AND_LEDGER_MISMATCH**
+Estado actual: **DIE_PROMOTION_SUSPENDED_BY_USER; PRODUCTION_TARGET_RECONCILED**
+
+Rectificación de 2026-09-24: el bloqueo por divergencia de base de datos fue
+un diagnóstico erróneo. La comprobación inicial atribuyó a los APIs un ledger
+vacío y las bases `edupay_identity`/`edupay_academico` de otro stack 2/6. La
+reconciliación del contenedor activo, su entorno real y una conexión de sólo
+lectura demuestra el destino administrado correcto y los ledgers 3/10. Véase
+[la evidencia de reconciliación](die-database-target-reconciliation-2026-09-24.md).
+Producción sigue disponible; la promoción DIE permanece suspendida por
+instrucción del usuario. No se migró, redeplegó ni modificó configuración.
 
 Este registro cubre el trabajo posterior al primer intento. No cambia SQL,
 checksums ni el alcance DIE. El módulo DIE no está desplegado ni configurado
@@ -69,7 +78,14 @@ Resultados:
 No se descargó schema-engine durante una migración. No se ejecutó ningún ensayo
 contra producción.
 
-## Preflight productivo de solo lectura: BLOQUEADO
+## Preflight productivo inicial (23:30Z; hallazgo invalidado)
+
+El siguiente resultado conserva la observación inicial para explicar el
+incidente. No describe el estado de los APIs activos y no debe usarse como
+preflight vigente. La comprobación posterior identificó que se mezclaron
+contenedores de un Compose antiguo con los recursos nativos de Coolify; los
+valores correctos, la cronología y el límite de la evidencia del recovery point
+están en el documento de reconciliación enlazado arriba.
 
 La comprobación del DATABASE_URL efectivo, proyectada sin usuario, contraseña ni
 URL completa, mostró que ambos contenedores API apuntan al nombre de base
@@ -119,10 +135,9 @@ se ejecutó migrate resolve.
   IDENTITY_INTERNAL_BASE_URL=http://identity-0vrvqepcukwcubxga0narorf:3000.
   La verificación privada de health/JWKS y S2S sintético anterior pasó.
 
-Antes de retomar, el responsable de producción debe establecer, a partir de la
-configuración guardada y la procedencia de los datos, cuál es el destino
-PostgreSQL autoritativo de cada API y reconciliar su catálogo/ledger con las tres
-migraciones históricas Identity y las diez Académico. Después se repite el
-preflight read-only y, sólo si pasa, se obtiene un recovery point vigente. No
-apuntar las APIs a edupay_identity o edupay_academico por inferencia ni
-aplicar migraciones históricas para hacer coincidir conteos.
+El destino de los APIs activos ya quedó verificado por conexión. Si se retoma
+la promoción DIE en otra ventana, repetir el preflight desde cada proceso API,
+seleccionando los PostgreSQL por UUID Coolify y verificando servidor, base,
+schema y ledger. Obtener entonces un recovery point conjunto vigente. No
+apuntar los APIs a las bases del Compose antiguo ni aplicar migraciones
+históricas para hacer coincidir conteos.
