@@ -93,12 +93,14 @@ The web bundle only needs `NEXT_PUBLIC_API_BASE_URL` and
 credentials or tenant authorization. Production-only value and purpose groups
 are in the [environment matrix](docs/deployment/environment-matrix.md).
 
-Do not reuse secrets across Identity, Académico or BL. The older migration
-chain and the production ledger have known historical differences; follow the
-[Prisma reconciliation procedure](docs/deployment/prisma-reconciliation-rehearsal.md)
-before proposing a schema change. The deployment uses native Coolify
-PostgreSQL resources; `deploy/compose.pilot.yml` is for isolated tests, not the
-production database.
+Do not reuse secrets across Identity, Académico or BL. The prior migration
+reconciliation is complete; the DIE release verified the ledger of 13 Academic
+migrations. Before future schema changes, verify ledger/checksums and rehearse
+the update in a clone with recovery verified; see the
+[Prisma reconciliation procedure](docs/deployment/prisma-reconciliation-rehearsal.md).
+There is no blanket production migration authorization. The deployment uses
+native Coolify PostgreSQL resources; `deploy/compose.pilot.yml` is for isolated
+tests, not the production database.
 
 ### Quality commands
 
