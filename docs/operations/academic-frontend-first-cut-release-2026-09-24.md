@@ -1,6 +1,6 @@
 # Estado de publicación del primer corte frontend Académico — 2026-09-24
 
-## Integración
+## Integrado
 
 - PR #18: https://github.com/Sherydans12/edupay-academico/pull/18
 - Commit integrado en `main`: `15d83950a574075956bd8d2e65460c3040c4010d`.
@@ -9,82 +9,75 @@
   `postgresql-integration` terminaran en verde. Los gates del piloto fueron
   omitidos por el workflow; el corte sólo modifica FRONT y documentación.
 
-## Artefacto y destino
+## Artefacto publicado
 
-- Recurso objetivo solicitado: `cct0rtf5iku6fkd3t9hldnv4`.
-- Dominio objetivo: `academico.edupay.baselogic.cl`.
-- El código integrado se construyó localmente con `deploy/Dockerfile.web`,
-  plataforma `linux/amd64`, y las bases públicas documentadas para Académico
-  API (`https://academico-api.edupay.baselogic.cl/api/v1`) e Identity
-  (`https://identity.edupay.baselogic.cl`). El label de revisión es el SHA
-  integrado indicado arriba.
-- ID local del build: `sha256:92538908c98636fecdf3a0f48cadf29289875920398828dbbea2c91155abb47c`.
-  Es una imagen cargada al daemon Docker local, **no** un digest de GHCR ni un
-  digest desplegado. No se publicó la imagen.
-- No hay digest nuevo desplegado. La inspección de Coolify confirmó que el
-  recurso activo `cct0rtf5iku6fkd3t9hldnv4`, llamado
-  `edupay-academico-web-die-20260924`, está `Running` y que su último
-  despliegue exitoso (`rtk462el38k8ughhtxlepclm`) inició desde
+- Repositorio de imagen: `ghcr.io/sherydans12/edupay-academico-web`.
+- Tag inmutable de trazabilidad: `15d83950a574075956bd8d2e65460c3040c4010d`.
+- Digest de índice OCI publicado: `sha256:92538908c98636fecdf3a0f48cadf29289875920398828dbbea2c91155abb47c`.
+- Manifest `linux/amd64`: `sha256:cf45188452fa68ebf04830e61e40f22cc630c95125c869b7ef1f55bb2f933b82`.
+- Imagen descargada desde GHCR e inspeccionada: arquitectura `linux/amd64`,
+  label `org.opencontainers.image.revision` igual al commit integrado y source
+  igual a `https://github.com/Sherydans12/edupay-academico.git`.
+- La revisión de publicación automática rechazó una invocación PowerShell
+  compuesta antes de ejecutarla y devolvió literalmente `blocked by policy`, sin
+  identificar subcomando ni motivo más específico. El `docker push` ejecutado
+  por separado con el mecanismo ya documentado terminó con código 0; no se
+  cambiaron herramientas ni se eludió una restricción.
+
+## Recurso, configuración y rollback previo al despliegue
+
+- Recurso FRONT existente: `cct0rtf5iku6fkd3t9hldnv4`,
+  `edupay-academico-web-die-20260924`. Dominio canónico:
+  `academico.edupay.baselogic.cl`.
+- Artefacto activo antes de desplegar este release:
   `ghcr.io/sherydans12/edupay-academico-web@sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81`.
-  Ese digest existe en GHCR y es el rollback identificado antes de esta
-  publicación.
-- La vista de Coolify confirma imagen preconstruida (sin build), puerto `3000`,
-  red `coolify` y los dominios `academico.edupay.baselogic.cl` y
-  `www.academico.edupay.baselogic.cl`. El dominio canónico reporta DNS OK;
-  `www` reporta DNS mismatch. HTTP→HTTPS está habilitado. El inventario
-  operativo registra además `autoDeploy: false`, sin almacenamiento
-  persistente, y el healthcheck Docker `GET /api/health`.
-- La pantalla General muestra `You have changes that haven't been saved yet`,
-  también al cargar el recurso en una pestaña nueva de sólo lectura. Sus
-  valores visibles de nombre, imagen/tag previo, puerto y red coinciden con el
-  despliegue e inventario; no se pudo identificar qué campo mantiene activo el
-  aviso. El panel Rollback informa `Rollback unavailable` y el botón está
-  deshabilitado. No se pulsó `Save changes` ni `Reset`: guardar el nuevo tag en
-  ese formulario podría persistir también cambios ajenos al release.
-- La publicación del nuevo digest en GHCR fue rechazada por `blocked by policy`
-  antes de ejecutar el comando. No se cambió de herramienta ni se intentó
-  eludir la restricción. El build local sigue disponible con ID
-  `sha256:92538908c98636fecdf3a0f48cadf29289875920398828dbbea2c91155abb47c`;
-  no equivale a un digest del registry.
+  Último despliegue exitoso: `rtk462el38k8ughhtxlepclm`.
+- Configuración persistida y formulario General comparados campo por campo:
+  nombre y descripción, `dockerimage`, repositorio/tag activos, puerto expuesto
+  `3000`, y alias/comandos/puertos mapeados vacíos; todos coincidían y los
+  campos estaban limpios. `project.shared.configuration-checker` devolvió
+  `isConfigurationChanged=false`, `configurationDiff.changed=false`,
+  `count=0`, `requires_build=false`, `requires_redeploy=false` y cero variables
+  requeridas ausentes. No había un cambio operativo pendiente.
+- El texto genérico “You have changes that haven't been saved yet” provenía de
+  un toast `wire:dirty` oculto (`opacity-0`, sin clase `is-dirty`); no aparecía
+  visualmente y no representaba diferencias. No se pulsaron `Reset` ni `Save`
+  durante esa inspección. Las capturas visuales y el comparador de estado
+  confirmaron el mismo resultado.
+- Se conserva el mecanismo de imagen preconstruida, puerto `3000`, red `coolify`,
+  reglas y dominios del recurso, HTTP→HTTPS, `autoDeploy=false` y healthcheck
+  Docker empaquetado por la imagen: `GET /api/health`. El HTTP healthcheck
+  opcional propio del panel Coolify está desactivado (`healthCheckEnabled=false`)
+  y coincide con sus campos persistidos; no se habilitó ni modificó.
+- El DNS del dominio canónico estaba correcto. `www.academico...` tiene DNS
+  mismatch; queda fuera de este release y no se modificó.
+- El selector del panel Rollback está deshabilitado y no ofrece un artefacto.
+  La restauración soportada por el mismo recurso es: en General, conservar el
+  repositorio y cambiar **sólo** `Docker image Tag` a
+  `sha256-c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81`,
+  guardar ese cambio de imagen y ejecutar Actions → Redeploy. El digest anterior
+  sigue disponible en GHCR. Verificar en los logs el digest `c117…`, estado
+  `Running`, `/api/health` y `/login`. No activar el recurso antiguo ni tocar
+  API, Identity, BL, workers, migraciones, flags o datos.
 
-## Validación disponible
+## Despliegue y validación
 
-- CI de la PR: `quality` y `postgresql-integration` aprobados.
-- Web: 135 pruebas, typecheck y build aprobados; lint sin errores y con 12
-  advertencias existentes en `course-builder`.
-- Docker: build del contenedor `runtime` completado; labels de source y revisión,
-  arquitectura y healthcheck de imagen inspeccionados localmente.
-- Antes de cualquier publicación, el host público devolvió `200` en
-  `/api/health` y `/login`. Son lecturas de línea base anteriores a un
-  despliegue, no validaciones del nuevo artefacto.
+- Estado: **pendiente**. La publicación en GHCR está completa y verificada; el
+  digest `925389…` aún no se declara desplegado. El artefacto activo sigue siendo
+  `c117…` hasta confirmar la actualización del recurso y el smoke test.
+- Resource UUID objetivo: `cct0rtf5iku6fkd3t9hldnv4`. El despliegue se hará por
+  Coolify sobre ese recurso y actualizando únicamente el tag de la imagen.
+- CI de PR #18: `quality` y `postgresql-integration` aprobados. Web: 135 pruebas,
+  typecheck y build aprobados; lint sin errores y con 12 advertencias existentes
+  en `course-builder`.
+- Antes del release, el host público devolvió `200` en `/api/health` y `/login`;
+  son línea base anterior al nuevo despliegue.
 - Las capturas sintéticas anteriores están en
-  [`docs/design/screenshots`](../design/screenshots). No hay capturas posteriores
-  del nuevo frontend: no se desplegó el artefacto integrado.
-- Tras consultar el panel Coolify, las lecturas públicas de
-  `/api/health` y `/login` devolvieron `200`; corresponden al frontend anterior.
+  [`docs/design/screenshots`](../design/screenshots). La comprobación visual
+  posterior, health/login/assets, navegación de roles y DIE en escritorio y
+  móvil se registrarán aquí tras el despliegue. Producción sólo se inspeccionará
+  en modo lectura; no se crearán ni modificarán registros. Si falta sesión
+  autorizada para DIE o un rol, se dejará la pantalla lista para que la persona
+  usuaria inicie sesión.
 
-## Bloqueo y siguiente paso
-
-El recurso, digest activo, dominios, puertos y red se leyeron de Coolify y se
-contrastaron con el último despliegue y el inventario. Persiste el aviso de
-cambios sin guardar incluso en una pestaña nueva. Como el formulario global no
-permite distinguir qué campos están pendientes, no se guardó ni reinició; hace
-falta reconciliar ese borrador antes de actualizar el tag y guardar la imagen
-del release. El panel de rollback integrado no ofrece una imagen anterior en su
-caché actual; conservar el digest GHCR `c117…` permite preparar un redeploy
-manual por digest después de publicar el nuevo artefacto.
-
-El servidor local de prueba fue rechazado por `blocked by policy` en el corte
-anterior. El intento de publicar el nuevo artefacto también fue rechazado por
-esa política. No se eludieron esas restricciones. La comparación visual
-posterior al despliegue, en escritorio y móvil, sigue pendiente. El siguiente
-paso operativo es reconciliar el formulario de Coolify sin guardar cambios
-ajenos, publicar la imagen por el mecanismo autorizado y actualizar únicamente
-el recurso FRONT ya existente. Después se deben validar health, login, assets y
-navegación. En producción no se crearán ni modificarán registros; la revisión
-de vistas DIE con datos reales debe evitar capturas que muestren información
-personal. Si falta sesión autorizada para flujos autenticados, dejar la
-comprobación lista para el usuario.
-
-No se crearon ni modificaron registros productivos. API, Identity, BL, workers,
-migraciones y flags permanecen fuera de este cambio.
+No se modificaron registros productivos ni servicios fuera de FRONT.
