@@ -42,7 +42,7 @@
 - El texto genérico “You have changes that haven't been saved yet” provenía de
   un toast `wire:dirty` oculto (`opacity-0`, sin clase `is-dirty`); no aparecía
   visualmente y no representaba diferencias. No se pulsaron `Reset` ni `Save`
-  durante esa inspección. Las capturas visuales y el comparador de estado
+  durante esa inspección. La comprobación visual y el comparador de estado
   confirmaron el mismo resultado.
 - Se conserva el mecanismo de imagen preconstruida, puerto `3000`, red `coolify`,
   reglas y dominios del recurso, HTTP→HTTPS, `autoDeploy=false` y healthcheck
@@ -60,24 +60,50 @@
   `Running`, `/api/health` y `/login`. No activar el recurso antiguo ni tocar
   API, Identity, BL, workers, migraciones, flags o datos.
 
-## Despliegue y validación
+## Desplegado y validado
 
-- Estado: **pendiente**. La publicación en GHCR está completa y verificada; el
-  digest `925389…` aún no se declara desplegado. El artefacto activo sigue siendo
-  `c117…` hasta confirmar la actualización del recurso y el smoke test.
-- Resource UUID objetivo: `cct0rtf5iku6fkd3t9hldnv4`. El despliegue se hará por
-  Coolify sobre ese recurso y actualizando únicamente el tag de la imagen.
+- Estado: **desplegado**. Coolify registra el deployment manual
+  `ggsb8dmkhtotu9zq91pizudl` como `Success` (2026-09-24 18:12:19 UTC,
+  duración 00m 58s), con rolling update completado.
+- Los logs de Coolify identifican el artefacto desplegado como
+  `ghcr.io/sherydans12/edupay-academico-web@sha256:92538908c98636fecdf3a0f48cadf29289875920398828dbbea2c91155abb47c`.
+  El digest del índice OCI y el manifest `linux/amd64` coinciden con los
+  verificados en GHCR; el label de revisión del manifest es el SHA integrado
+  `15d83950a574075956bd8d2e65460c3040c4010d`. La imagen/tag del formulario
+  General refleja ese mismo índice y el recurso `cct0rtf5iku6fkd3t9hldnv4` está
+  `Running`.
+- El despliegue guardó únicamente el tag del contenedor y se ejecutó mediante
+  Actions → Redeploy en el recurso existente. No se cambió el dominio, red,
+  puerto, reglas, healthcheck, mecanismo preconstruido ni otros recursos.
 - CI de PR #18: `quality` y `postgresql-integration` aprobados. Web: 135 pruebas,
   typecheck y build aprobados; lint sin errores y con 12 advertencias existentes
   en `course-builder`.
-- Antes del release, el host público devolvió `200` en `/api/health` y `/login`;
-  son línea base anterior al nuevo despliegue.
+- Después del release, `https://academico.edupay.baselogic.cl/api/health` y
+  `/login` devolvieron `200`; health respondió
+  `{"service":"edupay-academico-web","status":"ok"}`. Login tiene título
+  `EduPay Académico`. Los 11 assets CSS/JS locales del manifiesto de login
+  devolvieron `200`.
 - Las capturas sintéticas anteriores están en
   [`docs/design/screenshots`](../design/screenshots). La comprobación visual
-  posterior, health/login/assets, navegación de roles y DIE en escritorio y
-  móvil se registrarán aquí tras el despliegue. Producción sólo se inspeccionará
-  en modo lectura; no se crearán ni modificarán registros. Si falta sesión
-  autorizada para DIE o un rol, se dejará la pantalla lista para que la persona
-  usuaria inicie sesión.
-
-No se modificaron registros productivos ni servicios fuera de FRONT.
+  posterior del login se realizó en escritorio y móvil (390×844) en una sesión
+  pública y sin datos de alumnos; ambas capturas se adjuntaron al hilo de
+  release. En móvil no hubo overflow horizontal (ancho de contenido 375 px).
+- DIE se revisó en la sesión existente de administración, sólo lectura y sin
+  consultar nombres, valores de registros ni adjuntar capturas productivas.
+  Navegación visible: Alumnos, Hoja de vida, Pendientes, Equipo y Perfil; la
+  navegación compartida muestra Resumen, Estructura, Personas, Configuración e
+  Inclusión educativa. No hubo errores de consola. El enlace de salto es el
+  primer foco de teclado y Enter enfoca `main#main-content`. A 1920×855 y
+  390×844 no se observó overflow horizontal; en móvil se muestra la navegación
+  inferior. La captura del módulo autenticado expiró al alcanzar el límite de
+  5 s de `Page.captureScreenshot`; no se probó otro mecanismo para evitar
+  conservar o exponer registros productivos.
+- En producción sólo había disponible una sesión de administración. No se
+  verificaron visualmente sesiones de docente ni estudiante ni se simuló otro
+  rol. Su navegación está declarada en `AppShell` (`/docente`: Inicio,
+  Asignaturas, Revisiones, Calendario; `/estudiante`: Inicio, Asignaturas,
+  Mis entregas, Calendario); las comprobaciones existentes de roles pasaron
+  en CI de PR #18. Quedó abierta una pantalla pública `/login` para que la
+  persona usuaria valide ambos roles con sus cuentas autorizadas.
+- No se crearon ni modificaron registros productivos. API, Identity, BL,
+  workers, migraciones y flags no se tocaron.
