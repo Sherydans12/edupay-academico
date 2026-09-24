@@ -24,15 +24,15 @@ export function AccountShell({
       >
         <header className="account-brand">
           <div
-            aria-label="Espacio para logo institucional aprobado"
+            aria-label="EduPay Académico"
             className="account-brand__mark"
             role="img"
           >
-            CC
+            EP
           </div>
           <div>
-            <strong>Colegio Conquistadores</strong>
-            <span>EduPay Académico</span>
+            <strong>EduPay Académico</strong>
+            <span>Acceso institucional</span>
           </div>
         </header>
         <div className="account-intro">

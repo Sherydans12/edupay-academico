@@ -91,9 +91,7 @@ describe('representative workspaces', () => {
     expect(
       screen.getAllByText('Lenguaje y Comunicación').length,
     ).toBeGreaterThan(0);
-    expect(
-      screen.getByText('Datos académicos y de aprendizaje reales'),
-    ).toBeTruthy();
+    expect(screen.getByText('Datos reales')).toBeTruthy();
     expect(screen.queryByText(/reseña literaria/i)).toBeNull();
   });
 

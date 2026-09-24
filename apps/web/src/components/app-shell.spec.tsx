@@ -29,7 +29,16 @@ describe('AppShell', () => {
       screen.getAllByRole('button', { name: 'Cerrar navegación' }),
     ).toHaveLength(2);
     expect(
-      screen.getByText(/Contenido local aislado para validar componentes/i),
+      screen.getAllByText('Institución de demostración').length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Demostración')).toBeTruthy();
+    expect(
+      screen.getByText('Datos sintéticos; no se envían al API.'),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('navigation', {
+        name: 'Navegación por rol y módulo',
+      }),
     ).toBeTruthy();
   });
 

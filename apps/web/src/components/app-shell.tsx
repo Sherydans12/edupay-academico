@@ -143,21 +143,28 @@ export function AppShell({
   const dieAllowed =
     dieAccessGranted ??
     (dieProbe?.membershipId === session.membershipId && dieProbe.allowed);
-  const navigation = useMemo(
-    () =>
-      dieAllowed
-        ? [
-            ...workspaceNavigation[session.workspace],
-            {
-              href: '/die',
-              icon: 'review' as const,
-              label: 'Inclusión educativa',
-              mobile: session.workspace !== 'student',
-            },
-          ]
-        : workspaceNavigation[session.workspace],
-    [dieAllowed, session.workspace],
+  const workspaceItems = workspaceNavigation[session.workspace];
+  const moduleItems: NavigationItem[] = dieAllowed
+    ? [
+        {
+          href: '/die',
+          icon: 'review',
+          label: 'Inclusión educativa',
+          mobile: session.workspace === 'staff',
+        },
+      ]
+    : [];
+  const navigation = [...workspaceItems, ...moduleItems];
+  const mobileNavigation = navigation.filter((item) => item.mobile);
+  const activeNavigationItem = navigation.find((item) =>
+    isCurrentPath(pathname, item.href),
   );
+  const workspaceLabel = {
+    student: 'Mi aprendizaje',
+    teacher: 'Docencia',
+    'tenant-admin': 'Gestión académica',
+    staff: 'Espacio DIE',
+  }[session.workspace];
 
   return (
     <div className="app-shell">
@@ -169,12 +176,8 @@ export function AppShell({
         className={`app-sidebar ${mobileOpen ? 'app-sidebar--open' : ''}`}
       >
         <div className="brand-lockup">
-          <div
-            aria-label="Espacio para logo institucional aprobado"
-            className="brand-mark"
-            role="img"
-          >
-            CC
+          <div aria-label="EduPay Académico" className="brand-mark" role="img">
+            EP
           </div>
           <div className="brand-copy">
             <strong>{session.tenantDisplayName}</strong>
@@ -189,27 +192,50 @@ export function AppShell({
             <Icon name="close" />
           </button>
         </div>
-        <nav className="sidebar-nav">
-          {navigation.map((item) => {
-            const active = isCurrentPath(pathname, item.href);
-            return (
-              <Link
-                aria-current={active ? 'page' : undefined}
-                className="sidebar-link"
-                href={item.href}
-                key={item.href}
-                onClick={() => setMobileOpen(false)}
-              >
-                <Icon name={item.icon} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+        <nav aria-label="Navegación por rol y módulo" className="sidebar-nav">
+          {workspaceItems.length ? (
+            <div className="sidebar-nav-group">
+              <span className="sidebar-nav-heading">{workspaceLabel}</span>
+              {workspaceItems.map((item) => (
+                <Link
+                  aria-current={
+                    isCurrentPath(pathname, item.href) ? 'page' : undefined
+                  }
+                  className="sidebar-link"
+                  href={item.href}
+                  key={item.href}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <Icon name={item.icon} />
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          {moduleItems.length ? (
+            <div className="sidebar-nav-group">
+              <span className="sidebar-nav-heading">Módulo especializado</span>
+              {moduleItems.map((item) => (
+                <Link
+                  aria-current={
+                    isCurrentPath(pathname, item.href) ? 'page' : undefined
+                  }
+                  className="sidebar-link"
+                  href={item.href}
+                  key={item.href}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <Icon name={item.icon} />
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          ) : null}
         </nav>
         <div className="sidebar-context">
-          <span>Espacio activo</span>
+          <span>Rol actual</span>
           <strong>{session.roleLabel}</strong>
-          <p>Identity y Académico validan cada acción en el servidor.</p>
+          <p>{session.tenantDisplayName}</p>
         </div>
       </aside>
 
@@ -233,16 +259,12 @@ export function AppShell({
           >
             <Icon name="menu" />
           </button>
-          <button
-            className="search-affordance"
-            disabled
-            title="La búsqueda se conectará en una fase posterior"
-            type="button"
-          >
-            <Icon name="search" />
-            <span>Buscar en tu espacio</span>
-            <kbd>⌘ K</kbd>
-          </button>
+          <div aria-label="Contexto actual" className="topbar-location">
+            <span>{session.tenantDisplayName}</span>
+            <strong>
+              {activeNavigationItem?.label ?? 'Espacio académico'}
+            </strong>
+          </div>
           <div className="topbar-actions">
             <NotificationCenter api={notificationApi} />
             <DropdownMenu
@@ -283,16 +305,20 @@ export function AppShell({
             </DropdownMenu>
           </div>
         </header>
-        <div className={`demo-banner demo-banner--${dataMode}`} role="status">
-          <span>
-            {dataMode === 'real'
-              ? 'Datos académicos y de aprendizaje reales'
-              : 'Vista de demostración'}
-          </span>
+        <div
+          aria-label={
+            dataMode === 'real'
+              ? 'Datos reales. Contexto institucional activo.'
+              : 'Demostración. Datos sintéticos.'
+          }
+          className={`demo-banner demo-banner--${dataMode}`}
+          role="status"
+        >
+          <span>{dataMode === 'real' ? 'Datos reales' : 'Demostración'}</span>
           <p>
             {dataMode === 'real'
-              ? 'La información se carga con tu contexto activo de Identity y la autorización final del API Académico.'
-              : 'Contenido local aislado para validar componentes.'}
+              ? 'Contexto institucional activo de Identity.'
+              : 'Datos sintéticos; no se envían al API.'}
           </p>
         </div>
         <main className="app-content" id="main-content" tabIndex={-1}>
@@ -300,10 +326,9 @@ export function AppShell({
         </main>
       </div>
 
-      <nav aria-label="Navegación móvil" className="mobile-tabbar">
-        {navigation
-          .filter((item) => item.mobile)
-          .map((item) => {
+      {mobileNavigation.length ? (
+        <nav aria-label="Navegación móvil" className="mobile-tabbar">
+          {mobileNavigation.map((item) => {
             const active = isCurrentPath(pathname, item.href);
             return (
               <Link
@@ -316,7 +341,8 @@ export function AppShell({
               </Link>
             );
           })}
-      </nav>
+        </nav>
+      ) : null}
     </div>
   );
 }

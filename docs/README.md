@@ -37,6 +37,9 @@ aceptados mantienen autoridad sobre arquitectura y seguridad.
 
 ## Implementation notes
 
+- [Primer corte de frontend académico: shell compartido y DIE](design/academic-frontend-first-cut.md)
+  records the implemented visual direction, DIE changes, synthetic before
+  captures, validation, and prioritized module follow-ups.
 - [Platform bootstrap](governance/platform-bootstrap.md) records the Phase 0
   package-manager, workspace, quality-gate, and application-shell choices.
 - [Tenancy and authorization foundation](governance/tenancy-authorization-foundation.md)
