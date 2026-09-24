@@ -1,12 +1,187 @@
 # Arquitectura del ecosistema EduPay
 
-Estado: **decisión arquitectónica aceptada; Fases 1A, 1B y 1C implementadas
-en worktrees aislados**. Ninguna fase activa producción, ejecuta migraciones o
-backfills reales, ni autoriza cambios de producción. La proyección shadow de
-BL no crea ni modifica obligaciones, pagos, reportes, portal ni entidades
-legadas.
+Estado documental: mapa transversal vigente al **2026-09-24**. La fotografía
+operativa verificable está separada de la arquitectura objetivo. No se comprobó
+Coolify en esta edición; para runtime rigen las verificaciones fechadas que se
+enlazan abajo.
 
-Fecha de auditoría: 2026-09-03.
+## Entrada rápida y estado al 2026-09-24
+
+### Responsabilidad por dominio
+
+| Proyecto | Es dueño de | Fuera de su responsabilidad |
+| --- | --- | --- |
+| [EduPay Identity](https://github.com/Sherydans12/edupay-identity) | Cuentas, credenciales, sesiones, memberships, roles de tenant, invitaciones, activación y auditoría de identidad. | Personas, permisos académicos por recurso, datos DIE y finanzas. |
+| EduPay Académico (este repositorio) | Alumnos/docentes académicos, estructura y matrícula académica, aprendizaje y DIE; aplica autorización académica con contexto confiable de Identity. | Credenciales/sesiones de Identity, cobros/pagos de BL y acceso directo a las bases de otros servicios. |
+| [BL-002 / EduPay Pagos](https://github.com/Sherydans12/BL-002) | Operación y registros financieros: cobros, pagos, asignaciones, comunicaciones y portal financiero; conserva autenticación administrativa propia. | Identidad Académico, matrícula académica canónica y expedientes DIE. |
+
+Las bases y los registros de tenant son independientes. El UUID de tenant es un
+identificador lógico intercambiado por contratos autenticados, nunca una FK
+entre bases. La transición de ownership documentada es una dirección aceptada;
+las propuestas de migración y convergencia siguen requiriendo su propio cambio
+y autorización.
+
+### Integraciones desplegadas y límites actuales
+
+```mermaid
+flowchart LR
+  I[Identity<br/>identidad y acceso] -->|JWT/JWKS público; sesión del navegador| W[Académico FRONT]
+  W -->|API HTTPS| A[Académico API y dominio DIE]
+  A -->|S2S con bearer; red privada Coolify| I
+  B[BL-002<br/>dominio financiero] -->|Feed heredado v1; pull S2S HTTP| A
+  A -.->|Proyección financiera nueva<br/>productor/publicador apagados| B
+  I --- IDB[(PostgreSQL Identity)]
+  A --- ADB[(PostgreSQL Académico)]
+  B --- BDB[(PostgreSQL BL)]
+```
+
+- **Identity → Académico:** el navegador usa el servicio público de Identity;
+  la API Académico valida JWT asimétricos con JWKS. Las comprobaciones
+  restringidas de sesión, vínculo exacto y personal DIE salen de la API por la
+  red privada Coolify, con bearer S2S server-only. No hay acceso de Identity a
+  las tablas académicas. Contratos: [Identity API](https://github.com/Sherydans12/edupay-identity/blob/main/docs/architecture/api-contracts.md),
+  [ADR-0010 Identity](https://github.com/Sherydans12/edupay-identity/blob/main/docs/decisions/ADR-0010-academico-restricted-service-auth.md)
+  y [ADR-0009 Académico](../decisions/ADR-0009-identity-contract-reconciliation.md).
+- **BL-002 → Académico (heredada):** el worker Académico hace pull autenticado
+  del feed v1 BL de cursos, alumnos y relación vigente alumno–curso. Lee BL por
+  HTTP y persiste su propia proyección; no conecta al PostgreSQL BL. El último
+  inventario de release DIE registra ambos workers Académico detenidos antes de
+  la ventana y sin cambios durante ella; no asumir sincronización continua.
+  Fuente: [implementación del sync](../integration/edupay-sync-implementation.md)
+  y [descubrimiento v1](../integration/edupay-sync-discovery.md).
+- **Académico → BL (proyección nueva):** contratos de productor/publicador,
+  consumer shadow y snapshots están implementados y la preparación de esquema
+  consta en los cierres; producer, publisher y shadow permanecen **apagados**.
+  No hay backfill ni uso para decisiones financieras. Es una integración
+  distinta del pull heredado BL → Académico. Fuente: [contrato y límites](../integration/academic-financial-projection.md),
+  [decisión de release apagado](../deployment/phase1-financial-projection-release-decision.md)
+  y [ADR-0021](../decisions/ADR-0021-ecosystem-domain-ownership-transition.md).
+- **DIE → BL:** no existe conexión ni feed DIE a BL. Expedientes, datos sensibles
+  y resultados DIE quedan en Académico y se excluyen de toda proyección
+  financiera. Véase [ADR-0023](../decisions/ADR-0023-die-sensitive-record-boundary.md).
+
+### Git comprobado ahora y runtime verificado más recientemente
+
+El **2026-09-24** se actualizó `origin` con Git y se crearon worktrees limpios
+desde estos `origin/main`; esos SHAs son referencias de código/documentación,
+no commits de build ni prueba de runtime:
+
+| Repositorio | `origin/main` comprobado ahora | Estado local preservado |
+| --- | --- | --- |
+| Académico | `6543c2456caa7f7bfbf6630eb78c6751f32dba28` | Checkout `main` previo en `c86facb`, 51 commits detrás, limpio. |
+| Identity | `57b8827008c4a7b92c60a435b3fb1bc4f7554492` | Checkout local seguía en rama feature con cambios; no se tocó. |
+| BL-002 | `d3e40da0bcf893e8d02f2c23d7c79a4d46b8071f` | Checkout local `main` en `502e646`, 24 commits detrás y con cambios locales; no se tocó. |
+
+La comparación Git de BL entre `04687aa` (corte de release documentado) y
+`origin/main` actual muestra cambios sólo en cuatro archivos
+`docs/operations/*`. Esto no confirma qué artefacto sigue corriendo.
+
+La última verificación de runtime disponible en Git está fechada **2026-09-24**
+en el [cierre DIE](../operations/die-release-closeout-2026-09-24.md) y el
+[inventario Coolify](../operations/coolify-inventory.json): Identity API,
+Académico API y FRONT DIE quedaron `running:healthy`; Identity conserva 4
+migraciones y Académico 13. El FRONT Académico activo es
+`cct0rtf5iku6fkd3t9hldnv4`, fijado al digest
+`sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81`;
+el frontend anterior `qf65r4ltig6jhb6t8dmv2qyw` quedó detenido y conservado. El
+auto deploy es manual. El piloto DIE no está configurado ni validado con
+usuarios reales. Esta edición documental no vuelve a comprobar ese runtime.
+
+| Recurso Coolify | Aplicación → dominio | Repositorio / rama | Commit fuente del build | Artefacto desplegado según la última fotografía |
+| --- | --- | --- | --- | --- |
+| `cct0rtf5iku6fkd3t9hldnv4` | Académico FRONT → `academico.edupay.baselogic.cl` | `edupay-academico`, imagen aprobada | `bd413666ebb3674dc791d8cb735bcea1aadbed62` | `sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81` |
+| `qf65r4ltig6jhb6t8dmv2qyw` | FRONT anterior, sin dominio → conservado detenido | `edupay-academico`, rama histórica | `4f5ad2839e08e561e0335f6e4fdedfe448f15415` | Aplicación anterior; referencia de rollback del FRONT |
+| `iobfkpujjoa2kj5urbpnjvzi` | Académico API → `academico-api.edupay.baselogic.cl` | `edupay-academico`, servicio pinned | `bd413666ebb3674dc791d8cb735bcea1aadbed62` | `sha256:902c5e2ed1aa59d4e2ca7e6a558aaa113585b3737fc6ed4346bb6597531ac393` |
+| `0vrvqepcukwcubxga0narorf` | Identity API → `identity.edupay.baselogic.cl` | `edupay-identity`, servicio pinned | `93418b68eaf41976b4bc695039afcbc8eab4fdbc` | `sha256:960d326a9199881d54c7fc9611d052be77c0fbdceae4badebfe1208febe5aa01` |
+| `nn8yrhitex2r6squev0auwrs`, `r8mtn1xqtex96j4a8wu5hae6` | Workers de notificación y sync → sin dominio público | `edupay-academico`, mismo servicio/API image | `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` | `sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a`; ambos detenidos en el snapshot |
+| `ktgdely86kx0by10p9cb91os` | BL-002 FRONT → `edupay.baselogic.cl` | `BL-002`, rama `main` | `502e6463464de0a54b440362a64da0c31450818f` | Digest no consignado en el inventario transversal |
+| `km0aljzabdiqtaixj9dsequu` | BL-002 BACK → `api-edupay.baselogic.cl` | `BL-002`, rama `main` | `16e208af6a50e5703bc8f6edd51d7ff11b9c6381` | `sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f` |
+
+En esta tabla, rama configurada, commit fuente del build e imagen/digest son
+datos distintos. `origin/main` comprobado el 24/09 arriba no sustituye ninguno
+de los datos de build. UUID, imagen íntegra, PostgreSQL, flags y healthchecks
+están en el [inventario transversal](../operations/coolify-inventory.json);
+el BL mantiene además su fotografía propia del 15/09, marcada como histórica.
+
+### Reglas de release y recuperación
+
+- Identity y Académico usan recursos **PostgreSQL nativos de Coolify** (15 para
+  sus DBs); BL usa su PostgreSQL nativo (18). Las bases antiguas de Compose
+  `edupay-pilot` no son el destino de los procesos productivos. La lectura
+  segura del destino real y la reconciliación están en [el informe DB](../operations/die-database-target-reconciliation-2026-09-24.md).
+- Las migraciones productivas del 24/09 corrieron en migradores **inmutables
+  fijados por digest**: Identity terminó con 4 y Académico con 13 migraciones.
+  El migrador Identity anterior que carecía de `schema-engine` quedó retirado.
+  No se reejecuta la cadena histórica ni se infiere destino por el nombre del
+  contenedor; no hay autorización general para próximas migraciones.
+- El FRONT se publica como imagen por digest y con auto deploy manual. Sus
+  `NEXT_PUBLIC_API_BASE_URL` y `NEXT_PUBLIC_IDENTITY_BASE_URL` son configuración
+  pública incluida al construir el bundle; los tokens internos y secretos se
+  mantienen sólo en backend y Coolify. Un cambio web se libera por su recurso,
+  no redeployando el monorepo entero.
+- Los workflows de PR/main son de validación. Los workflows de publicación de
+  migradores requieren `workflow_dispatch`, y Coolify reporta auto deploy
+  manual/desactivado en los recursos citados. Por eso un merge documental a
+  `main` no inicia un deployment; una promoción de imagen sigue siendo manual.
+- El rollback se decide por recurso: FRONT, API/servicio y worker tienen
+  artefactos y healthchecks propios. Para el FRONT anterior, reasignar el
+  dominio con un solo router activo. No borrar DBs ni revertir migraciones para
+  recuperar la aplicación. Cuando existan expedientes DIE, volver a una API
+  anterior sólo es admisible tras verificar que puede tolerar esas tablas y
+  datos; el rollback de imagen no revierte el esquema ni autoriza borrar datos.
+- En la vista Coolify General de Identity y Académico persistía el aviso de
+  campos sin guardar durante el corte. No se guardó ni reseteó: conciliar el
+  estado antes del siguiente deploy/rollback, como indica el backlog.
+
+BL conserva su [registro directo de despliegue del 2026-09-15](https://github.com/Sherydans12/BL-002/blob/main/docs/operations/PRODUCTION.md)
+y su inventario fechado en esa misma fecha. El inventario transversal Académico
+del 2026-09-24 es la referencia más reciente disponible para recursos
+compartidos; las dos fotografías tienen fechas y finalidades distintas.
+
+### Pendientes operativos y trabajo aparcado
+
+El orden siguiente es de dependencia operativa, no una priorización de negocio.
+
+| Proyecto | Estado | Siguiente acción | Criterio de cierre |
+| --- | --- | --- | --- |
+| Académico + Identity — piloto DIE | Pendiente; módulo desplegado, perfil y equipo de prueba no configurados; sin usuarios reales validados. | Seguir [guía de primer uso](../operations/DIE-PILOT-GUIDE.md) con tenant y personal autorizados; registrar validación real por rol sin introducir expedientes ficticios. | Perfil institucional completo y flujo/acceso confirmado por usuarios del tenant previsto; registrar evidencia y límites. |
+| Académico + Identity — formulario Coolify | Aviso de campos sin guardar en General de ambos recursos durante la verificación del 24/09; no se guardó ni reseteó. | Antes del próximo redeploy/rollback, comparar campos con el runtime y resolver el aviso sin guardar cambios en bloque. | Configuración del recurso revisada y cambios intencionales guardados por separado; inventario fechado actualizado. |
+| Académico — próximo cambio de esquema | Ledger y efectos históricos necesitan reconciliación; no hay autorización general de migraciones. | Probar catálogo/ledger en clon, revisar respaldo actual y proponer el cambio específico conforme a [rehearsal](../deployment/prisma-reconciliation-rehearsal.md). | Evidencia de clon y backup para el cambio concreto, decisión y autorización registradas antes de una migración productiva. |
+| BL-002 — backup vivo y uploads | La restauración del backup PostgreSQL protegido se verificó en el cierre anterior; consistencia completa de DB viva y cobertura integral de uploads siguen sin certificarse. | Completar comprobación independiente de backup/restore para DB viva y archivos cuando se programe el siguiente corte. | Restore aislado documentado cubre DB y uploads requeridos y se registra fecha, fuente y límites. |
+| BL-002 ↔ Académico — mapping canónico | UI desplegada según cierre BL; se registraron 0 escrituras reales de mapping en el corte del 15/09. | Sólo al autorizar el uso de esa conexión: validar tenant y ejecutar dry-run antes de escribir el mapping. | Mapping explícito verificado para el tenant autorizado, con auditoría y prueba del contrato; no inferido por nombre/RUT. |
+| BL-002 — proyección financiera | En pausa: producer, publisher y shadow apagados; tablas/contratos no significan activación. | Mantener desactivado; tratar cualquier activación como cambio separado con contrato, datos, flags, credenciales, migración y autorización revisados. | Sólo un release autorizado y documentado con pruebas y gates propios; hasta entonces permanece apagado. |
+| BL-002 — rollover 2026–2027 y cambios locales | Trabajo local no integrado; no se promovió al desplegar el mapping. | Conservarlo aparcado; una propuesta nueva debe partir de revisión de ownership con Académico y estado Git limpio/revisable. | Decisión explícita de destino/alcance y PR revisado; ningún cambio local se considera aceptado por estar documentado. |
+| Todos — otros cambios locales no integrados | Permanecen ramas, worktrees y cambios locales fuera de `origin/main`; este cierre los preservó. | Al seleccionar trabajo, inspeccionar el worktree/branch concreto y comparar con `origin/main`; no promoverlo en bloque. | PR revisado e integrado, o decisión explícita del dueño para mantenerlo aparcado; no se descartan cambios por este cierre. |
+| Académico — mejoras futuras | No se seleccionó trabajo funcional nuevo para esta fase de cierre. | Elegir una mejora desde [roadmap](../product/roadmap.md), [decisiones pendientes](../governance/unresolved-decisions.md) y backlog del dominio, sin convertir propuestas en decisiones. | Alcance y criterios acordados; documentación/ADR afectada revisada antes de implementar. |
+
+### Punto de entrada para el próximo cambio Académico
+
+1. Leer este mapa, [límites de agentes](../governance/agent-boundaries.md),
+   ADRs aceptados y el runbook de la superficie afectada.
+2. Crear worktree propio desde `origin/main` actualizado; conservar otros
+   worktrees y cambios locales.
+3. Implementar el cambio limitado al dueño de dominio y probar según el riesgo
+   y las instrucciones de ese repo.
+4. Actualizar contrato, inventario, runbook o ADR cuando cambie una frontera,
+   autenticación, ownership, persistencia o comportamiento operativo.
+
+### Fuentes autoritativas
+
+| Tema | Fuente de detalle |
+| --- | --- |
+| Operación conjunta, recursos Coolify y migraciones DIE | [cierre DIE](../operations/die-release-closeout-2026-09-24.md), [inventario](../operations/coolify-inventory.json) y [reconciliación de destino DB](../operations/die-database-target-reconciliation-2026-09-24.md). |
+| Despliegue, restore y rollback Académico | [PRODUCTION](../operations/PRODUCTION.md), [RUNBOOK](../operations/RUNBOOK.md), [PHASE-CLOSEOUT](../operations/PHASE-CLOSEOUT.md), [backup/restore](../deployment/backup-restore.md). |
+| Identity | [índice](https://github.com/Sherydans12/edupay-identity/blob/main/docs/README.md), [runbook de release DIE](https://github.com/Sherydans12/edupay-identity/blob/main/docs/operations/die-release-authorization-runbook.md) y [contratos](https://github.com/Sherydans12/edupay-identity/blob/main/docs/architecture/api-contracts.md). |
+| BL-002 | [índice](https://github.com/Sherydans12/BL-002/blob/main/docs/README.md), [producción](https://github.com/Sherydans12/BL-002/blob/main/docs/operations/PRODUCTION.md), [runbook](https://github.com/Sherydans12/BL-002/blob/main/docs/operations/RUNBOOK.md) y [cierre](https://github.com/Sherydans12/BL-002/blob/main/docs/operations/PHASE-CLOSEOUT.md). |
+| Contratos y arquitectura aceptada Académico | [índice de docs](../README.md), [ADRs](../decisions/README.md), [sync heredado](../integration/edupay-sync-implementation.md), [proyección apagada](../integration/academic-financial-projection.md). |
+
+## Auditoría arquitectónica histórica — 2026-09-03
+
+La sección y matrices existentes debajo conservan el análisis de arquitectura
+objetivo, rollover y transición realizado el 03/09. Sus afirmaciones de estado
+operativo reflejan esa fecha y no reemplazan la fotografía fechada del 24/09 de
+esta entrada. La decisión aceptada y sus contratos siguen vigentes salvo una
+decisión posterior enlazada en los ADRs.
 
 ## Propósito y alcance
 
