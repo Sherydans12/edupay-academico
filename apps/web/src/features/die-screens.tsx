@@ -66,6 +66,7 @@ export function DieWorkspace({
   const contextKey = `${session.tenantId}:${session.membershipId}`;
   const loadRequest = useRef(0);
   const journalRequest = useRef(0);
+  const loadedContextKeyRef = useRef('');
   const [view, setView] = useState<View>('students');
   const [members, setMembers] = useState<DieMember[]>([]);
   const [students, setStudents] = useState<DieStudentSummary[]>([]);
@@ -73,18 +74,24 @@ export function DieWorkspace({
   const [journal, setJournal] = useState<DieJournalEntry[]>([]);
   const [profile, setProfile] = useState<TenantOperationalProfile | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  const [journalLoading, setJournalLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadedContextKey, setLoadedContextKey] = useState('');
   const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     const requestId = ++loadRequest.current;
+    const contextChanged = loadedContextKeyRef.current !== contextKey;
     setLoading(true);
     setError(null);
-    setLoadedContextKey('');
-    setJournal([]);
-    setProfile(null);
-    setSelectedStudentId('');
+    if (contextChanged) {
+      setLoadedContextKey('');
+      setJournal([]);
+      setProfile(null);
+      setSelectedStudentId('');
+      setJournalLoading(false);
+      journalRequest.current += 1;
+    }
     try {
       await client.getDieAccess();
       const [nextMembers, nextStudents, nextActions, nextProfile] =
@@ -99,8 +106,14 @@ export function DieWorkspace({
       setStudents(nextStudents);
       setActions(nextActions);
       setProfile(nextProfile);
-      setSelectedStudentId(nextStudents[0]?.studentId || '');
+      if (!contextChanged)
+        setSelectedStudentId((current) =>
+          nextStudents.some((student) => student.studentId === current)
+            ? current
+            : '',
+        );
       setLoadedContextKey(contextKey);
+      loadedContextKeyRef.current = contextKey;
     } catch (nextError) {
       if (loadRequest.current === requestId) setError(nextError);
     } finally {
@@ -112,8 +125,11 @@ export function DieWorkspace({
     const requestId = ++journalRequest.current;
     if (!selectedStudentId) {
       setJournal([]);
+      setJournalLoading(false);
       return;
     }
+    setJournal([]);
+    setJournalLoading(true);
     try {
       const nextJournal = await client.listDieJournal(selectedStudentId, {
         includeVoided: true,
@@ -122,6 +138,8 @@ export function DieWorkspace({
       setJournal(nextJournal);
     } catch (nextError) {
       if (journalRequest.current === requestId) setError(nextError);
+    } finally {
+      if (journalRequest.current === requestId) setJournalLoading(false);
     }
   }, [client, selectedStudentId]);
 
@@ -134,20 +152,29 @@ export function DieWorkspace({
     return () => window.clearTimeout(timer);
   }, [loadJournal]);
 
-  const selectedStudent = students.find(
-    (student) => student.studentId === selectedStudentId,
-  );
   const contextIsCurrent = loadedContextKey === contextKey;
+  const selectedStudent = contextIsCurrent
+    ? students.find((student) => student.studentId === selectedStudentId)
+    : undefined;
   return (
-    <AppShell dataMode="real" dieAccessGranted session={session}>
+    <AppShell
+      dataMode={api ? 'demo' : 'real'}
+      dieAccessGranted
+      session={session}
+    >
       <PageHeading
         title="Inclusión educativa"
-        description="Acompañamientos, situaciones y acciones compartidas por el equipo DIE. El acceso se valida nuevamente en cada operación."
+        description="Acompañamientos, hoja de vida y acciones del equipo DIE."
         action={
-          selectedStudent ? (
-            <Button onClick={() => setView('journal')}>
-              <Icon name="plus" />
-              Registrar situación
+          selectedStudent && view !== 'journal' ? (
+            <Button
+              aria-label={`${selectedStudent.activeEpisode ? 'Registrar situación para' : 'Abrir hoja de vida de'} ${selectedStudent.displayName}`}
+              onClick={() => setView('journal')}
+            >
+              <Icon name={selectedStudent.activeEpisode ? 'plus' : 'history'} />
+              {selectedStudent.activeEpisode
+                ? `Registrar para ${selectedStudent.displayName}`
+                : `Hoja de vida · ${selectedStudent.displayName}`}
             </Button>
           ) : undefined
         }
@@ -178,8 +205,8 @@ export function DieWorkspace({
           }
         >
           {profile.timeZone
-            ? 'La exportación PDF permanecerá bloqueada hasta configurar el nombre institucional.'
-            : 'No se usará la zona del navegador o servidor. Los hechos sin hora siguen disponibles; un administrador debe configurar la zona para horas y vencimientos.'}
+            ? 'Completa el nombre institucional para habilitar la exportación PDF.'
+            : 'Configura la zona horaria institucional para registrar horas y calcular vencimientos. Las fechas sin hora siguen disponibles.'}
         </Alert>
       ) : null}
       {loading || !contextIsCurrent ? (
@@ -224,6 +251,8 @@ export function DieWorkspace({
               timeZone={profile?.timeZone ?? null}
               onChanged={load}
               onSelect={(id) => {
+                setJournal([]);
+                setJournalLoading(true);
                 setSelectedStudentId(id);
                 setView('journal');
               }}
@@ -234,6 +263,7 @@ export function DieWorkspace({
             <JournalPanel
               api={client}
               entries={journal}
+              journalLoading={journalLoading}
               onChanged={async () => {
                 await loadJournal();
                 await load();
@@ -241,6 +271,7 @@ export function DieWorkspace({
               selectedStudent={selectedStudent}
               sessionUserId={session.identityUserId}
               profile={profile}
+              onChangeStudent={() => setView('students')}
             />
           ) : null}
           {view === 'actions' ? (
@@ -290,6 +321,10 @@ function StudentsPanel({
     Awaited<ReturnType<AcademicApiClient['listDieStudentCandidates']>>
   >([]);
   const [search, setSearch] = useState('');
+  const [rosterQuery, setRosterQuery] = useState('');
+  const [rosterStatus, setRosterStatus] = useState<
+    'ALL' | 'ACTIVE' | 'FINISHED'
+  >('ALL');
   const [studentId, setStudentId] = useState('');
   const [startDate, setStartDate] = useState(today(timeZone));
   const [reason, setReason] = useState('');
@@ -299,6 +334,17 @@ function StudentsPanel({
   const [finishReason, setFinishReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const visibleStudents = students.filter((student) => {
+    const matchesQuery = student.displayName
+      .toLocaleLowerCase('es-CL')
+      .includes(rosterQuery.trim().toLocaleLowerCase('es-CL'));
+    const matchesStatus =
+      rosterStatus === 'ALL' ||
+      (rosterStatus === 'ACTIVE'
+        ? Boolean(student.activeEpisode)
+        : !student.activeEpisode);
+    return matchesQuery && matchesStatus;
+  });
   async function find() {
     try {
       const rows = await api.listDieStudentCandidates(search);
@@ -396,12 +442,39 @@ function StudentsPanel({
           </div>
         </div>
       ) : null}
-      <div className="die-two-column">
+      <div className="die-two-column die-students-layout">
         <div className="die-roster">
           {students.length ? (
-            students.map((student) => (
+            <div className="die-roster-tools">
+              <label>
+                Buscar alumno
+                <input
+                  type="search"
+                  placeholder="Nombre o apellido"
+                  value={rosterQuery}
+                  onChange={(event) => setRosterQuery(event.target.value)}
+                />
+              </label>
+              <label>
+                Acompañamiento
+                <select
+                  value={rosterStatus}
+                  onChange={(event) =>
+                    setRosterStatus(event.target.value as typeof rosterStatus)
+                  }
+                >
+                  <option value="ALL">Todos</option>
+                  <option value="ACTIVE">Activo</option>
+                  <option value="FINISHED">Finalizado</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+          {visibleStudents.length ? (
+            visibleStudents.map((student) => (
               <article className="die-student-row" key={student.studentId}>
                 <button
+                  aria-label={`Abrir hoja de vida de ${student.displayName}`}
                   className="die-student-open"
                   onClick={() => onSelect(student.studentId)}
                   type="button"
@@ -417,8 +490,8 @@ function StudentsPanel({
                     <strong>{student.displayName}</strong>
                     <small>
                       {student.activeEpisode
-                        ? `Activo desde ${student.activeEpisode.startDate}`
-                        : `Finalizado ${student.latestEpisode.endDate ?? ''}`}
+                        ? `${student.activeEpisode.academicContext.courseLabel ?? 'Curso no informado'} · desde ${student.activeEpisode.startDate}`
+                        : `${student.latestEpisode.academicContext.courseLabel ?? 'Curso no informado'} · finalizado ${student.latestEpisode.endDate ?? ''}`}
                     </small>
                   </span>
                 </button>
@@ -442,6 +515,12 @@ function StudentsPanel({
                 </div>
               </article>
             ))
+          ) : students.length ? (
+            <EmptyState
+              icon={<Icon name="search" />}
+              title="No hay coincidencias"
+              description="Prueba otro nombre o cambia el estado del acompañamiento."
+            />
           ) : (
             <EmptyState
               icon={<Icon name="people" />}
@@ -450,83 +529,96 @@ function StudentsPanel({
             />
           )}
         </div>
-        <form
-          className="die-form-panel"
-          onSubmit={(event) => void start(event)}
-        >
-          <h3>Iniciar o retomar acompañamiento</h3>
-          <p>La selección reutiliza la ficha académica del alumno.</p>
-          <label>
-            Buscar alumno o curso
-            <span className="die-search-row">
-              <input
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Nombre, apellido o curso"
-                value={search}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void find()}
+        <details className="die-form-disclosure">
+          <summary className="die-disclosure-trigger">
+            <Icon name="plus" />
+            Incorporar alumno
+            <Icon className="die-disclosure-chevron" name="chevron-down" />
+          </summary>
+          <form
+            className="die-form-panel"
+            onSubmit={(event) => void start(event)}
+          >
+            <div>
+              <h3>Iniciar o retomar acompañamiento</h3>
+              <p>La selección reutiliza la ficha académica del alumno.</p>
+            </div>
+            <label>
+              Buscar alumno o curso
+              <span className="die-search-row">
+                <input
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Nombre, apellido o curso"
+                  value={search}
+                />
+                <Button
+                  disabled={!search.trim()}
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void find()}
+                >
+                  <Icon name="search" />
+                  Buscar
+                </Button>
+              </span>
+            </label>
+            <label>
+              Alumno
+              <select
+                required
+                value={studentId}
+                onChange={(event) => setStudentId(event.target.value)}
               >
-                <Icon name="search" />
-                Buscar
-              </Button>
-            </span>
-          </label>
-          <label>
-            Alumno
-            <select
-              required
-              value={studentId}
-              onChange={(event) => setStudentId(event.target.value)}
+                <option value="">Selecciona</option>
+                {candidates.map((candidate) => (
+                  <option key={candidate.studentId} value={candidate.studentId}>
+                    {candidate.displayName}
+                    {candidate.courseLabel ? ` · ${candidate.courseLabel}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Fecha de inicio
+              <input
+                required
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </label>
+            <label>
+              Motivo
+              <textarea
+                required
+                rows={3}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Describe la barrera o necesidad de acompañamiento con lenguaje objetivo."
+              />
+            </label>
+            <label>
+              Profesional responsable <span>(opcional)</span>
+              <select
+                value={responsible}
+                onChange={(event) => setResponsible(event.target.value)}
+              >
+                <option value="">Sin asignar</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              disabled={busy || !studentId || !reason.trim()}
+              type="submit"
             >
-              <option value="">Selecciona</option>
-              {candidates.map((candidate) => (
-                <option key={candidate.studentId} value={candidate.studentId}>
-                  {candidate.displayName}
-                  {candidate.courseLabel ? ` · ${candidate.courseLabel}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Fecha de inicio
-            <input
-              required
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-            />
-          </label>
-          <label>
-            Motivo
-            <textarea
-              required
-              rows={3}
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Describe la barrera o necesidad de acompañamiento con lenguaje objetivo."
-            />
-          </label>
-          <label>
-            Profesional responsable <span>(opcional)</span>
-            <select
-              value={responsible}
-              onChange={(event) => setResponsible(event.target.value)}
-            >
-              <option value="">Sin asignar</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button disabled={busy || !studentId || !reason.trim()} type="submit">
-            {busy ? 'Guardando…' : 'Iniciar acompañamiento'}
-          </Button>
-        </form>
+              {busy ? 'Guardando…' : 'Iniciar acompañamiento'}
+            </Button>
+          </form>
+        </details>
       </div>
     </section>
   );
@@ -535,6 +627,8 @@ function StudentsPanel({
 function JournalPanel({
   api,
   entries,
+  journalLoading,
+  onChangeStudent,
   onChanged,
   selectedStudent,
   sessionUserId,
@@ -542,6 +636,8 @@ function JournalPanel({
 }: {
   api: AcademicApiClient;
   entries: DieJournalEntry[];
+  journalLoading: boolean;
+  onChangeStudent: () => void;
   onChanged: () => Promise<void>;
   selectedStudent: DieStudentSummary | undefined;
   sessionUserId: string;
@@ -562,6 +658,8 @@ function JournalPanel({
   const [description, setDescription] = useState('');
   const [immediateAction, setImmediateAction] = useState('');
   const [reason, setReason] = useState('');
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
@@ -574,8 +672,13 @@ function JournalPanel({
   const authors = useMemo(
     () =>
       Array.from(
-        new Set(entries.map((entry) => entry.originalAuthorIdentityUserId)),
-      ).sort(),
+        new Map(
+          entries.map((entry) => [
+            entry.originalAuthorIdentityUserId,
+            entry.originalAuthorDisplayLabel,
+          ]),
+        ).entries(),
+      ).sort((left, right) => left[1].localeCompare(right[1], 'es-CL')),
     [entries],
   );
   const visibleEntries = useMemo(
@@ -602,13 +705,18 @@ function JournalPanel({
   );
   const reset = () => {
     setEditing(null);
+    setCategory('OBSERVATION');
+    setEventDate(today(profile?.timeZone ?? null));
     setTitle('');
     setDescription('');
     setImmediateAction('');
     setPlace('');
     setEventTime('');
     setApproximate(false);
+    setSource('WITNESSED');
+    setThirdParty('');
     setReason('');
+    setDetailsOpen(false);
   };
   function edit(entry: DieJournalEntry) {
     const row = entry.current;
@@ -624,6 +732,14 @@ function JournalPanel({
     setDescription(row.description);
     setImmediateAction(row.immediateAction ?? '');
     setReason('');
+    setDetailsOpen(
+      Boolean(
+        row.eventTime ||
+        row.place ||
+        row.immediateAction ||
+        row.informationSource === 'REPORTED_BY_THIRD_PARTY',
+      ),
+    );
   }
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -686,6 +802,8 @@ function JournalPanel({
   }
   async function voidEntry(entry: DieJournalEntry) {
     if (!voidReason.trim()) return;
+    setBusy(true);
+    setError('');
     try {
       await api.voidDieJournalEntry(entry.id, voidReason);
       setVoidingId('');
@@ -693,6 +811,8 @@ function JournalPanel({
       await onChanged();
     } catch (cause) {
       setError(message(cause));
+    } finally {
+      setBusy(false);
     }
   }
   async function exportPdf() {
@@ -710,7 +830,21 @@ function JournalPanel({
       anchor.href = url;
       anchor.download = `hoja-vida-${selectedStudent.displayName.toLowerCase().replaceAll(' ', '-')}.pdf`;
       anchor.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) {
+      setError(message(cause));
+    }
+  }
+  async function downloadAttachment(fileObjectId: string, fallback: string) {
+    setError('');
+    try {
+      const { blob, filename } = await api.downloadFile(fileObjectId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename ?? fallback;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (cause) {
       setError(message(cause));
     }
@@ -725,78 +859,120 @@ function JournalPanel({
     );
   return (
     <section className="die-section">
-      <div className="die-split-heading">
+      <div className="die-student-context">
         <div>
+          <span>Alumno en contexto</span>
           <h2>{selectedStudent.displayName}</h2>
-          <p>Hoja de vida cronológica compartida por el equipo.</p>
+          <p>
+            {selectedStudent.activeEpisode?.academicContext.courseLabel ??
+              selectedStudent.latestEpisode.academicContext.courseLabel ??
+              'Curso no informado'}
+            {' · '}
+            {selectedStudent.activeEpisode
+              ? 'Acompañamiento activo'
+              : 'Acompañamiento finalizado; historial disponible'}
+          </p>
         </div>
-        <Button
-          disabled={!profile?.institutionDisplayName}
-          variant="secondary"
-          onClick={() => void exportPdf()}
-        >
-          <Icon name="download" />
-          Exportar PDF
-        </Button>
+        <div className="die-student-context-actions">
+          <Button variant="ghost" onClick={onChangeStudent}>
+            Cambiar alumno
+          </Button>
+          <Button
+            disabled={!profile?.institutionDisplayName}
+            title={
+              profile?.institutionDisplayName
+                ? undefined
+                : 'Completa Perfil institucional para habilitar el PDF.'
+            }
+            variant="secondary"
+            onClick={() => void exportPdf()}
+          >
+            <Icon name="download" />
+            Exportar PDF
+          </Button>
+        </div>
       </div>
+      {!profile?.institutionDisplayName ? (
+        <p className="die-help">
+          Completa Perfil institucional para habilitar la exportación PDF.
+        </p>
+      ) : null}
       {error ? (
         <Alert title="Revisa el registro" tone="error">
           {error}
         </Alert>
       ) : null}
-      <div className="die-filter-bar" aria-label="Filtros de hoja de vida">
-        <label>
-          Desde
-          <input
-            type="date"
-            value={filterFrom}
-            onChange={(event) => setFilterFrom(event.target.value)}
-          />
-        </label>
-        <label>
-          Hasta
-          <input
-            type="date"
-            value={filterTo}
-            onChange={(event) => setFilterTo(event.target.value)}
-          />
-        </label>
-        <label>
-          Categoría
-          <select
-            value={filterCategory}
-            onChange={(event) => setFilterCategory(event.target.value)}
-          >
-            <option value="">Todas</option>
-            {categories.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Autor
-          <select
-            value={filterAuthor}
-            onChange={(event) => setFilterAuthor(event.target.value)}
-          >
-            <option value="">Todos</option>
-            {authors.map((author) => (
-              <option key={author} value={author}>
-                {author.slice(0, 8)}…
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="die-checkbox">
-          <input
-            checked={includeVoided}
-            type="checkbox"
-            onChange={(event) => setIncludeVoided(event.target.checked)}
-          />
-          Incluir anulados
-        </label>
+      <div className="die-history-toolbar">
+        <p aria-live="polite">
+          {visibleEntries.length}{' '}
+          {visibleEntries.length === 1 ? 'registro' : 'registros'}
+          {includeVoided ? ' · incluye anulados' : ''}
+        </p>
+        <details
+          className="die-filter-disclosure"
+          onToggle={(event) => setFiltersOpen(event.currentTarget.open)}
+          open={filtersOpen}
+        >
+          <summary className="die-disclosure-trigger">
+            <Icon name="search" />
+            Filtrar historial
+            <Icon className="die-disclosure-chevron" name="chevron-down" />
+          </summary>
+          <div className="die-filter-bar" aria-label="Filtros de hoja de vida">
+            <label>
+              Desde
+              <input
+                type="date"
+                value={filterFrom}
+                onChange={(event) => setFilterFrom(event.target.value)}
+              />
+            </label>
+            <label>
+              Hasta
+              <input
+                type="date"
+                value={filterTo}
+                onChange={(event) => setFilterTo(event.target.value)}
+              />
+            </label>
+            <label>
+              Categoría
+              <select
+                value={filterCategory}
+                onChange={(event) => setFilterCategory(event.target.value)}
+              >
+                <option value="">Todas</option>
+                {categories.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Autor
+              <select
+                value={filterAuthor}
+                onChange={(event) => setFilterAuthor(event.target.value)}
+              >
+                <option value="">Todos</option>
+                {authors.map(([authorId, authorLabel]) => (
+                  <option key={authorId} value={authorId}>
+                    {authorLabel}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="die-checkbox">
+              <input
+                checked={includeVoided}
+                type="checkbox"
+                onChange={(event) => setIncludeVoided(event.target.checked)}
+              />
+              Incluir anulados
+            </label>
+          </div>
+        </details>
       </div>
       <div className="die-case-layout">
         <form
@@ -806,7 +982,10 @@ function JournalPanel({
           <div className="die-form-title">
             <div>
               <h3>{editing ? 'Corregir registro' : 'Registrar situación'}</h3>
-              <p>La fecha del hecho es distinta de la fecha de creación.</p>
+              <p>
+                Fecha, categoría, título y descripción son los datos
+                principales.
+              </p>
             </div>
             {editing ? (
               <Button type="button" variant="ghost" onClick={reset}>
@@ -839,47 +1018,7 @@ function JournalPanel({
                 onChange={(event) => setEventDate(event.target.value)}
               />
             </label>
-            <label>
-              Hora <span>(opcional)</span>
-              <input
-                disabled={!profile?.timeZone && !editing?.current.eventTime}
-                type="time"
-                value={eventTime}
-                onChange={(event) => {
-                  setEventTime(event.target.value);
-                }}
-              />
-            </label>
-            {eventTime ? (
-              <p className="die-field-note">
-                Zona conservada por el servidor:{' '}
-                {editing?.current.eventTime === eventTime
-                  ? editing.current.eventTimeZone
-                  : profile?.timeZone}
-              </p>
-            ) : !profile?.timeZone ? (
-              <p className="die-field-note">
-                Configura la zona institucional para registrar una hora. La
-                fecha sin hora sigue disponible.
-              </p>
-            ) : null}
-            <label className="die-checkbox">
-              <input
-                checked={approximate}
-                disabled={!eventTime}
-                type="checkbox"
-                onChange={(event) => setApproximate(event.target.checked)}
-              />
-              Hora aproximada
-            </label>
           </div>
-          <label>
-            Lugar <span>(opcional)</span>
-            <input
-              value={place}
-              onChange={(event) => setPlace(event.target.value)}
-            />
-          </label>
           <label>
             Título
             <input
@@ -892,18 +1031,10 @@ function JournalPanel({
             Descripción objetiva
             <textarea
               required
-              rows={5}
+              rows={3}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Registra hechos observables, contexto y participantes; evita interpretaciones clínicas no confirmadas."
-            />
-          </label>
-          <label>
-            Acción inmediata realizada <span>(opcional)</span>
-            <textarea
-              rows={2}
-              value={immediateAction}
-              onChange={(event) => setImmediateAction(event.target.value)}
             />
           </label>
           <fieldset>
@@ -938,6 +1069,65 @@ function JournalPanel({
               </label>
             ) : null}
           </fieldset>
+          <details
+            className="die-optional-disclosure"
+            onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
+            open={detailsOpen}
+          >
+            <summary>
+              Más detalles <span>· hora, lugar e intervención</span>
+              <Icon className="die-disclosure-chevron" name="chevron-down" />
+            </summary>
+            <div className="die-optional-fields">
+              <div className="die-form-grid">
+                <label>
+                  Hora <span>(opcional)</span>
+                  <input
+                    disabled={!profile?.timeZone && !editing?.current.eventTime}
+                    type="time"
+                    value={eventTime}
+                    onChange={(event) => setEventTime(event.target.value)}
+                  />
+                </label>
+                {eventTime ? (
+                  <p className="die-field-note">
+                    Zona institucional:{' '}
+                    {editing?.current.eventTime === eventTime
+                      ? editing.current.eventTimeZone
+                      : profile?.timeZone}
+                  </p>
+                ) : !profile?.timeZone ? (
+                  <p className="die-field-note">
+                    Configura la zona institucional para registrar una hora.
+                  </p>
+                ) : null}
+                <label className="die-checkbox">
+                  <input
+                    checked={approximate}
+                    disabled={!eventTime}
+                    type="checkbox"
+                    onChange={(event) => setApproximate(event.target.checked)}
+                  />
+                  Hora aproximada
+                </label>
+              </div>
+              <label>
+                Lugar <span>(opcional)</span>
+                <input
+                  value={place}
+                  onChange={(event) => setPlace(event.target.value)}
+                />
+              </label>
+              <label>
+                Acción inmediata realizada <span>(opcional)</span>
+                <textarea
+                  rows={2}
+                  value={immediateAction}
+                  onChange={(event) => setImmediateAction(event.target.value)}
+                />
+              </label>
+            </div>
+          </details>
           {editing ? (
             <label>
               Motivo de la corrección{' '}
@@ -972,7 +1162,13 @@ function JournalPanel({
           ) : null}
         </form>
         <div className="die-timeline" aria-live="polite">
-          {visibleEntries.length ? (
+          {journalLoading ? (
+            <div aria-label="Cargando hoja de vida" className="die-loading">
+              <Skeleton />
+              <Skeleton />
+              <Skeleton />
+            </div>
+          ) : visibleEntries.length ? (
             visibleEntries.map((entry) => (
               <article
                 className={
@@ -1014,7 +1210,7 @@ function JournalPanel({
                   <dl>
                     <div>
                       <dt>Autor original</dt>
-                      <dd>{entry.originalAuthorIdentityUserId.slice(0, 8)}…</dd>
+                      <dd>{entry.originalAuthorDisplayLabel}</dd>
                     </div>
                     <div>
                       <dt>Creado</dt>
@@ -1030,13 +1226,88 @@ function JournalPanel({
                       </dd>
                     </div>
                     <div>
-                      <dt>Versiones</dt>
+                      <dt>Origen</dt>
+                      <dd>
+                        {entry.current.informationSource === 'WITNESSED'
+                          ? 'Hecho presenciado'
+                          : `Informado por terceros${entry.current.thirdPartySource ? ` · ${entry.current.thirdPartySource}` : ''}`}
+                      </dd>
+                    </div>
+                    {entry.current.place ? (
+                      <div>
+                        <dt>Lugar</dt>
+                        <dd>{entry.current.place}</dd>
+                      </div>
+                    ) : null}
+                    <div>
+                      <dt>Correcciones</dt>
                       <dd>{entry.revisions.length}</dd>
                     </div>
                   </dl>
+                  {entry.current.revisionNumber > 1 ? (
+                    <div className="die-correction-note">
+                      <p>
+                        Última corrección por{' '}
+                        <strong>{entry.current.correctedByDisplayLabel}</strong>
+                      </p>
+                      {entry.current.correctionReason ? (
+                        <p>
+                          <strong>Motivo:</strong>{' '}
+                          {entry.current.correctionReason}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {entry.revisions.length ? (
+                    <details className="die-revision-history">
+                      <summary>
+                        Leer historial de cambios
+                        <span>{entry.revisions.length}</span>
+                      </summary>
+                      <ol>
+                        {[...entry.revisions]
+                          .sort(
+                            (left, right) =>
+                              right.revisionNumber - left.revisionNumber,
+                          )
+                          .map((revision) => (
+                            <li key={revision.revisionNumber}>
+                              <div className="die-revision-heading">
+                                <strong>
+                                  Versión {revision.revisionNumber} ·{' '}
+                                  {revision.title}
+                                </strong>
+                                <time>
+                                  {new Date(revision.createdAt).toLocaleString(
+                                    'es-CL',
+                                  )}
+                                </time>
+                              </div>
+                              <p>{revision.description}</p>
+                              {revision.correctionReason ? (
+                                <p>
+                                  <strong>Motivo:</strong>{' '}
+                                  {revision.correctionReason}
+                                </p>
+                              ) : null}
+                              <small>
+                                Corregido por {revision.correctedByDisplayLabel}
+                              </small>
+                            </li>
+                          ))}
+                      </ol>
+                    </details>
+                  ) : null}
                   {entry.status === 'VOIDED' ? (
                     <Alert title="Registro anulado" tone="warning">
+                      El registro se conserva en el historial. Motivo:{' '}
                       {entry.voidReason}
+                      {entry.voidedAt ? (
+                        <p>
+                          Anulado el{' '}
+                          {new Date(entry.voidedAt).toLocaleString('es-CL')}
+                        </p>
+                      ) : null}
                     </Alert>
                   ) : null}
                   <div className="die-entry-actions">
@@ -1087,10 +1358,10 @@ function JournalPanel({
                           Volver
                         </Button>
                         <Button
-                          disabled={!voidReason.trim()}
+                          disabled={busy || !voidReason.trim()}
                           onClick={() => void voidEntry(entry)}
                         >
-                          Confirmar anulación
+                          {busy ? 'Anulando…' : 'Confirmar anulación'}
                         </Button>
                       </div>
                     </div>
@@ -1102,16 +1373,10 @@ function JournalPanel({
                           <Icon name="document" />
                           <button
                             onClick={() =>
-                              void api
-                                .downloadFile(file.fileObjectId)
-                                .then(({ blob, filename }) => {
-                                  const url = URL.createObjectURL(blob);
-                                  const anchor = document.createElement('a');
-                                  anchor.href = url;
-                                  anchor.download = filename ?? file.filename;
-                                  anchor.click();
-                                  URL.revokeObjectURL(url);
-                                })
+                              void downloadAttachment(
+                                file.fileObjectId,
+                                file.filename,
+                              )
                             }
                             type="button"
                           >
@@ -1170,8 +1435,18 @@ function ActionsPanel({
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterOverdue, setFilterOverdue] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [reassignment, setReassignment] = useState<{
+    action: DieAction;
+    memberId: string;
+  } | null>(null);
+  const [reassignmentReason, setReassignmentReason] = useState('');
   async function create(event: React.FormEvent) {
     event.preventDefault();
+    setBusy(true);
+    setError('');
     try {
       await api.createDieAction({
         studentId,
@@ -1182,9 +1457,12 @@ function ActionsPanel({
       });
       setTitle('');
       setDescription('');
+      setCreateOpen(false);
       await onChanged();
     } catch (cause) {
       setError(message(cause));
+    } finally {
+      setBusy(false);
     }
   }
   async function update(
@@ -1195,6 +1473,8 @@ function ActionsPanel({
     if ((status === 'COMPLETED' || status === 'CANCELLED') && !detail.trim())
       return;
     try {
+      setBusy(true);
+      setError('');
       await api.updateDieAction(action.id, {
         status,
         ...(status === 'COMPLETED' ? { result: detail } : {}),
@@ -1205,19 +1485,26 @@ function ActionsPanel({
       await onChanged();
     } catch (cause) {
       setError(message(cause));
+    } finally {
+      setBusy(false);
     }
   }
-  async function reassign(action: DieAction, nextMemberId: string) {
-    if (!nextMemberId || nextMemberId === action.assigneeMemberAssignmentId)
-      return;
+  async function reassign() {
+    if (!reassignment || !reassignmentReason.trim()) return;
     try {
-      await api.reassignDieAction(action.id, {
-        assigneeMemberAssignmentId: nextMemberId,
-        reason: 'Reasignación manual desde la vista del equipo.',
+      setBusy(true);
+      setError('');
+      await api.reassignDieAction(reassignment.action.id, {
+        assigneeMemberAssignmentId: reassignment.memberId,
+        reason: reassignmentReason,
       });
+      setReassignment(null);
+      setReassignmentReason('');
       await onChanged();
     } catch (cause) {
       setError(message(cause));
+    } finally {
+      setBusy(false);
     }
   }
   useEffect(() => {
@@ -1248,10 +1535,7 @@ function ActionsPanel({
       <div className="die-split-heading">
         <div>
           <h2>Acciones pendientes</h2>
-          <p>
-            El vencimiento se calcula; completar y cancelar exige dejar
-            resultado o motivo.
-          </p>
+          <p>Seguimiento y responsabilidades del equipo.</p>
         </div>
         <label className="die-toggle">
           <input
@@ -1267,56 +1551,72 @@ function ActionsPanel({
           {error}
         </Alert>
       ) : null}
-      <div className="die-filter-bar" aria-label="Filtros de acciones">
-        <label>
-          Alumno
-          <select
-            value={filterStudent}
-            onChange={(event) => setFilterStudent(event.target.value)}
-          >
-            <option value="">Todos</option>
-            {students.map((student) => (
-              <option key={student.studentId} value={student.studentId}>
-                {student.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Responsable
-          <select
-            value={filterAssignee}
-            onChange={(event) => setFilterAssignee(event.target.value)}
-          >
-            <option value="">Todos</option>
-            {members.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Estado
-          <select
-            value={filterStatus}
-            onChange={(event) => setFilterStatus(event.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="PENDING">Pendiente</option>
-            <option value="IN_PROGRESS">En curso</option>
-            <option value="COMPLETED">Completada</option>
-            <option value="CANCELLED">Cancelada</option>
-          </select>
-        </label>
-        <label className="die-checkbox">
-          <input
-            checked={filterOverdue}
-            type="checkbox"
-            onChange={(event) => setFilterOverdue(event.target.checked)}
-          />
-          Sólo vencidas
-        </label>
+      <div className="die-history-toolbar">
+        <p aria-live="polite">
+          {visible.length} {visible.length === 1 ? 'acción' : 'acciones'}
+        </p>
+        <details
+          className="die-filter-disclosure"
+          onToggle={(event) => setFiltersOpen(event.currentTarget.open)}
+          open={filtersOpen}
+        >
+          <summary className="die-disclosure-trigger">
+            <Icon name="search" />
+            Filtrar acciones
+            <Icon className="die-disclosure-chevron" name="chevron-down" />
+          </summary>
+          <div className="die-filter-bar" aria-label="Filtros de acciones">
+            <label>
+              Alumno
+              <select
+                value={filterStudent}
+                onChange={(event) => setFilterStudent(event.target.value)}
+              >
+                <option value="">Todos</option>
+                {students.map((student) => (
+                  <option key={student.studentId} value={student.studentId}>
+                    {student.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Responsable
+              <select
+                value={filterAssignee}
+                onChange={(event) => setFilterAssignee(event.target.value)}
+              >
+                <option value="">Todos</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Estado
+              <select
+                value={filterStatus}
+                onChange={(event) => setFilterStatus(event.target.value)}
+              >
+                <option value="">Todos</option>
+                <option value="PENDING">Pendiente</option>
+                <option value="IN_PROGRESS">En curso</option>
+                <option value="COMPLETED">Completada</option>
+                <option value="CANCELLED">Cancelada</option>
+              </select>
+            </label>
+            <label className="die-checkbox">
+              <input
+                checked={filterOverdue}
+                type="checkbox"
+                onChange={(event) => setFilterOverdue(event.target.checked)}
+              />
+              Sólo vencidas
+            </label>
+          </div>
+        </details>
       </div>
       {transition ? (
         <div className="die-inline-decision">
@@ -1350,7 +1650,7 @@ function ActionsPanel({
           </div>
         </div>
       ) : null}
-      <div className="die-two-column">
+      <div className="die-action-content">
         <div className="die-action-list">
           {visible.length ? (
             visible.map((action) => (
@@ -1366,12 +1666,25 @@ function ActionsPanel({
                             : 'neutral'
                       }
                     >
-                      {action.overdue ? 'Vencida' : action.status}
+                      {action.overdue
+                        ? 'Vencida'
+                        : {
+                            PENDING: 'Pendiente',
+                            IN_PROGRESS: 'En curso',
+                            COMPLETED: 'Completada',
+                            CANCELLED: 'Cancelada',
+                          }[action.status]}
                     </Badge>
                     {action.dueDate ? <time>{action.dueDate}</time> : null}
                   </span>
                   <h3>{action.title}</h3>
                   <p>{action.description || 'Sin descripción adicional.'}</p>
+                  <small>
+                    Alumno:{' '}
+                    {students.find(
+                      (student) => student.studentId === action.studentId,
+                    )?.displayName ?? 'Alumno histórico'}
+                  </small>
                   <small>
                     Responsable:{' '}
                     {members.find(
@@ -1382,52 +1695,104 @@ function ActionsPanel({
                 </div>
                 {action.status === 'PENDING' ||
                 action.status === 'IN_PROGRESS' ? (
-                  <div className="die-row-actions">
-                    <select
-                      aria-label={`Reasignar ${action.title}`}
-                      defaultValue=""
-                      onChange={(event) =>
-                        void reassign(action, event.target.value)
-                      }
-                    >
-                      <option value="">Reasignar…</option>
-                      {members
-                        .filter(
-                          (member) =>
-                            member.id !== action.assigneeMemberAssignmentId,
-                        )
-                        .map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.displayName}
-                          </option>
-                        ))}
-                    </select>
-                    {action.status === 'PENDING' ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => void update(action, 'IN_PROGRESS')}
+                  <div className="die-action-controls">
+                    <div className="die-row-actions">
+                      <select
+                        aria-label={`Reasignar ${action.title}`}
+                        value={
+                          reassignment?.action.id === action.id
+                            ? reassignment.memberId
+                            : ''
+                        }
+                        onChange={(event) => {
+                          const nextMemberId = event.target.value;
+                          if (!nextMemberId) return;
+                          setReassignment({ action, memberId: nextMemberId });
+                          setReassignmentReason('');
+                        }}
                       >
-                        Iniciar
+                        <option value="">Reasignar…</option>
+                        {members
+                          .filter(
+                            (member) =>
+                              member.id !== action.assigneeMemberAssignmentId,
+                          )
+                          .map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.displayName}
+                            </option>
+                          ))}
+                      </select>
+                      {action.status === 'PENDING' ? (
+                        <Button
+                          disabled={busy}
+                          variant="ghost"
+                          onClick={() => void update(action, 'IN_PROGRESS')}
+                        >
+                          Iniciar
+                        </Button>
+                      ) : null}
+                      <Button
+                        disabled={busy}
+                        variant="ghost"
+                        onClick={() => {
+                          setTransition({ action, status: 'COMPLETED' });
+                          setTransitionDetail('');
+                        }}
+                      >
+                        Completar
                       </Button>
+                      <Button
+                        disabled={busy}
+                        variant="ghost"
+                        onClick={() => {
+                          setTransition({ action, status: 'CANCELLED' });
+                          setTransitionDetail('');
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                    {reassignment?.action.id === action.id ? (
+                      <div className="die-inline-decision die-reassignment-decision">
+                        <p>
+                          Reasignar a{' '}
+                          {members.find(
+                            (member) => member.id === reassignment.memberId,
+                          )?.displayName ?? 'otro integrante'}
+                        </p>
+                        <label>
+                          Motivo de la reasignación
+                          <textarea
+                            autoFocus
+                            required
+                            rows={2}
+                            value={reassignmentReason}
+                            onChange={(event) =>
+                              setReassignmentReason(event.target.value)
+                            }
+                          />
+                        </label>
+                        <div className="die-row-actions">
+                          <Button
+                            disabled={busy}
+                            variant="secondary"
+                            onClick={() => {
+                              setReassignment(null);
+                              setReassignmentReason('');
+                            }}
+                          >
+                            Volver
+                          </Button>
+                          <Button
+                            disabled={busy || !reassignmentReason.trim()}
+                            onClick={() => void reassign()}
+                          >
+                            {busy ? 'Guardando…' : 'Confirmar reasignación'}
+                          </Button>
+                        </div>
+                      </div>
                     ) : null}
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setTransition({ action, status: 'COMPLETED' });
-                        setTransitionDetail('');
-                      }}
-                    >
-                      Completar
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setTransition({ action, status: 'CANCELLED' });
-                        setTransitionDetail('');
-                      }}
-                    >
-                      Cancelar
-                    </Button>
                   </div>
                 ) : null}
               </article>
@@ -1440,72 +1805,94 @@ function ActionsPanel({
             />
           )}
         </div>
-        <form
-          className="die-form-panel"
-          onSubmit={(event) => void create(event)}
+        <details
+          className="die-form-disclosure"
+          onToggle={(event) => setCreateOpen(event.currentTarget.open)}
+          open={createOpen}
         >
-          <h3>Nueva acción</h3>
-          <label>
-            Alumno
-            <select
-              required
-              value={studentId}
-              onChange={(event) => setStudentId(event.target.value)}
-            >
-              <option value="">Selecciona</option>
-              {students.map((student) => (
-                <option key={student.studentId} value={student.studentId}>
-                  {student.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Título
-            <input
-              required
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </label>
-          <label>
-            Descripción <span>(opcional)</span>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </label>
-          <label>
-            Responsable
-            <select
-              required
-              value={assignee}
-              onChange={(event) => setAssignee(event.target.value)}
-            >
-              <option value="">Selecciona</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Vencimiento <span>(opcional)</span>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(event) => setDueDate(event.target.value)}
-            />
-          </label>
-          <Button
-            disabled={!studentId || !assignee || !title.trim()}
-            type="submit"
+          <summary className="die-disclosure-trigger">
+            <Icon name="plus" />
+            Nueva acción
+            <Icon className="die-disclosure-chevron" name="chevron-down" />
+          </summary>
+          <form
+            className="die-form-panel"
+            onSubmit={(event) => void create(event)}
           >
-            Crear acción
-          </Button>
-        </form>
+            <div>
+              <h3>Asignar acción</h3>
+              <p>Indica a quién corresponde el siguiente paso del equipo.</p>
+            </div>
+            <label>
+              Alumno
+              <select
+                required
+                value={studentId}
+                onChange={(event) => setStudentId(event.target.value)}
+              >
+                <option value="">Selecciona</option>
+                {students.map((student) => (
+                  <option key={student.studentId} value={student.studentId}>
+                    {student.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Título
+              <input
+                required
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
+            <label>
+              Responsable
+              <select
+                required
+                value={assignee}
+                onChange={(event) => setAssignee(event.target.value)}
+              >
+                <option value="">Selecciona</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <details className="die-optional-disclosure">
+              <summary>
+                Añadir vencimiento o descripción
+                <Icon className="die-disclosure-chevron" name="chevron-down" />
+              </summary>
+              <div className="die-optional-fields">
+                <label>
+                  Vencimiento <span>(opcional)</span>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Descripción <span>(opcional)</span>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                  />
+                </label>
+              </div>
+            </details>
+            <Button
+              disabled={busy || !studentId || !assignee || !title.trim()}
+              type="submit"
+            >
+              {busy ? 'Creando…' : 'Crear acción'}
+            </Button>
+          </form>
+        </details>
       </div>
     </section>
   );
@@ -1629,7 +2016,7 @@ function MembersPanel({
           </div>
         </div>
       ) : null}
-      <div className="die-two-column">
+      <div className="die-two-column die-team-layout">
         <div className="die-member-list">
           {members.map((member) => (
             <article className="die-member-row" key={member.id}>
@@ -1678,27 +2065,39 @@ function MembersPanel({
             </article>
           ))}
         </div>
-        <div className="die-form-panel">
-          <h3>Incorporar miembro ordinario</h3>
-          <p>
-            Escribe el username institucional exacto. No se muestran listados ni
-            coincidencias parciales.
-          </p>
-          <label>
-            Username institucional
-            <input
-              autoComplete="off"
-              value={institutionalUsername}
-              onChange={(event) => setInstitutionalUsername(event.target.value)}
-            />
-          </label>
-          <Button disabled={!institutionalUsername.trim()} onClick={() => void add()}>
-            Incorporar como especialista
-          </Button>
-          <p className="die-help">
-            Sólo un administrador puede conceder coordinación.
-          </p>
-        </div>
+        <details className="die-form-disclosure">
+          <summary className="die-disclosure-trigger">
+            <Icon name="plus" />
+            Incorporar miembro
+            <Icon className="die-disclosure-chevron" name="chevron-down" />
+          </summary>
+          <div className="die-form-panel">
+            <h3>Incorporar miembro ordinario</h3>
+            <p>
+              Escribe el username institucional exacto. No se muestran listados
+              ni coincidencias parciales.
+            </p>
+            <label>
+              Username institucional
+              <input
+                autoComplete="off"
+                value={institutionalUsername}
+                onChange={(event) =>
+                  setInstitutionalUsername(event.target.value)
+                }
+              />
+            </label>
+            <Button
+              disabled={!institutionalUsername.trim()}
+              onClick={() => void add()}
+            >
+              Incorporar como especialista
+            </Button>
+            <p className="die-help">
+              Sólo un administrador puede conceder coordinación.
+            </p>
+          </div>
+        </details>
       </div>
     </section>
   );

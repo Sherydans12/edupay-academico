@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   icons: {
     icon: '/favicon.ico',
   },
-  title: 'EduPay Académico · Colegio Conquistadores',
-  description: 'Espacio académico de estudiantes y docentes',
+  title: 'EduPay Académico',
+  description: 'Espacio académico para estudiantes, docentes y equipos.',
 };
 
 export default function RootLayout({
@@ -32,16 +32,16 @@ export default function RootLayout({
           data-design-contract="academic-learning-route"
           dangerouslySetInnerHTML={{
             __html: `<!--
-THESIS: A calm educational operating environment organized around the next meaningful learning step, refusing the dense ERP dashboard.
-OWN-WORLD: Warm paper-like neutral fields, institutional blue navigation, precise yellow attention cues, turquoise/purple learning accents, Montserrat, and tactile route markers.
-STORY: Students immediately see what matters now and where learning continues; teachers immediately see what to prepare and review.
-FIRST VIEWPORT: Compact institutional shell, clear greeting and next action, then a learning/work stream with deadlines and subject context visible without scrolling on common desktop sizes.
-FORM: Operate mode; structured learning route pinned by the owner brief; seed key owner-pinned-conquistadores.
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+THESIS: EduPay Académico is a clear daily workspace for learners and institution teams.
+OWN-WORLD: Neutral EduPay surfaces, institutional blue navigation, restrained attention color, Montserrat, and accessible controls.
+STORY: People see their current institution, role, module, next task, and the record or course they are working in.
+FIRST VIEWPORT: Keep context and role navigation compact, then prioritize the selected learning or casework content.
+FORM: Reuse the documented EduPay design system; keep tenant identity in active session data and avoid school-specific branding in shared screens.
+FINISH: Review shared navigation, role context, keyboard operation, narrow layouts, and the affected module flows.
 -->`,
           }}
         />
-        <TenantTheme theme="colegio-conquistadores">
+        <TenantTheme theme="default">
           <IdentitySessionProvider>{children}</IdentitySessionProvider>
         </TenantTheme>
       </body>

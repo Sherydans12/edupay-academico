@@ -13,8 +13,8 @@ export const demoSessions = {
     membershipId: 'demo-membership-student',
     roles: ['STUDENT'],
     roleLabel: 'Estudiante · 7º Básico A',
-    tenantDisplayName: 'Colegio Conquistadores',
-    tenantId: 'demo-tenant-conquistadores',
+    tenantDisplayName: 'Institución de demostración',
+    tenantId: 'demo-tenant',
     workspace: 'student',
   },
   teacher: {
@@ -23,8 +23,8 @@ export const demoSessions = {
     membershipId: 'demo-membership-teacher',
     roles: ['TEACHER'],
     roleLabel: 'Docente',
-    tenantDisplayName: 'Colegio Conquistadores',
-    tenantId: 'demo-tenant-conquistadores',
+    tenantDisplayName: 'Institución de demostración',
+    tenantId: 'demo-tenant',
     workspace: 'teacher',
   },
   admin: {
@@ -33,8 +33,8 @@ export const demoSessions = {
     membershipId: 'demo-membership-admin',
     roles: ['TENANT_ADMIN'],
     roleLabel: 'Administración académica',
-    tenantDisplayName: 'Colegio Conquistadores',
-    tenantId: 'demo-tenant-conquistadores',
+    tenantDisplayName: 'Institución de demostración',
+    tenantId: 'demo-tenant',
     workspace: 'tenant-admin',
   },
 } as const satisfies Record<string, TrustedCurrentSession>;
