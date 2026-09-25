@@ -13,7 +13,8 @@ import {
   Skeleton,
 } from '@edupay/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
+import Link from 'next/link';
 
 import {
   useTrustedCurrentSession,
@@ -679,10 +680,50 @@ function AdminOverview({
         onRetry={onRetryPreparation}
         showStructureLink
       />
-      <Alert title="Datos académicos reales" tone="success">
-        Esta vista usa registros del Academic Structure API. Credenciales,
-        membresías y sesiones pertenecen a EduPay Identity.
-      </Alert>
+      <nav
+        aria-label="Accesos de administración"
+        className="admin-module-links"
+      >
+        <Link className="admin-module-link" href="/administracion/estructura">
+          <span className="admin-module-link__icon">
+            <Icon name="layers" />
+          </span>
+          <span className="admin-module-link__copy">
+            <strong>Estructura académica</strong>
+            <small>
+              {data.academicYears.length} años · {data.courses.length} cursos ·{' '}
+              {data.subjects.length} asignaturas
+            </small>
+          </span>
+          <Icon className="admin-module-link__arrow" name="chevron-right" />
+        </Link>
+        <Link className="admin-module-link" href="/administracion/personas">
+          <span className="admin-module-link__icon">
+            <Icon name="people" />
+          </span>
+          <span className="admin-module-link__copy">
+            <strong>Personas y accesos</strong>
+            <small>
+              {data.studentsTotalCount ?? data.students.length} alumnos ·{' '}
+              {data.teachersTotalCount ?? data.teachers.length} profesores
+            </small>
+          </span>
+          <Icon className="admin-module-link__arrow" name="chevron-right" />
+        </Link>
+        <Link
+          className="admin-module-link"
+          href="/administracion/configuracion"
+        >
+          <span className="admin-module-link__icon">
+            <Icon name="settings" />
+          </span>
+          <span className="admin-module-link__copy">
+            <strong>Configuración institucional</strong>
+            <small>Datos usados en documentos y fechas académicas</small>
+          </span>
+          <Icon className="admin-module-link__arrow" name="chevron-right" />
+        </Link>
+      </nav>
       <div className="compact-stats academic-stats">
         <Card className="compact-stat">
           <span>
@@ -716,44 +757,13 @@ function AdminOverview({
           </div>
         </Card>
       </div>
-      <div className="academic-admin__grid">
-        <Card>
-          <div className="admin-card-heading">
-            <div>
-              <span className="admin-icon">
-                <Icon name="layers" />
-              </span>
-              <div>
-                <h2>Estructura académica</h2>
-                <p>
-                  {data.academicYears.length} años · {data.courses.length}{' '}
-                  cursos · {data.subjects.length} asignaturas catalogadas
-                </p>
-              </div>
-            </div>
-            <Badge tone="info">API</Badge>
-          </div>
-        </Card>
-        <Card>
-          <div className="admin-card-heading">
-            <div>
-              <span className="admin-icon">
-                <Icon name="people" />
-              </span>
-              <div>
-                <h2>Personas y acceso</h2>
-                <p>
-                  {data.students.length} alumnos · {data.teachers.length}{' '}
-                  profesores con registros separados de Identity
-                </p>
-              </div>
-            </div>
-            <Badge tone="info">API</Badge>
-          </div>
-        </Card>
-      </div>
-      <SyncStatusOverview api={api} />
-      <StorageUsageOverview api={api} />
+      <details className="admin-support-details">
+        <summary>Integraciones y almacenamiento</summary>
+        <div className="admin-support-details__content">
+          <SyncStatusOverview api={api} />
+          <StorageUsageOverview api={api} />
+        </div>
+      </details>
     </>
   );
 }
@@ -848,6 +858,8 @@ function CourseForm({
   const selectedYear = data.academicYears.find(
     (year) => year.id === academicYearId,
   );
+  const canCreateCourse =
+    selectedYear?.status === 'ACTIVE' || selectedYear?.status === 'DRAFT';
   const canCreateActive = selectedYear?.status === 'ACTIVE';
 
   async function submit(event: FormEvent) {
@@ -872,7 +884,13 @@ function CourseForm({
       <div className="academic-form__fields">
         <Select
           id="new-course-year"
-          label="Año académico"
+          hint={
+            canCreateCourse
+              ? 'Los años cerrados o archivados se conservan en solo lectura.'
+              : 'Selecciona un año activo o en borrador para crear un curso.'
+          }
+          label="Año del nuevo curso"
+          required
           value={academicYearId}
           onChange={(e) => {
             const nextYearId = e.target.value;
@@ -887,8 +905,12 @@ function CourseForm({
         >
           <option value="">Selecciona un año</option>
           {data.academicYears.map((year) => (
-            <option key={year.id} value={year.id}>
-              {year.label}
+            <option
+              disabled={year.status === 'CLOSED' || year.status === 'ARCHIVED'}
+              key={year.id}
+              value={year.id}
+            >
+              {year.label} · {statusLabel(year.status)}
             </option>
           ))}
         </Select>
@@ -923,7 +945,7 @@ function CourseForm({
         </p>
       ) : null}
       <Button
-        disabled={!academicYearId || !label.trim()}
+        disabled={!canCreateCourse || !academicYearId || !label.trim()}
         loading={saving}
         type="submit"
       >
@@ -1207,13 +1229,16 @@ function CourseSubjectTeacherManager({
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const reloadAssigned = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const list = await api.getAssignedTeachers(courseSubjectId);
       setAssigned(list);
-    } catch {
-      setAssigned([]);
+    } catch (nextError) {
+      setLoadError(errorMessage(nextError).message);
     } finally {
       setLoading(false);
     }
@@ -1267,6 +1292,19 @@ function CourseSubjectTeacherManager({
   return (
     <div className="course-subject-teachers">
       <h4>Profesores asignados</h4>
+      {loadError ? (
+        <Alert
+          action={
+            <Button onClick={() => void reloadAssigned()} variant="secondary">
+              Reintentar
+            </Button>
+          }
+          title="No pudimos cargar las responsabilidades"
+          tone="error"
+        >
+          {loadError}
+        </Alert>
+      ) : null}
       {loading ? (
         <Skeleton />
       ) : assigned.length ? (
@@ -1290,7 +1328,7 @@ function CourseSubjectTeacherManager({
             </li>
           ))}
         </ul>
-      ) : (
+      ) : loadError ? null : (
         <p className="empty-subtext">Sin profesores asignados actualmente.</p>
       )}
 
@@ -1634,20 +1672,70 @@ function CourseRoster({
   const [roster, setRoster] = useState<
     Awaited<ReturnType<AcademicApiClient['getCourseRoster']>>
   >([]);
+  const [rosterContextId, setRosterContextId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [errorContextId, setErrorContextId] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
+  const requestSequence = useRef(0);
 
   useEffect(() => {
+    const sequence = ++requestSequence.current;
     const timer = window.setTimeout(() => {
       setLoading(true);
+      setError('');
+      setErrorContextId('');
       void api
         .getCourseRoster(course.id)
-        .then(setRoster)
-        .finally(() => setLoading(false));
+        .then((nextRoster) => {
+          if (sequence === requestSequence.current) {
+            setRoster(nextRoster);
+            setRosterContextId(course.id);
+          }
+        })
+        .catch((nextError: unknown) => {
+          if (sequence === requestSequence.current) {
+            setError(errorMessage(nextError).message);
+            setErrorContextId(course.id);
+          }
+        })
+        .finally(() => {
+          if (sequence === requestSequence.current) setLoading(false);
+        });
     }, 0);
-    return () => window.clearTimeout(timer);
-  }, [api, course.id]);
+    return () => {
+      window.clearTimeout(timer);
+      requestSequence.current += 1;
+    };
+  }, [api, course.id, retryCount]);
 
+  const rosterIsCurrent = rosterContextId === course.id;
+  const errorIsCurrent = errorContextId === course.id && Boolean(error);
   if (loading)
+    return (
+      <div className="academic-loading">
+        <Skeleton />
+        <Skeleton />
+      </div>
+    );
+  if (!rosterIsCurrent && errorIsCurrent)
+    return (
+      <Alert
+        action={
+          <Button
+            onClick={() => setRetryCount((current) => current + 1)}
+            variant="secondary"
+          >
+            Reintentar
+          </Button>
+        }
+        title="No pudimos cargar el roster"
+        tone="error"
+      >
+        {error}
+      </Alert>
+    );
+  if (!rosterIsCurrent)
     return (
       <div className="academic-loading">
         <Skeleton />
@@ -1663,41 +1751,61 @@ function CourseRoster({
     );
 
   return (
-    <div className="responsive-table">
-      <table>
-        <caption className="sr-only">Roster de {course.label}</caption>
-        <thead>
-          <tr>
-            <th>Alumno</th>
-            <th>Correo</th>
-            <th>Origen</th>
-            <th>Estado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {roster.map((item) => (
-            <tr key={item.enrollmentId}>
-              <td data-label="Alumno">
-                <strong>
-                  {item.student.firstName} {item.student.lastName}
-                </strong>
-              </td>
-              <td data-label="Correo">{item.student.email ?? 'Sin correo'}</td>
-              <td data-label="Origen">
-                {item.student.source === 'EDUPAY' ? (
-                  <Badge tone="info">EduPay</Badge>
-                ) : (
-                  <Badge tone="neutral">Manual</Badge>
-                )}
-              </td>
-              <td data-label="Estado">
-                <Badge tone="success">Activo</Badge>
-              </td>
+    <>
+      {errorIsCurrent ? (
+        <Alert
+          action={
+            <Button
+              onClick={() => setRetryCount((current) => current + 1)}
+              variant="secondary"
+            >
+              Reintentar
+            </Button>
+          }
+          title="No pudimos actualizar el roster"
+          tone="error"
+        >
+          {error}
+        </Alert>
+      ) : null}
+      <div className="responsive-table">
+        <table>
+          <caption className="sr-only">Roster de {course.label}</caption>
+          <thead>
+            <tr>
+              <th>Alumno</th>
+              <th>Correo</th>
+              <th>Origen</th>
+              <th>Estado</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {roster.map((item) => (
+              <tr key={item.enrollmentId}>
+                <td data-label="Alumno">
+                  <strong>
+                    {item.student.firstName} {item.student.lastName}
+                  </strong>
+                </td>
+                <td data-label="Correo">
+                  {item.student.email ?? 'Sin correo'}
+                </td>
+                <td data-label="Origen">
+                  {item.student.source === 'EDUPAY' ? (
+                    <Badge tone="info">EduPay</Badge>
+                  ) : (
+                    <Badge tone="neutral">Manual</Badge>
+                  )}
+                </td>
+                <td data-label="Estado">
+                  <Badge tone="success">Activo</Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -1862,6 +1970,69 @@ function SubjectCoverageSummary({
   );
 }
 
+interface AdminTabOption<T extends string> {
+  label: ReactNode;
+  value: T;
+}
+
+function AdminTabList<T extends string>({
+  idPrefix,
+  label,
+  onSelect,
+  options,
+  selected,
+}: {
+  idPrefix: string;
+  label: string;
+  onSelect(value: T): void;
+  options: AdminTabOption<T>[];
+  selected: T;
+}) {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function handleKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    let nextIndex = index;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % options.length;
+    else if (event.key === 'ArrowLeft')
+      nextIndex = (index - 1 + options.length) % options.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = options.length - 1;
+    else return;
+
+    event.preventDefault();
+    const next = options[nextIndex];
+    if (!next) return;
+    onSelect(next.value);
+    tabRefs.current[nextIndex]?.focus();
+  }
+
+  return (
+    <div aria-label={label} className="admin-tabs-nav" role="tablist">
+      {options.map((option, index) => (
+        <button
+          aria-selected={selected === option.value}
+          className={`admin-tab-button ${selected === option.value ? 'admin-tab-button--active' : ''}`}
+          id={`${idPrefix}-tab-${option.value}`}
+          key={option.value}
+          ref={(element) => {
+            tabRefs.current[index] = element;
+          }}
+          role="tab"
+          tabIndex={selected === option.value ? 0 : -1}
+          type="button"
+          onClick={() => onSelect(option.value)}
+          onKeyDown={(event) => handleKeyDown(event, index)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function StructureView({
   api,
   data,
@@ -1930,8 +2101,30 @@ function StructureView({
   ).length;
 
   return (
-    <div className="academic-stack">
-      <AcademicPreparationPanel data={data} onRetry={onRetryPreparation} />
+    <div className="academic-stack academic-structure-stack">
+      <details className="academic-preparation-disclosure">
+        <summary>
+          <span className="academic-preparation-disclosure__copy">
+            <strong>Preparación académica base</strong>
+            <small>
+              Evalúa años y cursos; no asignaturas, personas ni matrículas.
+            </small>
+          </span>
+          <Badge tone={data.academicPreparation?.ready ? 'success' : 'warning'}>
+            {data.academicPreparation?.ready
+              ? 'Preparada'
+              : data.academicPreparation
+                ? 'Requiere atención'
+                : 'Sin validar'}
+          </Badge>
+          <span className="academic-preparation-disclosure__action">
+            Ver detalle <Icon name="chevron-down" />
+          </span>
+        </summary>
+        <div className="academic-preparation-disclosure__content">
+          <AcademicPreparationPanel data={data} onRetry={onRetryPreparation} />
+        </div>
+      </details>
       <section
         aria-labelledby="academic-structure-scope-title"
         className="academic-panel academic-structure-scope"
@@ -1941,10 +2134,7 @@ function StructureView({
             <h2 id="academic-structure-scope-title">
               Contexto de configuración
             </h2>
-            <p>
-              Selecciona un año y un curso para que el catálogo y sus
-              asociaciones se muestren en el contexto correcto.
-            </p>
+            <p>Las asociaciones usan este año y curso.</p>
           </div>
           <Badge
             tone={selectedYear?.status === 'ACTIVE' ? 'success' : 'neutral'}
@@ -1971,11 +2161,7 @@ function StructureView({
           </Select>
           <Select
             disabled={!scopedCourses.length}
-            hint={
-              selectedYear
-                ? 'Las asignaturas se asocian al curso seleccionado.'
-                : 'Primero selecciona un año académico.'
-            }
+            hint={selectedYear ? undefined : 'Primero selecciona un año.'}
             id="academic-structure-scope-course"
             label="Curso"
             value={resolvedSelectedCourseId}
@@ -1998,222 +2184,242 @@ function StructureView({
           </p>
         ) : null}
       </section>
-      <SubjectCoverageSummary
-        activeSubjectCount={activeSubjectCount}
-        coursesWithoutSubjects={coursesWithoutSubjects}
-        onOpenAssociations={() => setActiveTab('course-subjects')}
-        onSelectCourse={setSelectedCourseId}
-        selectedYear={selectedYear}
-        subjectCounts={subjectCounts}
-        totalCourses={scopedCourses.length}
+      <AdminTabList<'years-courses' | 'subjects' | 'course-subjects'>
+        idPrefix="admin-structure"
+        label="Secciones de estructura académica"
+        onSelect={setActiveTab}
+        options={[
+          { value: 'years-courses', label: 'Años y Cursos' },
+          { value: 'subjects', label: 'Catálogo de Asignaturas' },
+          { value: 'course-subjects', label: 'Asignaturas del Curso' },
+        ]}
+        selected={activeTab}
       />
-      <div className="admin-tabs-nav" role="tablist">
-        <button
-          aria-selected={activeTab === 'years-courses'}
-          className={`admin-tab-button ${activeTab === 'years-courses' ? 'admin-tab-button--active' : ''}`}
-          role="tab"
-          type="button"
-          onClick={() => setActiveTab('years-courses')}
-        >
-          Años y Cursos
-        </button>
-        <button
-          aria-selected={activeTab === 'subjects'}
-          className={`admin-tab-button ${activeTab === 'subjects' ? 'admin-tab-button--active' : ''}`}
-          role="tab"
-          type="button"
-          onClick={() => setActiveTab('subjects')}
-        >
-          Catálogo de Asignaturas
-        </button>
-        <button
-          aria-selected={activeTab === 'course-subjects'}
-          className={`admin-tab-button ${activeTab === 'course-subjects' ? 'admin-tab-button--active' : ''}`}
-          role="tab"
-          type="button"
-          onClick={() => setActiveTab('course-subjects')}
-        >
-          Asignaturas del Curso
-        </button>
-      </div>
 
       {activeTab === 'years-courses' ? (
-        <>
-          <section className="academic-panel">
-            <div className="section-heading">
-              <div>
-                <h2>Años académicos</h2>
-                <p>
-                  Periodos lectivos del establecimiento. Los años cerrados o
-                  archivados se conservan para auditoría.
-                </p>
+        <div
+          aria-labelledby="admin-structure-tab-years-courses"
+          className="admin-tab-panel"
+          id="admin-structure-panel"
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <>
+            <section className="academic-panel">
+              <div className="section-heading">
+                <div>
+                  <h2>Años académicos</h2>
+                  <p>
+                    Periodos lectivos del establecimiento. Los años cerrados o
+                    archivados se conservan para auditoría.
+                  </p>
+                </div>
               </div>
-            </div>
-            <AcademicYearForm api={api} onSaved={onSaved} />
-            <div className="responsive-table">
-              <table>
-                <caption className="sr-only">Años académicos</caption>
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Periodo</th>
-                    <th>Estado</th>
-                    <th>Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.academicYears.map((year) => (
-                    <tr key={year.id}>
-                      <td data-label="Nombre">
-                        <strong>{year.label}</strong>
-                      </td>
-                      <td data-label="Periodo">
-                        {year.startDate} → {year.endDate}
-                      </td>
-                      <td data-label="Estado">
+              <AcademicYearForm api={api} onSaved={onSaved} />
+              <div className="responsive-table">
+                <table>
+                  <caption className="sr-only">Años académicos</caption>
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Periodo</th>
+                      <th>Estado</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.academicYears.map((year) => (
+                      <tr key={year.id}>
+                        <td data-label="Nombre">
+                          <strong>{year.label}</strong>
+                        </td>
+                        <td data-label="Periodo">
+                          {year.startDate} → {year.endDate}
+                        </td>
+                        <td data-label="Estado">
+                          <Badge
+                            tone={
+                              year.status === 'ACTIVE' ? 'success' : 'neutral'
+                            }
+                          >
+                            {statusLabel(year.status)}
+                          </Badge>
+                        </td>
+                        <td data-label="Acción">
+                          {year.status === 'DRAFT' ? (
+                            <ActivateAcademicRecord
+                              label="Activar año"
+                              onActivate={() =>
+                                api.updateAcademicYear(year.id, {
+                                  status: 'ACTIVE',
+                                })
+                              }
+                              onSaved={onSaved}
+                            />
+                          ) : (
+                            <span className="table-muted">Sin acción</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {data.academicYears.length === 0 ? (
+                  <EmptyState
+                    description="Crea el primer año académico para comenzar a configurar cursos."
+                    title="Aún no hay años"
+                  />
+                ) : null}
+              </div>
+            </section>
+
+            <section className="academic-panel">
+              <div className="section-heading">
+                <div>
+                  <h2>Cursos y roster</h2>
+                  <p>
+                    Cursos organizados por año académico y su lista de alumnos
+                    inscritos.
+                  </p>
+                </div>
+              </div>
+              <CourseForm api={api} data={data} onSaved={onSaved} />
+              {data.courses.length ? (
+                <div className="course-readiness-list">
+                  <div className="course-readiness-list__heading">
+                    <div>
+                      <h3>Cursos creados</h3>
+                      <p>
+                        Activa los cursos después de activar su año académico.
+                      </p>
+                    </div>
+                    <span>{data.courses.length} total</span>
+                  </div>
+                  {data.courses.map((course) => {
+                    const courseYear = data.academicYears.find(
+                      (year) => year.id === course.academicYearId,
+                    );
+                    const yearIsReadOnly =
+                      !courseYear ||
+                      courseYear.status === 'CLOSED' ||
+                      courseYear.status === 'ARCHIVED';
+                    const canActivateCourse =
+                      course.status === 'DRAFT' &&
+                      course.source !== 'EDUPAY' &&
+                      courseYear?.status === 'ACTIVE';
+                    return (
+                      <div className="course-readiness-row" key={course.id}>
+                        <div>
+                          <strong>{course.label}</strong>
+                          <span>
+                            {courseYear?.label ?? 'Año no disponible'}
+                            {course.source === 'EDUPAY' ? ' · EduPay' : ''}
+                          </span>
+                        </div>
                         <Badge
                           tone={
-                            year.status === 'ACTIVE' ? 'success' : 'neutral'
+                            course.status === 'ACTIVE' ? 'success' : 'neutral'
                           }
                         >
-                          {statusLabel(year.status)}
+                          {statusLabel(course.status)}
                         </Badge>
-                      </td>
-                      <td data-label="Acción">
-                        {year.status === 'DRAFT' ? (
+                        {canActivateCourse ? (
                           <ActivateAcademicRecord
-                            label="Activar año"
+                            label="Activar curso"
                             onActivate={() =>
-                              api.updateAcademicYear(year.id, {
-                                status: 'ACTIVE',
-                              })
+                              api.updateCourse(course.id, { status: 'ACTIVE' })
                             }
                             onSaved={onSaved}
                           />
                         ) : (
-                          <span className="table-muted">Sin acción</span>
+                          <span className="table-muted">
+                            {yearIsReadOnly
+                              ? 'Solo lectura'
+                              : course.status === 'DRAFT' &&
+                                  courseYear?.status === 'DRAFT'
+                                ? 'Activa el año primero'
+                                : 'Sin acción'}
+                          </span>
                         )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {data.academicYears.length === 0 ? (
-                <EmptyState
-                  description="Crea el primer año académico para comenzar a configurar cursos."
-                  title="Aún no hay años"
-                />
-              ) : null}
-            </div>
-          </section>
-
-          <section className="academic-panel">
-            <div className="section-heading">
-              <div>
-                <h2>Cursos y roster</h2>
-                <p>
-                  Cursos organizados por año académico y su lista de alumnos
-                  inscritos.
-                </p>
-              </div>
-            </div>
-            <CourseForm api={api} data={data} onSaved={onSaved} />
-            {data.courses.length ? (
-              <div className="course-readiness-list">
-                <div className="course-readiness-list__heading">
-                  <div>
-                    <h3>Cursos creados</h3>
-                    <p>
-                      Activa los cursos después de activar su año académico.
-                    </p>
-                  </div>
-                  <span>{data.courses.length} total</span>
-                </div>
-                {data.courses.map((course) => {
-                  const courseYear = data.academicYears.find(
-                    (year) => year.id === course.academicYearId,
-                  );
-                  return (
-                    <div className="course-readiness-row" key={course.id}>
-                      <div>
-                        <strong>{course.label}</strong>
-                        <span>
-                          {courseYear?.label ?? 'Año no disponible'}
-                          {course.source === 'EDUPAY' ? ' · EduPay' : ''}
-                        </span>
                       </div>
-                      <Badge
-                        tone={
-                          course.status === 'ACTIVE' ? 'success' : 'neutral'
-                        }
-                      >
-                        {statusLabel(course.status)}
-                      </Badge>
-                      {course.status === 'DRAFT' &&
-                      course.source !== 'EDUPAY' ? (
-                        <ActivateAcademicRecord
-                          label="Activar curso"
-                          onActivate={() =>
-                            api.updateCourse(course.id, { status: 'ACTIVE' })
-                          }
-                          onSaved={onSaved}
-                        />
-                      ) : (
-                        <span className="table-muted">Sin acción</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-            {selectedCourse ? (
-              <>
-                <p className="course-context-note">
-                  <Icon name="layers" />
-                  Roster del curso en contexto:{' '}
-                  <strong>{selectedCourse.label}</strong>
-                </p>
-                <CourseRoster api={api} course={selectedCourse} />
-              </>
-            ) : (
-              <EmptyState
-                description="Elige un año y un curso en el contexto de configuración para revisar su roster."
-                title="Selecciona un curso"
-              />
-            )}
-          </section>
-        </>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {selectedCourse ? (
+                <>
+                  <p className="course-context-note">
+                    <Icon name="layers" />
+                    Roster del curso en contexto:{' '}
+                    <strong>{selectedCourse.label}</strong>
+                  </p>
+                  <CourseRoster api={api} course={selectedCourse} />
+                </>
+              ) : (
+                <EmptyState
+                  description="Elige un año y un curso en el contexto de configuración para revisar su roster."
+                  title="Selecciona un curso"
+                />
+              )}
+            </section>
+          </>
+        </div>
       ) : null}
 
       {activeTab === 'subjects' ? (
-        <SubjectCatalog api={api} data={data} onSaved={onSaved} />
+        <div
+          aria-labelledby="admin-structure-tab-subjects"
+          className="admin-tab-panel"
+          id="admin-structure-panel"
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <SubjectCatalog api={api} data={data} onSaved={onSaved} />
+        </div>
       ) : null}
 
       {activeTab === 'course-subjects' ? (
-        <section className="academic-panel">
-          <div className="section-heading">
-            <div>
-              <h2>Asignaturas por curso</h2>
-              <p>
-                Asocia asignaturas a cada curso específico y asigna a los
-                profesores responsables.
-              </p>
+        <div
+          aria-labelledby="admin-structure-tab-course-subjects"
+          className="admin-tab-panel"
+          id="admin-structure-panel"
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <SubjectCoverageSummary
+            activeSubjectCount={activeSubjectCount}
+            coursesWithoutSubjects={coursesWithoutSubjects}
+            onOpenAssociations={() => setActiveTab('course-subjects')}
+            onSelectCourse={setSelectedCourseId}
+            selectedYear={selectedYear}
+            subjectCounts={subjectCounts}
+            totalCourses={scopedCourses.length}
+          />
+          <section className="academic-panel">
+            <div className="section-heading">
+              <div>
+                <h2>Asignaturas por curso</h2>
+                <p>
+                  Asocia asignaturas a cada curso específico y asigna a los
+                  profesores responsables.
+                </p>
+              </div>
             </div>
-          </div>
-          {selectedCourse ? (
-            <CourseSubjectManagement
-              api={api}
-              data={data}
-              selectedCourse={selectedCourse}
-              onSaved={onSaved}
-            />
-          ) : (
-            <EmptyState
-              description="Selecciona un curso para gestionar sus asignaturas."
-              title="Sin curso seleccionado"
-            />
-          )}
-        </section>
+            {selectedCourse ? (
+              <CourseSubjectManagement
+                api={api}
+                data={data}
+                selectedCourse={selectedCourse}
+                onSaved={onSaved}
+              />
+            ) : (
+              <EmptyState
+                description="Selecciona un curso para gestionar sus asignaturas."
+                title="Sin curso seleccionado"
+              />
+            )}
+          </section>
+        </div>
       ) : null}
     </div>
   );
@@ -2331,7 +2537,10 @@ function StudentsView({
   >(undefined);
   const [searchTerm, setSearchTerm] = useState('');
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [paginationError, setPaginationError] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
+  const searchSequence = useRef(0);
   const [editStudent, setEditStudent] = useState<
     AdminData['students'][number] | null
   >(null);
@@ -2353,22 +2562,32 @@ function StudentsView({
 
   const handleSearch = useCallback(
     async (query: string) => {
+      const sequence = ++searchSequence.current;
+      const normalizedQuery = query.trim();
+      setSearchError('');
+      setPaginationError('');
+      setLoadingMore(false);
+      if (!normalizedQuery) {
+        setQueriedStudents(null);
+        setQueriedCursor(undefined);
+        setQueriedTotalCount(undefined);
+        setSearching(false);
+        return;
+      }
+
       setSearching(true);
       try {
-        if (!query.trim()) {
-          setQueriedStudents(null);
-          setQueriedCursor(undefined);
-          setQueriedTotalCount(undefined);
-        } else {
-          const res = await api.listStudents(query.trim());
+        const res = await api.listStudents(normalizedQuery);
+        if (sequence === searchSequence.current) {
           setQueriedStudents(res.items);
           setQueriedCursor(res.nextCursor);
           setQueriedTotalCount(res.totalCount);
         }
-      } catch {
-        // Keep existing list on error
+      } catch (error) {
+        if (sequence === searchSequence.current)
+          setSearchError(errorMessage(error).message);
       } finally {
-        setSearching(false);
+        if (sequence === searchSequence.current) setSearching(false);
       }
     },
     [api],
@@ -2376,20 +2595,24 @@ function StudentsView({
 
   async function handleLoadMore() {
     if (!currentCursor) return;
+    const sequence = searchSequence.current;
+    const query = searchTerm.trim();
+    const cursor = currentCursor;
     setLoadingMore(true);
+    setPaginationError('');
     try {
-      const res = await api.listStudents(
-        searchTerm.trim() || undefined,
-        currentCursor,
-      );
-      setQueriedStudents((prev) => [
-        ...(prev ?? initialStudents),
-        ...res.items,
-      ]);
-      setQueriedCursor(res.nextCursor);
-      setQueriedTotalCount(res.totalCount);
-    } catch {
-      // ignore
+      const res = await api.listStudents(query || undefined, cursor);
+      if (sequence === searchSequence.current) {
+        setQueriedStudents((prev) => [
+          ...(prev ?? initialStudents),
+          ...res.items,
+        ]);
+        setQueriedCursor(res.nextCursor);
+        setQueriedTotalCount(res.totalCount);
+      }
+    } catch (error) {
+      if (sequence === searchSequence.current)
+        setPaginationError(errorMessage(error).message);
     } finally {
       setLoadingMore(false);
     }
@@ -2434,7 +2657,16 @@ function StudentsView({
         </div>
       </div>
 
-      <PersonForm api={api} kind="student" onSaved={onSaved} />
+      <details className="admin-create-disclosure">
+        <summary>
+          <span>
+            <strong>Incorporar alumno</strong>
+            <small>Crear una ficha manual; el correo es opcional.</small>
+          </span>
+          <span className="admin-create-disclosure__action">Nuevo alumno</span>
+        </summary>
+        <PersonForm api={api} kind="student" onSaved={onSaved} />
+      </details>
 
       <div className="search-filter-toolbar">
         <div className="search-input-wrapper">
@@ -2442,6 +2674,7 @@ function StudentsView({
             id="student-search-input"
             label="Buscar alumno"
             placeholder="Buscar por nombre, apellido, correo o identificador..."
+            aria-busy={searching}
             value={searchTerm}
             onChange={(e) => {
               const val = e.target.value;
@@ -2451,9 +2684,25 @@ function StudentsView({
           />
         </div>
         {searching ? (
-          <span className="searching-indicator">Buscando…</span>
+          <span
+            aria-live="polite"
+            className="searching-indicator"
+            role="status"
+          >
+            Buscando alumnos…
+          </span>
         ) : null}
       </div>
+      {searchError ? (
+        <Alert title="No pudimos buscar alumnos" tone="error">
+          {searchError}
+        </Alert>
+      ) : null}
+      {paginationError ? (
+        <Alert title="No pudimos cargar más alumnos" tone="error">
+          {paginationError}
+        </Alert>
+      ) : null}
 
       <div className="responsive-table">
         <table>
@@ -2622,12 +2871,14 @@ function TeachersView({
   api,
   initialTeachers,
   initialCursor,
+  initialTotalCount,
   identityActions,
   onSaved,
 }: {
   api: AcademicApiClient;
   initialTeachers: AdminData['teachers'];
   initialCursor?: string | null | undefined;
+  initialTotalCount?: number | undefined;
   identityActions?: AccountProvisioningActions | undefined;
   onSaved: () => void;
 }) {
@@ -2637,9 +2888,15 @@ function TeachersView({
   const [queriedCursor, setQueriedCursor] = useState<string | null | undefined>(
     undefined,
   );
+  const [queriedTotalCount, setQueriedTotalCount] = useState<
+    number | undefined
+  >(undefined);
   const [searchTerm, setSearchTerm] = useState('');
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [paginationError, setPaginationError] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
+  const searchSequence = useRef(0);
   const [editTeacher, setEditTeacher] = useState<
     AdminData['teachers'][number] | null
   >(null);
@@ -2652,23 +2909,37 @@ function TeachersView({
   const displayedTeachers = queriedTeachers ?? initialTeachers;
   const currentCursor =
     queriedTeachers !== null ? queriedCursor : initialCursor;
+  const currentTotalCount =
+    queriedTeachers !== null ? queriedTotalCount : initialTotalCount;
 
   const handleSearch = useCallback(
     async (query: string) => {
+      const sequence = ++searchSequence.current;
+      const normalizedQuery = query.trim();
+      setSearchError('');
+      setPaginationError('');
+      setLoadingMore(false);
+      if (!normalizedQuery) {
+        setQueriedTeachers(null);
+        setQueriedCursor(undefined);
+        setQueriedTotalCount(undefined);
+        setSearching(false);
+        return;
+      }
+
       setSearching(true);
       try {
-        if (!query.trim()) {
-          setQueriedTeachers(null);
-          setQueriedCursor(undefined);
-        } else {
-          const res = await api.listTeachers(query.trim());
+        const res = await api.listTeachers(normalizedQuery);
+        if (sequence === searchSequence.current) {
           setQueriedTeachers(res.items);
           setQueriedCursor(res.nextCursor);
+          setQueriedTotalCount(res.totalCount);
         }
-      } catch {
-        // ignore
+      } catch (error) {
+        if (sequence === searchSequence.current)
+          setSearchError(errorMessage(error).message);
       } finally {
-        setSearching(false);
+        if (sequence === searchSequence.current) setSearching(false);
       }
     },
     [api],
@@ -2676,19 +2947,24 @@ function TeachersView({
 
   async function handleLoadMore() {
     if (!currentCursor) return;
+    const sequence = searchSequence.current;
+    const query = searchTerm.trim();
+    const cursor = currentCursor;
     setLoadingMore(true);
+    setPaginationError('');
     try {
-      const res = await api.listTeachers(
-        searchTerm.trim() || undefined,
-        currentCursor,
-      );
-      setQueriedTeachers((prev) => [
-        ...(prev ?? initialTeachers),
-        ...res.items,
-      ]);
-      setQueriedCursor(res.nextCursor);
-    } catch {
-      // ignore
+      const res = await api.listTeachers(query || undefined, cursor);
+      if (sequence === searchSequence.current) {
+        setQueriedTeachers((prev) => [
+          ...(prev ?? initialTeachers),
+          ...res.items,
+        ]);
+        setQueriedCursor(res.nextCursor);
+        setQueriedTotalCount(res.totalCount);
+      }
+    } catch (error) {
+      if (sequence === searchSequence.current)
+        setPaginationError(errorMessage(error).message);
     } finally {
       setLoadingMore(false);
     }
@@ -2726,7 +3002,18 @@ function TeachersView({
         </div>
       </div>
 
-      <PersonForm api={api} kind="teacher" onSaved={onSaved} />
+      <details className="admin-create-disclosure">
+        <summary>
+          <span>
+            <strong>Incorporar profesor</strong>
+            <small>Crear una ficha académica; el correo es opcional.</small>
+          </span>
+          <span className="admin-create-disclosure__action">
+            Nuevo profesor
+          </span>
+        </summary>
+        <PersonForm api={api} kind="teacher" onSaved={onSaved} />
+      </details>
 
       <div className="search-filter-toolbar">
         <div className="search-input-wrapper">
@@ -2734,6 +3021,7 @@ function TeachersView({
             id="teacher-search-input"
             label="Buscar profesor"
             placeholder="Buscar por nombre, apellido o correo..."
+            aria-busy={searching}
             value={searchTerm}
             onChange={(e) => {
               const val = e.target.value;
@@ -2743,9 +3031,25 @@ function TeachersView({
           />
         </div>
         {searching ? (
-          <span className="searching-indicator">Buscando…</span>
+          <span
+            aria-live="polite"
+            className="searching-indicator"
+            role="status"
+          >
+            Buscando profesores…
+          </span>
         ) : null}
       </div>
+      {searchError ? (
+        <Alert title="No pudimos buscar profesores" tone="error">
+          {searchError}
+        </Alert>
+      ) : null}
+      {paginationError ? (
+        <Alert title="No pudimos cargar más profesores" tone="error">
+          {paginationError}
+        </Alert>
+      ) : null}
 
       <div className="responsive-table">
         <table>
@@ -2815,15 +3119,22 @@ function TeachersView({
         ) : null}
       </div>
 
-      {currentCursor ? (
+      {displayedTeachers.length > 0 ? (
         <div className="pagination-bar">
-          <Button
-            loading={loadingMore}
-            variant="secondary"
-            onClick={() => void handleLoadMore()}
-          >
-            Cargar más profesores
-          </Button>
+          <span className="pagination-info">
+            Mostrando {displayedTeachers.length} de{' '}
+            {currentTotalCount ?? displayedTeachers.length} profesores
+          </span>
+          {currentCursor ? (
+            <Button
+              loading={loadingMore}
+              disabled={searching}
+              variant="secondary"
+              onClick={() => void handleLoadMore()}
+            >
+              Cargar más profesores
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -2953,11 +3264,14 @@ function EnrollmentsAndAssignmentsView({
         >
           <h3>Inscribir alumno en curso</h3>
           <Select
+            disabled={!data.students.length}
             id="enroll-student"
             label="Alumno"
+            required
             value={studentId}
             onChange={(event) => setStudentId(event.target.value)}
           >
+            <option value="">Selecciona un alumno</option>
             {data.students.map((student) => (
               <option key={student.id} value={student.id}>
                 {student.firstName} {student.lastName}
@@ -2965,14 +3279,20 @@ function EnrollmentsAndAssignmentsView({
             ))}
           </Select>
           <Select
+            disabled={!data.courses.length}
             id="enroll-course"
             label="Curso"
+            required
             value={courseId}
             onChange={(event) => setCourseId(event.target.value)}
           >
+            <option value="">Selecciona un curso</option>
             {data.courses.map((course) => (
               <option key={course.id} value={course.id}>
-                {course.label}
+                {course.label} ·{' '}
+                {data.academicYears.find(
+                  (year) => year.id === course.academicYearId,
+                )?.label ?? 'Año no disponible'}
               </option>
             ))}
           </Select>
@@ -2997,26 +3317,39 @@ function EnrollmentsAndAssignmentsView({
         >
           <h3>Asignar profesor a asignatura</h3>
           <Select
+            disabled={!availableCourseSubjects.length}
             id="assignment-course-subject"
             label="Asignatura del curso"
+            required
             value={courseSubjectId}
             onChange={(event) => setCourseSubjectId(event.target.value)}
           >
+            <option value="">Selecciona una asignatura del curso</option>
             {availableCourseSubjects.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.subject?.name ?? item.subjectId} (
                 {data.courses.find((c) => c.id === item.courseId)?.label ??
-                  'Curso'}
+                  'Curso'}{' '}
+                ·{' '}
+                {data.academicYears.find(
+                  (year) =>
+                    year.id ===
+                    data.courses.find((c) => c.id === item.courseId)
+                      ?.academicYearId,
+                )?.label ?? 'Año no disponible'}
                 )
               </option>
             ))}
           </Select>
           <Select
+            disabled={!data.teachers.length}
             id="assignment-teacher"
             label="Profesor"
+            required
             value={teacherId}
             onChange={(event) => setTeacherId(event.target.value)}
           >
+            <option value="">Selecciona un profesor</option>
             {data.teachers.map((teacher) => (
               <option key={teacher.id} value={teacher.id}>
                 {teacher.firstName} {teacher.lastName}
@@ -3040,11 +3373,14 @@ function EnrollmentsAndAssignmentsView({
         >
           <h3>Asignar asignatura directamente</h3>
           <Select
+            disabled={!data.students.length}
             id="direct-student"
             label="Alumno"
+            required
             value={studentId}
             onChange={(event) => setStudentId(event.target.value)}
           >
+            <option value="">Selecciona un alumno</option>
             {data.students.map((student) => (
               <option key={student.id} value={student.id}>
                 {student.firstName} {student.lastName}
@@ -3052,14 +3388,26 @@ function EnrollmentsAndAssignmentsView({
             ))}
           </Select>
           <Select
+            disabled={!availableCourseSubjects.length}
             id="direct-course-subject"
             label="Asignatura del curso"
+            required
             value={courseSubjectId}
             onChange={(event) => setCourseSubjectId(event.target.value)}
           >
+            <option value="">Selecciona una asignatura del curso</option>
             {availableCourseSubjects.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.subject?.name ?? item.subjectId}
+                {item.subject?.name ?? item.subjectId} ·{' '}
+                {data.courses.find((course) => course.id === item.courseId)
+                  ?.label ?? 'Curso'}{' '}
+                ·{' '}
+                {data.academicYears.find(
+                  (year) =>
+                    year.id ===
+                    data.courses.find((course) => course.id === item.courseId)
+                      ?.academicYearId,
+                )?.label ?? 'Año no disponible'}
               </option>
             ))}
           </Select>
@@ -3089,63 +3437,76 @@ function PeopleView({
 
   return (
     <div className="academic-stack">
-      <div className="admin-tabs-nav" role="tablist">
-        <button
-          aria-selected={activeTab === 'students'}
-          className={`admin-tab-button ${activeTab === 'students' ? 'admin-tab-button--active' : ''}`}
-          role="tab"
-          type="button"
-          onClick={() => setActiveTab('students')}
-        >
-          Alumnos ({data.students.length})
-        </button>
-        <button
-          aria-selected={activeTab === 'teachers'}
-          className={`admin-tab-button ${activeTab === 'teachers' ? 'admin-tab-button--active' : ''}`}
-          role="tab"
-          type="button"
-          onClick={() => setActiveTab('teachers')}
-        >
-          Profesores ({data.teachers.length})
-        </button>
-        <button
-          aria-selected={activeTab === 'assignments'}
-          className={`admin-tab-button ${activeTab === 'assignments' ? 'admin-tab-button--active' : ''}`}
-          role="tab"
-          type="button"
-          onClick={() => setActiveTab('assignments')}
-        >
-          Inscripciones y Asignaciones
-        </button>
-      </div>
+      <AdminTabList<'students' | 'teachers' | 'assignments'>
+        idPrefix="admin-people"
+        label="Secciones de personas y relaciones académicas"
+        onSelect={setActiveTab}
+        options={[
+          {
+            value: 'students',
+            label: `Alumnos (${data.studentsTotalCount ?? data.students.length})`,
+          },
+          {
+            value: 'teachers',
+            label: `Profesores (${data.teachersTotalCount ?? data.teachers.length})`,
+          },
+          { value: 'assignments', label: 'Inscripciones y Asignaciones' },
+        ]}
+        selected={activeTab}
+      />
 
       {activeTab === 'students' ? (
-        <StudentsView
-          api={api}
-          identityActions={identityActions}
-          initialCursor={data.studentsNextCursor}
-          initialStudents={data.students}
-          initialTotalCount={data.studentsTotalCount}
-          onSaved={onSaved}
-        />
+        <div
+          aria-labelledby="admin-people-tab-students"
+          className="admin-tab-panel"
+          id="admin-people-panel"
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <StudentsView
+            api={api}
+            identityActions={identityActions}
+            initialCursor={data.studentsNextCursor}
+            initialStudents={data.students}
+            initialTotalCount={data.studentsTotalCount}
+            onSaved={onSaved}
+          />
+        </div>
       ) : null}
 
       {activeTab === 'teachers' ? (
-        <TeachersView
-          api={api}
-          identityActions={identityActions}
-          initialCursor={data.teachersNextCursor}
-          initialTeachers={data.teachers}
-          onSaved={onSaved}
-        />
+        <div
+          aria-labelledby="admin-people-tab-teachers"
+          className="admin-tab-panel"
+          id="admin-people-panel"
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <TeachersView
+            api={api}
+            identityActions={identityActions}
+            initialCursor={data.teachersNextCursor}
+            initialTeachers={data.teachers}
+            initialTotalCount={data.teachersTotalCount}
+            onSaved={onSaved}
+          />
+        </div>
       ) : null}
 
       {activeTab === 'assignments' ? (
-        <EnrollmentsAndAssignmentsView
-          api={api}
-          data={data}
-          onSaved={onSaved}
-        />
+        <div
+          aria-labelledby="admin-people-tab-assignments"
+          className="admin-tab-panel"
+          id="admin-people-panel"
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <EnrollmentsAndAssignmentsView
+            api={api}
+            data={data}
+            onSaved={onSaved}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -3153,11 +3514,13 @@ function PeopleView({
 
 export function AcademicAdminScreen({
   api,
+  dataMode = 'real',
   identityActions,
   session = demoSessions.admin,
   view,
 }: {
   api?: AcademicApiClient;
+  dataMode?: 'demo' | 'real';
   identityActions?: AccountProvisioningActions | undefined;
   session?: TrustedCurrentSession;
   view: AdminView;
@@ -3168,21 +3531,21 @@ export function AcademicAdminScreen({
   const { data, error, loading, reload } = useAdminData(client, contextKey);
 
   return (
-    <AppShell dataMode="real" session={currentSession}>
+    <AppShell dataMode={dataMode} session={currentSession}>
       <PageHeading
         description={
           view === 'overview'
             ? 'Una vista práctica del estado académico del tenant.'
             : view === 'structure'
-              ? 'Configura años, cursos, asignaturas y espacios de aprendizaje sin salir del espacio académico.'
-              : 'Administra alumnos, profesores y crea accesos de Identity desde cada persona.'
+              ? 'Organiza cursos y asignaturas dentro del año académico seleccionado.'
+              : 'Busca fichas académicas y gestiona los accesos de Identity desde cada persona.'
         }
         title={
           view === 'overview'
             ? 'Administración académica'
             : view === 'structure'
               ? 'Estructura académica'
-              : 'Personas y asignaciones'
+              : 'Personas'
         }
       />
       <DataState error={error} loading={loading} onRetry={() => void reload()}>
@@ -3194,6 +3557,7 @@ export function AcademicAdminScreen({
           />
         ) : view === 'structure' ? (
           <StructureView
+            key={contextKey}
             api={client}
             data={data}
             onSaved={() => void reload()}
@@ -3201,6 +3565,7 @@ export function AcademicAdminScreen({
           />
         ) : (
           <PeopleView
+            key={contextKey}
             api={client}
             data={data}
             identityActions={identityActions}
