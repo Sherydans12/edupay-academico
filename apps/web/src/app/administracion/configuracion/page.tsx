@@ -1,5 +1,5 @@
-import { AdminPlaceholderScreen } from '@/features/admin-screen';
+import { AcademicAdminSettingsScreen } from '@/features/academic-admin-settings';
 
 export default function AcademicSettingsPage() {
-  return <AdminPlaceholderScreen title="Configuración del espacio" />;
+  return <AcademicAdminSettingsScreen />;
 }

@@ -447,15 +447,27 @@ describe('Academic admin screens', () => {
     ).toBeTruthy();
   });
 
+  it('moves between structure tabs with arrow keys and exposes the selected panel', async () => {
+    render(<AcademicAdminScreen api={adminClient()} view="structure" />);
+    const yearsTab = await screen.findByRole('tab', { name: 'Años y Cursos' });
+    yearsTab.focus();
+    fireEvent.keyDown(yearsTab, { key: 'ArrowRight' });
+
+    const subjectsTab = screen.getByRole('tab', {
+      name: 'Catálogo de Asignaturas',
+    });
+    expect(subjectsTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(subjectsTab);
+    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(
+      subjectsTab.id,
+    );
+  });
+
   it('keeps subject progress scoped to the selected year and course', async () => {
     const client = adminClient();
     render(<AcademicAdminScreen api={client} view="structure" />);
 
-    expect(
-      await screen.findByRole('heading', { name: 'Asignaturas del año 2026' }),
-    ).toBeTruthy();
-    expect(screen.getByText('Sin pendientes en este corte')).toBeTruthy();
-
+    await screen.findByRole('heading', { name: 'Contexto de configuración' });
     const yearSelect = document.getElementById(
       'academic-structure-scope-year',
     ) as HTMLSelectElement;
@@ -466,6 +478,10 @@ describe('Academic admin screens', () => {
     expect(courseSelect.value).toBe(id);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Asignaturas del año 2026' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Sin pendientes en este corte')).toBeTruthy();
     expect(
       await screen.findByRole('heading', { name: 'Asignaturas por curso' }),
     ).toBeTruthy();
@@ -478,10 +494,68 @@ describe('Academic admin screens', () => {
     });
     render(<AcademicAdminScreen api={client} view="structure" />);
 
+    await screen.findByRole('heading', { name: 'Contexto de configuración' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
     expect(
       await screen.findByText('Sin cursos en este año.', { exact: true }),
     ).toBeTruthy();
     expect(screen.queryByText('Sin pendientes en este corte')).toBeNull();
+  });
+
+  it('shows a roster load error and lets the administrator retry', async () => {
+    const client = adminClient({
+      getCourseRoster: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Servicio sintético no disponible.'))
+        .mockResolvedValueOnce([
+          {
+            enrollmentId: 'synthetic-enrollment',
+            student: studentEduPay,
+          },
+        ]),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    expect(await screen.findByText('No pudimos cargar el roster')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    const roster = await screen.findByRole('table', {
+      name: 'Roster de 7º Básico A',
+    });
+    expect(within(roster).getByText('Claudio Arrau')).toBeTruthy();
+    expect(client.getCourseRoster).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows responsibility load errors instead of reporting an empty assignment', async () => {
+    const client = adminClient({
+      getAssignedTeachers: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Servicio sintético no disponible.'))
+        .mockResolvedValueOnce([
+          {
+            id: 'synthetic-assignment',
+            courseSubjectId: id,
+            teacherId: teacher1.id,
+            status: 'ACTIVE' as const,
+            teacher: teacher1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ]),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+    await screen.findByRole('heading', { name: 'Contexto de configuración' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
+
+    expect(
+      await screen.findByText('No pudimos cargar las responsabilidades'),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText('Sin profesores asignados actualmente.'),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByText('Gabriela Mistral')).toBeTruthy();
+    expect(client.getAssignedTeachers).toHaveBeenCalledTimes(2);
   });
 
   it('loads every relevant academic page before calculating subject progress', async () => {
@@ -530,15 +604,17 @@ describe('Academic admin screens', () => {
     });
     render(<AcademicAdminScreen api={client} view="structure" />);
 
+    await screen.findByRole('heading', { name: 'Contexto de configuración' });
+    expect(
+      screen.getAllByRole('option', { name: '2027 · Borrador' }).length,
+    ).toBeTruthy();
+    expect(screen.getByRole('option', { name: '8º Básico B' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
     const summary = await screen.findByLabelText(
       'Resumen de asignaturas del año',
     );
     expect(within(summary).getAllByText('2', { exact: true })).toHaveLength(3);
-    expect(
-      screen.getByRole('option', { name: '2027 · Borrador' }),
-    ).toBeTruthy();
-    expect(screen.getByRole('option', { name: '8º Básico B' })).toBeTruthy();
-
     fireEvent.click(
       screen.getByRole('tab', { name: 'Catálogo de Asignaturas' }),
     );
@@ -752,6 +828,55 @@ describe('Academic admin screens', () => {
     ).toBeTruthy();
   });
 
+  it('keeps draft courses in closed years read-only and unavailable for new work', async () => {
+    const closedYear = {
+      ...year,
+      id: id3,
+      label: '2025',
+      status: 'CLOSED' as const,
+    };
+    const closedDraftCourse = {
+      ...course,
+      id: id4,
+      academicYearId: closedYear.id,
+      label: '6º Básico B',
+      status: 'DRAFT' as const,
+    };
+    render(
+      <AcademicAdminScreen
+        api={adminClient({
+          listAcademicYears: vi.fn(async () => ({
+            items: [year, closedYear],
+            nextCursor: null,
+          })),
+          listCourses: vi.fn(async () => ({
+            items: [course, closedDraftCourse],
+            nextCursor: null,
+          })),
+        })}
+        view="structure"
+      />,
+    );
+
+    await screen.findByRole('heading', { name: 'Años académicos' });
+    const closedCourseRow = screen
+      .getByText('6º Básico B')
+      .closest('.course-readiness-row') as HTMLElement | null;
+    expect(closedCourseRow).toBeTruthy();
+    const courseRow = closedCourseRow as HTMLElement;
+    expect(within(courseRow).getByText('Solo lectura')).toBeTruthy();
+    expect(
+      within(courseRow).queryByRole('button', { name: 'Activar curso' }),
+    ).toBeNull();
+    const newCourseYear = screen.getByLabelText(
+      'Año del nuevo curso',
+    ) as HTMLElement;
+    const closedYearOption = within(newCourseYear).getByRole('option', {
+      name: '2025 · Cerrado',
+    }) as HTMLOptionElement;
+    expect(closedYearOption.disabled).toBe(true);
+  });
+
   it('creates and archives a subject from the Subject Catalog tab', async () => {
     const client = adminClient();
     render(<AcademicAdminScreen api={client} view="structure" />);
@@ -819,6 +944,99 @@ describe('Academic admin screens', () => {
     await waitFor(() => {
       expect(client.listStudents).toHaveBeenCalledWith('Claudio');
     });
+  });
+
+  it('keeps person creation collapsed until requested and marks optional contact clearly', async () => {
+    const client = adminClient();
+    render(<AcademicAdminScreen api={client} view="people" />);
+    await screen.findByRole('heading', { name: 'Alumnos' });
+
+    const disclosure = document.querySelector(
+      '.admin-create-disclosure',
+    ) as HTMLDetailsElement;
+    expect(disclosure.open).toBe(false);
+    fireEvent.click(screen.getByText('Incorporar alumno'));
+    expect(disclosure.open).toBe(true);
+
+    const firstName = screen.getByLabelText('Nombres') as HTMLInputElement;
+    const lastName = screen.getByLabelText('Apellidos') as HTMLInputElement;
+    const email = screen.getByLabelText(
+      'Correo electrónico (opcional)',
+    ) as HTMLInputElement;
+    expect(firstName.required).toBe(true);
+    expect(lastName.required).toBe(true);
+    expect(email.required).toBe(false);
+    expect(client.createStudent).not.toHaveBeenCalled();
+  });
+
+  it('ignores an older student search response when a newer query finishes first', async () => {
+    const oldSearch = deferred<StudentsPage>();
+    const newSearch = deferred<StudentsPage>();
+    const staleStudent = {
+      ...studentEduPay,
+      id: id3,
+      firstName: 'Resultado',
+      lastName: 'Obsoleto',
+    };
+    const currentStudent = {
+      ...studentManual,
+      id: id4,
+      firstName: 'Resultado',
+      lastName: 'Vigente',
+    };
+    const client = adminClient({
+      listStudents: vi.fn(async (query?: string) => {
+        if (query === 'obsoleto') return oldSearch.promise;
+        if (query === 'vigente') return newSearch.promise;
+        return { items: [studentEduPay, studentManual], nextCursor: null };
+      }),
+    });
+    render(<AcademicAdminScreen api={client} view="people" />);
+    const search = await screen.findByLabelText(/buscar alumno/i);
+
+    fireEvent.change(search, { target: { value: 'obsoleto' } });
+    fireEvent.change(search, { target: { value: 'vigente' } });
+    newSearch.resolve({
+      items: [currentStudent],
+      nextCursor: null,
+      totalCount: 1,
+    });
+    expect(await screen.findByText('Resultado Vigente')).toBeTruthy();
+    oldSearch.resolve({
+      items: [staleStudent],
+      nextCursor: null,
+      totalCount: 1,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Resultado Vigente')).toBeTruthy();
+      expect(screen.queryByText('Resultado Obsoleto')).toBeNull();
+    });
+  });
+
+  it('shows search errors without replacing the current student list', async () => {
+    const client = adminClient({
+      listStudents: vi.fn(async (query?: string) => {
+        if (query) {
+          throw new AcademicApiError({
+            code: 'REQUEST_FAILED',
+            details: [],
+            message: 'La consulta no está disponible.',
+            requestId: 'req-student-search',
+            status: 503,
+          });
+        }
+        return { items: [studentEduPay], nextCursor: null };
+      }),
+    });
+    render(<AcademicAdminScreen api={client} view="people" />);
+    const search = await screen.findByLabelText(/buscar alumno/i);
+    fireEvent.change(search, { target: { value: 'claudio' } });
+
+    expect(
+      await screen.findByText(/La consulta no está disponible\./),
+    ).toBeTruthy();
+    expect(screen.getByText('Claudio Arrau')).toBeTruthy();
   });
 
   it('prevents modifying name fields on EduPay-sourced student records', async () => {
