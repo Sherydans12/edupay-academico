@@ -1,8 +1,17 @@
 # Topología productiva EduPay
 
-Verificado: **2026-09-24**. Estado: **módulo DIE desplegado; piloto sin configurar ni validar por el usuario; BL flags apagados**. Esta sección y el inventario estructurado representan el estado operativo más reciente. Las observaciones posteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
+Verificado: **2026-09-27**. Estado: **corte docente desplegado en API y FRONT; piloto DIE sin configurar; BL flags apagados**. El inventario estructurado y [el cierre del corte docente](2026-09-27-teacher-release.md) registran el estado operativo más reciente. Las observaciones anteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 
-## Estado operativo vigente — 2026-09-24
+## Estado operativo vigente — 2026-09-27
+
+| Componente | Commit integrado | Imagen activa | Recurso |
+|---|---|---|---|
+| Académico API | `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b` | `ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d` | `iobfkpujjoa2kj5urbpnjvzi` |
+| Académico FRONT | `c6916a7ba3676bac6f3cfa6a2299cb85cab77447` | `ghcr.io/sherydans12/edupay-academico-web@sha256:fe66c9ff716040e6d9d33b4696bc657458a23821b4b7d4b42548db51bd947f23` | `cct0rtf5iku6fkd3t9hldnv4` |
+
+Identity, BL, workers, ClamAV, redes, dominios y flags no cambiaron en este release. No se ejecutaron migraciones ni escrituras de prueba en producción. El rollback y las comprobaciones constan en [el cierre del corte docente](2026-09-27-teacher-release.md).
+
+## Cierre DIE histórico — 2026-09-24
 
 PR #10 de Académico y PR #12 de Identity se integraron después de aprobarse sus CI. El recovery point conjunto y las migraciones autorizadas se completaron. No se crearon usuarios STAFF, memberships, perfiles institucionales ni expedientes DIE reales.
 
@@ -73,8 +82,9 @@ credenciales S2S productivas nuevas. El candidato GHCR
 fue validado localmente pero no se desplegó; su acceso desde la VPS sigue
 pendiente por autorización del registry.
 
-Este archivo y `coolify-inventory.json` se mantienen iguales en BL-002 y
-Académico. Ante cualquier diferencia futura entre esta fotografía y Coolify,
+La fotografía histórica de 2026-09-24 también se registró en BL-002. El corte
+docente de 2026-09-27 actualiza solamente el inventario de Académico, sin cambiar
+conexiones entre productos. Ante cualquier diferencia entre el inventario y Coolify,
 hacer inventario read-only y reconciliar antes de desplegar. Un nombre, una rama
 o un contenedor healthy por sí solos no identifican al producto correcto.
 

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "verifiedDate": "2026-09-24",
+  "verifiedDate": "2026-09-27",
   "scope": "EduPay production only; not a full inventory of unrelated VPS projects",
-  "status": "DIE_MODULE_DEPLOYED_PILOT_UNCONFIGURED; BL_FLAGS_OFF",
+  "status": "TEACHER_RELEASE_DEPLOYED; DIE_PILOT_UNCONFIGURED; BL_FLAGS_OFF",
   "project": {
     "name": "My first project",
     "uuid": "p5gswqrr8ot1oaoxwytrpsho"
@@ -81,7 +81,7 @@
       "uuid": "cct0rtf5iku6fkd3t9hldnv4",
       "name": "edupay-academico-web-die-20260924",
       "type": "application",
-      "image": "ghcr.io/sherydans12/edupay-academico-web@sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81",
+      "image": "ghcr.io/sherydans12/edupay-academico-web@sha256:fe66c9ff716040e6d9d33b4696bc657458a23821b4b7d4b42548db51bd947f23",
       "domain": "academico.edupay.baselogic.cl",
       "port": 3000,
       "health": "/login",
@@ -95,8 +95,8 @@
         "0vrvqepcukwcubxga0narorf"
       ],
       "observedState": "running:healthy",
-      "buildSourceSha": "bd413666ebb3674dc791d8cb735bcea1aadbed62",
-      "artifactDigest": "sha256:c117c718352ede7220f4f685711d7df4bc88384b304bb19970d9379aa9fc0d81",
+      "buildSourceSha": "c6916a7ba3676bac6f3cfa6a2299cb85cab77447",
+      "artifactDigest": "sha256:fe66c9ff716040e6d9d33b4696bc657458a23821b4b7d4b42548db51bd947f23",
       "repository": "Sherydans12/edupay-academico"
     },
     {
@@ -104,7 +104,7 @@
       "name": "edupay-academico-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-academico",
-      "image": "ghcr.io/sherydans12/edupay-academico@sha256:902c5e2ed1aa59d4e2ca7e6a558aaa113585b3737fc6ed4346bb6597531ac393",
+      "image": "ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d",
       "migrationCount": 13,
       "identityInternalBaseUrl": "http://identity-0vrvqepcukwcubxga0narorf:3000",
       "domain": "academico-api.edupay.baselogic.cl",
@@ -119,8 +119,8 @@
         "ttrrmrkod9hmqo68er6q2ghs"
       ],
       "observedState": "running:healthy",
-      "buildSourceSha": "bd413666ebb3674dc791d8cb735bcea1aadbed62",
-      "artifactDigest": "sha256:902c5e2ed1aa59d4e2ca7e6a558aaa113585b3737fc6ed4346bb6597531ac393"
+      "buildSourceSha": "5e3e6079baf4b8f6732a3d4f270f27c67ffa812b",
+      "artifactDigest": "sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d"
     },
     {
       "uuid": "0vrvqepcukwcubxga0narorf",
