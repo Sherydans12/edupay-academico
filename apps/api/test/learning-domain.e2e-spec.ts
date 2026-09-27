@@ -244,6 +244,249 @@ describe.runIf(testDatabaseUrl)(
         .expect(404);
     });
 
+    it('keeps closed-year learning content and history readable while rejecting every content write without partial effects', async () => {
+      const admin = await token('closed-learning', 'admin', ['TENANT_ADMIN']);
+      const structure = await createStructure(admin, '7° A', 'Historia');
+      const teacher = await createTeacher(admin, 'Clara', 'Docente');
+      await linkTeacher(teacher.id, 'teacher-closed', admin);
+      await post(admin, '/api/v1/course-subject-teachers', {
+        courseSubjectId: structure.courseSubject.id,
+        teacherIds: [teacher.id],
+      });
+      const teacherToken = await token('closed-learning', 'teacher-closed', [
+        'TEACHER',
+      ]);
+      const unit = await post(teacherToken, '/api/v1/learning-units', {
+        courseSubjectId: structure.courseSubject.id,
+        title: 'Unidad original',
+      });
+      await patch(teacherToken, `/api/v1/learning-units/${unit.id}`, {
+        title: 'Unidad revisada',
+        status: 'ACTIVE',
+        expectedRevision: 1,
+      });
+      const archivedUnit = await post(teacherToken, '/api/v1/learning-units', {
+        courseSubjectId: structure.courseSubject.id,
+        title: 'Unidad archivada',
+      });
+      await post(
+        teacherToken,
+        `/api/v1/learning-units/${archivedUnit.id}/archive`,
+        {},
+      );
+      const item = await post(
+        teacherToken,
+        `/api/v1/learning-units/${unit.id}/items`,
+        { type: 'MATERIAL', title: 'Lectura original' },
+      );
+      await patch(teacherToken, `/api/v1/learning-items/${item.id}`, {
+        title: 'Lectura revisada',
+        expectedRevision: 1,
+      });
+      const published = await post(
+        teacherToken,
+        `/api/v1/learning-units/${unit.id}/items`,
+        { type: 'MATERIAL', title: 'Lectura publicada' },
+      );
+      await post(
+        teacherToken,
+        `/api/v1/learning-items/${published.id}/publish`,
+        {},
+      );
+
+      const yearId = structure.course.academicYearId as string;
+      await patch(admin, `/api/v1/academic-years/${yearId}`, {
+        status: 'CLOSED',
+      });
+      const before = {
+        units: await prisma.learningUnit.findMany({
+          where: { tenantId: 'closed-learning' },
+          orderBy: { id: 'asc' },
+        }),
+        items: await prisma.learningItem.findMany({
+          where: { tenantId: 'closed-learning' },
+          orderBy: { id: 'asc' },
+        }),
+        revisions: await prisma.contentRevision.count({
+          where: { tenantId: 'closed-learning' },
+        }),
+        receipts: await prisma.commandReceipt.count({
+          where: { tenantId: 'closed-learning' },
+        }),
+      };
+      const writes = [
+        () =>
+          api(teacherToken).post('/api/v1/learning-units').send({
+            courseSubjectId: structure.courseSubject.id,
+            title: 'No crear',
+          }),
+        () =>
+          api(teacherToken).patch(`/api/v1/learning-units/${unit.id}`).send({
+            title: 'No editar',
+            expectedRevision: 2,
+          }),
+        () =>
+          api(teacherToken)
+            .post(`/api/v1/learning-units/${unit.id}/archive`)
+            .send({}),
+        () =>
+          api(teacherToken)
+            .post(`/api/v1/learning-units/${archivedUnit.id}/restore`)
+            .send({}),
+        () =>
+          api(teacherToken)
+            .post(`/api/v1/learning-units/${unit.id}/items`)
+            .send({
+              type: 'MATERIAL',
+              title: 'No crear ítem',
+            }),
+        () =>
+          api(teacherToken).patch(`/api/v1/learning-items/${item.id}`).send({
+            title: 'No editar ítem',
+            expectedRevision: 2,
+          }),
+        () =>
+          api(teacherToken)
+            .post(`/api/v1/learning-items/${item.id}/publish`)
+            .send({}),
+        () =>
+          api(teacherToken)
+            .post(`/api/v1/learning-items/${published.id}/draft`)
+            .send({
+              title: 'No guardar borrador',
+              expectedRevision: 2,
+            }),
+        () =>
+          api(teacherToken)
+            .post(`/api/v1/learning-items/${published.id}/archive`)
+            .send({}),
+        () =>
+          api(teacherToken)
+            .post(`/api/v1/learning-units/${unit.id}/history/1/restore`)
+            .send({}),
+        () =>
+          api(teacherToken)
+            .post(`/api/v1/learning-items/${item.id}/history/1/restore`)
+            .send({}),
+      ];
+      for (const write of writes) {
+        const response = await write();
+        expect(response.status).toBe(409);
+        expect(response.body.error.message).toBe(
+          'The academic year is read-only.',
+        );
+      }
+      expect(
+        await prisma.learningUnit.findMany({
+          where: { tenantId: 'closed-learning' },
+          orderBy: { id: 'asc' },
+        }),
+      ).toEqual(before.units);
+      expect(
+        await prisma.learningItem.findMany({
+          where: { tenantId: 'closed-learning' },
+          orderBy: { id: 'asc' },
+        }),
+      ).toEqual(before.items);
+      expect(
+        await prisma.contentRevision.count({
+          where: { tenantId: 'closed-learning' },
+        }),
+      ).toBe(before.revisions);
+      expect(
+        await prisma.commandReceipt.count({
+          where: { tenantId: 'closed-learning' },
+        }),
+      ).toBe(before.receipts);
+
+      await api(teacherToken)
+        .get(`/api/v1/course-subjects/${structure.courseSubject.id}/learning`)
+        .expect(200);
+      await api(teacherToken)
+        .get(`/api/v1/learning-units/${unit.id}/history`)
+        .expect(200);
+      await api(teacherToken)
+        .get(`/api/v1/learning-items/${item.id}/history`)
+        .expect(200);
+      await api(teacherToken)
+        .get(`/api/v1/learning-items/${published.id}/draft`)
+        .expect(200);
+      await patch(admin, `/api/v1/academic-years/${yearId}`, {
+        status: 'ARCHIVED',
+      });
+      await api(admin)
+        .post('/api/v1/learning-units')
+        .send({
+          courseSubjectId: structure.courseSubject.id,
+          title: 'No crear',
+        })
+        .expect(409);
+    });
+
+    it('checks teacher assignment and tenant before the closed-year policy', async () => {
+      const adminA = await token('closed-scope-a', 'admin-a', ['TENANT_ADMIN']);
+      const structureA = await createStructure(adminA, '6° A', 'Lenguaje');
+      const assigned = await createTeacher(adminA, 'Ana', 'Asignada');
+      const unrelated = await createTeacher(adminA, 'Uri', 'Sin asignación');
+      await linkTeacher(assigned.id, 'teacher-assigned', adminA);
+      await linkTeacher(unrelated.id, 'teacher-unrelated', adminA);
+      await post(adminA, '/api/v1/course-subject-teachers', {
+        courseSubjectId: structureA.courseSubject.id,
+        teacherIds: [assigned.id],
+      });
+      const assignedToken = await token('closed-scope-a', 'teacher-assigned', [
+        'TEACHER',
+      ]);
+      const unrelatedToken = await token(
+        'closed-scope-a',
+        'teacher-unrelated',
+        ['TEACHER'],
+      );
+      const adminB = await token('closed-scope-b', 'admin-b', ['TENANT_ADMIN']);
+      const structureB = await createStructure(adminB, '6° B', 'Lenguaje');
+      await patch(
+        adminA,
+        `/api/v1/academic-years/${structureA.course.academicYearId}`,
+        {
+          status: 'CLOSED',
+        },
+      );
+      await api(unrelatedToken)
+        .post('/api/v1/learning-units')
+        .send({
+          courseSubjectId: structureA.courseSubject.id,
+          title: 'No acceso',
+        })
+        .expect(403);
+      await api(assignedToken)
+        .post('/api/v1/learning-units')
+        .send({
+          courseSubjectId: structureB.courseSubject.id,
+          title: 'No tenant',
+        })
+        .expect(404);
+      await post(adminB, '/api/v1/learning-units', {
+        courseSubjectId: structureB.courseSubject.id,
+        title: 'Año ajeno abierto',
+      });
+      await prisma.teacher.update({
+        where: { tenantId_id: { tenantId: 'closed-scope-a', id: assigned.id } },
+        data: { status: 'INACTIVE' },
+      });
+      await api(assignedToken)
+        .post('/api/v1/learning-units')
+        .send({
+          courseSubjectId: structureA.courseSubject.id,
+          title: 'Sesión revocada',
+        })
+        .expect(403);
+      expect(
+        await prisma.learningUnit.count({
+          where: { tenantId: 'closed-scope-a' },
+        }),
+      ).toBe(0);
+    });
+
     it('shows only entitled published content and evaluates elapsed schedules without a worker', async () => {
       const admin = await token('visibility-a', 'admin', ['TENANT_ADMIN']);
       const structure = await createStructure(admin, '5° A', 'Lenguaje');
