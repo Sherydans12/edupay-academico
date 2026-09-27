@@ -1584,20 +1584,34 @@ export function LegacyTeacherSubjectWorkspace({
                                             <Icon name="arrow-down" />
                                           </Button>
 
-                                          <Button
-                                            aria-label={`Editar ${item.title}`}
-                                            onClick={() => {
-                                              setItemFormDraft({
-                                                unitId: unit.id,
-                                                values: initialItemDraft(item),
-                                              });
-                                            }}
-                                            size="sm"
-                                            variant="secondary"
-                                          >
-                                            <Icon name="edit" />
-                                            Editar
-                                          </Button>
+                                          {item.publicationStatus !==
+                                          'ARCHIVED' ? (
+                                            <Button
+                                              aria-label={`Editar ${item.title}`}
+                                              onClick={() => {
+                                                if (
+                                                  item.publicationStatus ===
+                                                  'DRAFT'
+                                                ) {
+                                                  setItemFormDraft({
+                                                    unitId: unit.id,
+                                                    values:
+                                                      initialItemDraft(item),
+                                                  });
+                                                } else {
+                                                  setFullscreenEditorItem({
+                                                    item,
+                                                    unit,
+                                                  });
+                                                }
+                                              }}
+                                              size="sm"
+                                              variant="secondary"
+                                            >
+                                              <Icon name="edit" />
+                                              Editar
+                                            </Button>
+                                          ) : null}
 
                                           {attachmentSupported ? (
                                             <Button

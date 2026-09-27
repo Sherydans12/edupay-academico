@@ -517,6 +517,7 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       const api = {
         getLearningRoute,
         getTeacherContextSubjects,
+        getLearningItemDraft: vi.fn().mockResolvedValue({ draft: null }),
       } as unknown as AcademicApiClient;
 
       render(<TeacherSubjectScreen api={api} courseSubjectId={subject.id} />);
@@ -535,6 +536,15 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       expect(
         screen.getByRole('button', { name: `Editar ${item.title}` }),
       ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole('button', { name: `Editar ${item.title}` }),
+      );
+      expect(
+        await screen.findByText(/estás editando un borrador de trabajo/i),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole('button', { name: 'Guardar contenido' }),
+      ).toBeNull();
       expect(screen.getByText('No hay contenido en esta unidad.')).toBeTruthy();
       expect(
         screen.getByRole('button', {

@@ -322,7 +322,7 @@ describe('real Learning screens', () => {
   });
 
   it('requires explicit confirmation when the API rejects a sensitive published edit', async () => {
-    const updateLearningItem = vi
+    const publishLearningItemDraft = vi
       .fn()
       .mockRejectedValueOnce(
         new AcademicApiError({
@@ -334,13 +334,16 @@ describe('real Learning screens', () => {
         }),
       )
       .mockResolvedValueOnce(assignment);
+    const saveLearningItemDraft = vi.fn().mockResolvedValue({ id: 'draft-1' });
     const client = api({
       getTeacherContextSubjects: vi.fn(async () => [subject]),
       getLearningRoute: vi.fn(async () => ({
         ...route,
         units: [{ ...route.units[0]!, items: [assignment] }],
       })),
-      updateLearningItem,
+      getLearningItemDraft: vi.fn(async () => ({ draft: null })),
+      publishLearningItemDraft,
+      saveLearningItemDraft,
     });
     render(<TeacherSubjectScreen api={client} courseSubjectId={subjectId} />);
 
@@ -348,18 +351,25 @@ describe('real Learning screens', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /editar actividad real/i }),
     );
-    fireEvent.change(screen.getByLabelText('Instrucciones'), {
-      target: { value: 'Cambiar instrucciones.' },
+    await screen.findByText(/estás editando un borrador de trabajo/i);
+    fireEvent.change(screen.getByLabelText(/título del contenido/i), {
+      target: { value: 'Actividad real ajustada' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar contenido' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /guardar borrador de trabajo/i }),
+    );
+    await waitFor(() => expect(saveLearningItemDraft).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /publicar cambios/i }));
 
     expect(
       await screen.findByRole('heading', { name: 'Confirmar cambio sensible' }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar cambio' }));
-    expect(updateLearningItem).toHaveBeenLastCalledWith(
-      assignment.id,
-      expect.objectContaining({ confirmSensitiveChange: true }),
+    await waitFor(() =>
+      expect(publishLearningItemDraft).toHaveBeenLastCalledWith(
+        assignment.id,
+        expect.objectContaining({ confirmSensitiveChange: true }),
+      ),
     );
   });
 });

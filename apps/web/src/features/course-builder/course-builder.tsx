@@ -149,9 +149,7 @@ export function CourseBuilder({
 
       const isStaleRevision =
         (error instanceof AcademicApiError &&
-          (error.code === 'STALE_REVISION' ||
-            (error.status === 409 &&
-              error.code !== 'CONFIRMATION_REQUIRED'))) ||
+          error.code === 'STALE_REVISION') ||
         (error &&
           typeof error === 'object' &&
           'code' in error &&
@@ -878,9 +876,13 @@ export function CourseBuilder({
                   }}
                   onDuplicateItem={handleDuplicateItem}
                   onDuplicateUnit={handleDuplicateUnit}
-                  onEditItem={(unit, it) =>
-                    setActiveItemEditor({ item: it, unitId: unit.id })
-                  }
+                  onEditItem={(unit, it) => {
+                    if (it.publicationStatus === 'DRAFT') {
+                      setActiveItemEditor({ item: it, unitId: unit.id });
+                    } else {
+                      setFullscreenEditorItem({ item: it, unit });
+                    }
+                  }}
                   onEditUnit={(unit) => setActiveUnitEditor({ unit })}
                   onManageAttachments={(it) => setAttachmentItem(it)}
                   onMoveItemDown={(unit, it, idx) =>
