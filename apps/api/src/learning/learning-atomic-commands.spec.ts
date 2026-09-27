@@ -395,7 +395,15 @@ describe('Learning Content - Phase 3 Atomic Commands', () => {
               tenantId === 'tenant-a' &&
               (id === ids.courseSubject1 || id === ids.courseSubject2)
             ) {
-              return { id, tenantId, status: 'ACTIVE' };
+              return {
+                id,
+                tenantId,
+                status: 'ACTIVE',
+                course: {
+                  status: 'ACTIVE',
+                  academicYear: { status: 'ACTIVE' },
+                },
+              };
             }
             return null;
           },
