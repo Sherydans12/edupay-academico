@@ -20,6 +20,7 @@ import type { CreateDieUploadIntent } from '@edupay/contracts';
 import { AuthorizationService } from '../authorization/authorization.service';
 import { TenantCapability } from '../authorization/authorization.types';
 import type { AcademicRequestContext } from '../academic/academic-context';
+import { requireAcademicYearMutable } from '../academic/academic-year.policy';
 import {
   ACADEMIC_AUDIT_PORT,
   type AcademicAuditPort,
@@ -248,6 +249,7 @@ export class StorageService implements LearningAttachmentPort {
     } else {
       this.requireMatchingLearningAttachment(item.type, category);
       await this.requireTeacherOrTenantAdminForCourseSubject(context, item.courseSubjectId);
+      await this.requireMutableLearningCourseSubject(context, item.courseSubjectId);
     }
 
     let metadata: ReturnType<typeof validateUploadMetadata>;
@@ -353,6 +355,14 @@ export class StorageService implements LearningAttachmentPort {
         await this.failIntent(tenantId, intentId);
       }
       throw error;
+    }
+    if (intent.parentType === 'LEARNING_ITEM' && intent.category !== 'STUDENT_SUBMISSION') {
+      const item = await this.prisma.learningItem.findUnique({
+        where: { tenantId_id: { tenantId, id: intent.parentId } },
+        select: { courseSubjectId: true },
+      });
+      if (!item) this.notFound();
+      await this.requireMutableLearningCourseSubject(context, item.courseSubjectId);
     }
     if (intent.status === 'FINALIZED' && intent.finalizedFileObjectId) {
       const existing = await this.prisma.fileObject.findUnique({
@@ -1274,6 +1284,33 @@ export class StorageService implements LearningAttachmentPort {
       !(await this.hasTeacherAssignment(context, courseSubjectId))
     ) {
       this.deny();
+    }
+  }
+
+  private async requireMutableLearningCourseSubject(
+    context: AcademicRequestContext,
+    courseSubjectId: string,
+  ): Promise<void> {
+    const tenantId = TenantQueryScope.fromTrustedContext(context.tenant).tenantId;
+    const courseSubject = await this.prisma.courseSubject.findUnique({
+      where: { tenantId_id: { tenantId, id: courseSubjectId } },
+      select: {
+        status: true,
+        course: {
+          select: {
+            status: true,
+            academicYear: { select: { status: true } },
+          },
+        },
+      },
+    });
+    if (!courseSubject) this.notFound();
+    if (courseSubject.status !== 'ACTIVE') {
+      throw new ConflictException('Learning content can only be changed for an active CourseSubject.');
+    }
+    requireAcademicYearMutable(courseSubject.course.academicYear.status);
+    if (courseSubject.course.status === 'ARCHIVED') {
+      throw new ConflictException('The course is read-only.');
     }
   }
 

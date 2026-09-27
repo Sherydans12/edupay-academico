@@ -34,6 +34,7 @@ import {
 } from '../generated/prisma/client';
 import { PrismaService } from '../persistence/prisma.service';
 import { TenantQueryScope } from '../persistence/tenant-query-scope';
+import { requireAcademicYearMutable } from '../academic/academic-year.policy';
 import type { AcademicRequestContext } from '../academic/academic-context';
 import {
   ACADEMIC_AUDIT_PORT,
@@ -1106,7 +1107,7 @@ export class LearningService {
   async getDraft(context: AcademicRequestContext, id: string): Promise<object> {
     const scope = this.managerScope(context);
     const current = await this.learningItem(scope, id);
-    await this.requireCourseSubjectForMutation(
+    await this.requireCourseSubjectRead(
       context,
       scope,
       current.courseSubjectId,
@@ -2054,14 +2055,31 @@ export class LearningService {
     scope: TenantQueryScope,
     courseSubjectId: string,
   ): Promise<void> {
-    const courseSubject = await this.courseSubject(scope, courseSubjectId);
+    const courseSubject = await this.prisma.courseSubject.findUnique({
+      where: { tenantId_id: { tenantId: scope.tenantId, id: courseSubjectId } },
+      select: {
+        status: true,
+        course: {
+          select: {
+            status: true,
+            academicYear: { select: { status: true } },
+          },
+        },
+      },
+    });
+    if (!courseSubject) this.notFound();
+    if (!context.principal.roles.includes('TENANT_ADMIN')) {
+      await this.requireCourseSubjectRead(context, scope, courseSubjectId);
+    }
     if (courseSubject.status !== 'ACTIVE') {
       throw new ConflictException(
         'Learning content can only be changed for an active CourseSubject.',
       );
     }
-    if (context.principal.roles.includes('TENANT_ADMIN')) return;
-    await this.requireCourseSubjectRead(context, scope, courseSubjectId);
+    requireAcademicYearMutable(courseSubject.course.academicYear.status);
+    if (courseSubject.course.status === 'ARCHIVED') {
+      throw new ConflictException('The course is read-only.');
+    }
   }
 
   private async courseSubject(scope: TenantQueryScope, id: string) {
@@ -2382,7 +2400,7 @@ export class LearningService {
   ): Promise<object[]> {
     const scope = this.managerScope(context);
     const current = await this.learningUnit(scope, id);
-    await this.requireCourseSubjectForMutation(
+    await this.requireCourseSubjectRead(
       context,
       scope,
       current.courseSubjectId,
@@ -2396,7 +2414,7 @@ export class LearningService {
   ): Promise<object[]> {
     const scope = this.managerScope(context);
     const current = await this.learningItem(scope, id);
-    await this.requireCourseSubjectForMutation(
+    await this.requireCourseSubjectRead(
       context,
       scope,
       current.courseSubjectId,

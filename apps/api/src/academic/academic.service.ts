@@ -31,6 +31,7 @@ import type {
 } from '@edupay/contracts';
 
 import { AuthorizationService } from '../authorization/authorization.service';
+import { requireAcademicYearMutable } from './academic-year.policy';
 import { TenantCapability } from '../authorization/authorization.types';
 import type {
   AcademicYearStatus,
@@ -1387,9 +1388,7 @@ export class AcademicService {
   }
 
   private requireYearMutable(status: AcademicYearStatus): void {
-    if (status === 'CLOSED' || status === 'ARCHIVED') {
-      throw new ConflictException('The academic year is read-only.');
-    }
+    requireAcademicYearMutable(status);
   }
 
   private requireStructuralMutation(

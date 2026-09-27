@@ -631,6 +631,75 @@ describe.runIf(testDatabaseUrl)(
         .expect(403);
     });
 
+    it('preserves closed-year attachments but rejects new and reserved teacher uploads', async () => {
+      const admin = await token('closed-upload', 'admin', ['TENANT_ADMIN']);
+      const setup = await createDeliverable(
+        admin,
+        'closed-upload',
+        'teacher-closed-upload',
+        'student-closed-upload',
+      );
+      const bytes = Buffer.from('%PDF-closed-year-attachment');
+      const completed = await createIntentOnly(
+        setup.teacherToken,
+        setup.item.id,
+        'ASSIGNMENT_SOURCE',
+        'existing.pdf',
+        bytes,
+      );
+      await transfer(setup.teacherToken, completed.id, 'existing.pdf', bytes);
+      const reserved = await createIntentOnly(
+        setup.teacherToken,
+        setup.item.id,
+        'ASSIGNMENT_SOURCE',
+        'reserved.pdf',
+        bytes,
+      );
+      await request(application.getHttpServer())
+        .patch(`/api/v1/academic-years/${setup.course.academicYearId}`)
+        .auth(admin, { type: 'bearer' })
+        .send({ status: 'CLOSED' })
+        .expect(200);
+      const fileCount = await prisma.fileObject.count({
+        where: { tenantId: 'closed-upload' },
+      });
+      const referenceCount = await prisma.fileReference.count({
+        where: { tenantId: 'closed-upload', learningItemId: setup.item.id },
+      });
+      await api(setup.teacherToken)
+        .post('/api/v1/file-upload-intents')
+        .send({
+          parentType: 'LEARNING_ITEM',
+          parentId: setup.item.id,
+          category: 'ASSIGNMENT_SOURCE',
+          filename: 'new.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: bytes.length,
+        })
+        .expect(409);
+      await api(setup.teacherToken)
+        .post(`/api/v1/file-upload-intents/${reserved.id}/content`)
+        .attach('file', bytes, {
+          filename: 'reserved.pdf',
+          contentType: 'application/pdf',
+        })
+        .expect(409);
+      expect(
+        await prisma.fileObject.count({
+          where: { tenantId: 'closed-upload' },
+        }),
+      ).toBe(fileCount);
+      expect(
+        await prisma.fileReference.count({
+          where: { tenantId: 'closed-upload', learningItemId: setup.item.id },
+        }),
+      ).toBe(referenceCount);
+      const attachments = await api(setup.teacherToken)
+        .get(`/api/v1/learning-items/${setup.item.id}/attachments`)
+        .expect(200);
+      expect(attachments.body).toHaveLength(1);
+    });
+
     function api(accessToken: string) {
       const server = application.getHttpServer();
       return {
