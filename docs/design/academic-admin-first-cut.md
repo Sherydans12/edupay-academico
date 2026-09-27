@@ -25,12 +25,19 @@ La lista de cuentas e invitaciones de Identity, asociaciones, matrículas, asign
 
 ## Capturas sintéticas
 
-Las capturas comparan el build de `origin/main` con este corte. Se generaron en un preview local aislado con identidades y personas sintéticas, a 1440 × 900 (escritorio) y 480 × 844 (móvil); no se usó producción. La revisión interactiva también cubrió 390 px.
+Las capturas comparan el build de `origin/main` con este corte. Se generaron en un preview local aislado con identidades y personas sintéticas, a 1440 × 900 (escritorio) y 480 × 844 (móvil); no se usó producción. La revisión interactiva también cubrió 390 px. Cada imagen se muestra en línea y enlaza al archivo original para que la comparación siga disponible al abrir este documento en GitHub.
 
-| Antes (`origin/main`)                                                        | Después (este corte)                                                        |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [Administración — escritorio](screenshots/academic-admin-before-desktop.png) | [Administración — escritorio](screenshots/academic-admin-after-desktop.png) |
-| [Estructura — móvil](screenshots/academic-admin-before-mobile.png)           | [Estructura — móvil](screenshots/academic-admin-after-mobile.png)           |
+### Estructura académica — escritorio (1440 × 900)
+
+| Antes (`origin/main`) | Después (este corte) |
+| --- | --- |
+| [![Estructura académica antes — escritorio, datos sintéticos](./screenshots/academic-admin-before-desktop.png)](./screenshots/academic-admin-before-desktop.png) | [![Estructura académica después — escritorio, datos sintéticos](./screenshots/academic-admin-after-desktop.png)](./screenshots/academic-admin-after-desktop.png) |
+
+### Estructura — móvil (480 × 844)
+
+| Antes (`origin/main`) | Después (este corte) |
+| --- | --- |
+| [![Estructura antes — móvil, datos sintéticos](./screenshots/academic-admin-before-mobile.png)](./screenshots/academic-admin-before-mobile.png) | [![Estructura después — móvil, datos sintéticos](./screenshots/academic-admin-after-mobile.png)](./screenshots/academic-admin-after-mobile.png) |
 
 ## Validación
 
