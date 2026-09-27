@@ -1,8 +1,9 @@
 # EduPay Académico documentation
 
 La documentación siguiente distingue decisiones aceptadas, propuestas e
-historial de operación. El runtime más reciente documentado se verificó el
-**2026-09-24**; esta entrada no representa una comprobación en vivo posterior.
+historial de operación. El mapa transversal conserva el corte del **2026-09-24**;
+el [cierre del frontend de Administración](operations/academic-admin-frontend-release-2026-09-27.md)
+registra por separado la verificación FRONT del **2026-09-27**.
 
 ## Empieza aquí
 
@@ -11,8 +12,9 @@ historial de operación. El runtime más reciente documentado se verificó el
 3. [Runbook de cambio, release y rollback](operations/RUNBOOK.md)
    - [Estado de publicación del primer corte frontend Académico](operations/academic-frontend-first-cut-release-2026-09-24.md)
 4. [Cierre de release DIE del 24/09](operations/die-release-closeout-2026-09-24.md)
-5. [Guía de primer uso del piloto DIE](operations/DIE-PILOT-GUIDE.md); configuración y validación por usuario siguen pendientes.
-6. [Inventario Coolify](operations/coolify-inventory.json), [reconciliación del destino PostgreSQL](operations/die-database-target-reconciliation-2026-09-24.md) y [respaldo/restauración](deployment/backup-restore.md)
+5. [Cierre de integración y despliegue FRONT de Administración del 27/09](operations/academic-admin-frontend-release-2026-09-27.md)
+6. [Guía de primer uso del piloto DIE](operations/DIE-PILOT-GUIDE.md); configuración y validación por usuario siguen pendientes.
+7. [Inventario Coolify](operations/coolify-inventory.json), [reconciliación del destino PostgreSQL](operations/die-database-target-reconciliation-2026-09-24.md) y [respaldo/restauración](deployment/backup-restore.md)
 
 `main` de Académico e Identity integra los cierres documentales #15 y #16,
 respectivamente. Para el estado exacto de cada recurso, usa el inventario y

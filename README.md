@@ -12,6 +12,7 @@ y las instrucciones de [AGENTS.md](AGENTS.md).
 - [Topología y artefactos productivos](docs/operations/PRODUCTION.md)
 - [Runbook de despliegue, rollback y entornos aislados](docs/operations/RUNBOOK.md)
 - [Cierre DIE, migraciones y último runtime verificado](docs/operations/die-release-closeout-2026-09-24.md)
+- [Cierre del corte de Administración: integración y despliegue FRONT](docs/operations/academic-admin-frontend-release-2026-09-27.md)
 - [Guía pendiente del piloto DIE](docs/operations/DIE-PILOT-GUIDE.md)
 - [Inventario Coolify estructurado](docs/operations/coolify-inventory.json)
 
