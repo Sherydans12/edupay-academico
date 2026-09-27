@@ -12,7 +12,9 @@ import type { UnitEditorFormValues } from './types';
 export interface UnitEditorProps {
   initialUnit?: LearningUnitWithItems | null | undefined;
   saving?: boolean | undefined;
-  onSave: (values: UnitEditorFormValues) => Promise<void> | void;
+  onSave: (
+    values: UnitEditorFormValues,
+  ) => Promise<boolean | void> | boolean | void;
   onCancel: () => void;
 }
 
@@ -79,8 +81,7 @@ export function UnitEditor({
   }, [handleCancelClick]);
 
   const onSubmit = async (values: UnitEditorFormValues) => {
-    await onSave(values);
-    reset(values);
+    if ((await onSave(values)) !== false) reset(values);
   };
 
   return (

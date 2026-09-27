@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -6,6 +7,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useEffect, useState } from 'react';
 
 import {
   IdentityApiError,
@@ -106,6 +108,114 @@ afterEach(() => {
 });
 
 describe('IdentitySessionProvider', () => {
+  it('clears teacher-local view state when the active membership changes', async () => {
+    navigation.pathname = '/docente';
+    const first = { ...membership, roles: ['TEACHER' as const] };
+    const second = {
+      ...first,
+      membershipId: 'membership-2',
+      tenantId: 'tenant-2',
+    };
+    const client = fakeClient({
+      refresh: vi.fn(async () => ({ ...token, activeMembership: first })),
+      switchContext: vi.fn(async () => ({
+        ...token,
+        activeMembership: second,
+      })),
+    });
+    function LocalState() {
+      const [count, setCount] = useState(0);
+      return <button onClick={() => setCount(count + 1)}>local:{count}</button>;
+    }
+    render(
+      <IdentitySessionProvider client={client}>
+        <Probe />
+        <LocalState />
+      </IdentitySessionProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'local:0' }));
+    expect(screen.getByRole('button', { name: 'local:1' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'switch' }));
+    expect(await screen.findByText('membership-2')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'local:0' })).toBeTruthy();
+  });
+  it('hides the previous tenant while a context switch is pending', async () => {
+    navigation.pathname = '/docente';
+    const first = { ...membership, roles: ['TEACHER' as const] };
+    const second = {
+      ...first,
+      membershipId: 'membership-2',
+      tenantId: 'tenant-2',
+    };
+    let completeSwitch!: (value: typeof token) => void;
+    const client = fakeClient({
+      refresh: vi.fn(async () => ({ ...token, activeMembership: first })),
+      switchContext: vi.fn(
+        () =>
+          new Promise<typeof token>((resolve) => {
+            completeSwitch = resolve;
+          }),
+      ),
+    });
+    render(
+      <IdentitySessionProvider client={client}>
+        <Probe />
+        <h1>Datos del primer tenant</h1>
+      </IdentitySessionProvider>,
+    );
+    expect(await screen.findByText('Datos del primer tenant')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'switch' }));
+    expect(screen.queryByText('Datos del primer tenant')).toBeNull();
+    expect(screen.getByLabelText('Restaurando sesión')).toBeTruthy();
+    completeSwitch({ ...token, activeMembership: second });
+    expect(await screen.findByText('membership-2')).toBeTruthy();
+  });
+  it('ignores a response from the previous tenant after the teacher tree remounts', async () => {
+    navigation.pathname = '/docente';
+    const first = { ...membership, roles: ['TEACHER' as const] };
+    const second = {
+      ...first,
+      membershipId: 'membership-2',
+      tenantId: 'tenant-2',
+    };
+    let resolveOld!: (value: string) => void;
+    const oldResponse = new Promise<string>((resolve) => {
+      resolveOld = resolve;
+    });
+    const client = fakeClient({
+      refresh: vi.fn(async () => ({ ...token, activeMembership: first })),
+      switchContext: vi.fn(async () => ({
+        ...token,
+        activeMembership: second,
+      })),
+    });
+    function RemoteView() {
+      const tenantId = useIdentitySession()?.session?.tenantId;
+      const [value, setValue] = useState(() =>
+        tenantId === 'tenant-2'
+          ? 'Datos del segundo tenant'
+          : 'Cargando datos docentes',
+      );
+      useEffect(() => {
+        if (tenantId === 'tenant-1') void oldResponse.then(setValue);
+      }, [tenantId]);
+      return <p>{value}</p>;
+    }
+    render(
+      <IdentitySessionProvider client={client}>
+        <Probe />
+        <RemoteView />
+      </IdentitySessionProvider>,
+    );
+    expect(await screen.findByText('membership-1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'switch' }));
+    expect(await screen.findByText('Datos del segundo tenant')).toBeTruthy();
+    await act(async () => {
+      resolveOld('Datos antiguos del primer tenant');
+      await oldResponse;
+    });
+    expect(screen.queryByText('Datos antiguos del primer tenant')).toBeNull();
+  });
   it('blocks protected content until refresh-cookie bootstrap resolves and keeps the token out of browser persistence', async () => {
     let resolveRefresh!: (value: typeof token) => void;
     const refresh = vi.fn(
@@ -247,7 +357,9 @@ describe('IdentitySessionProvider', () => {
         <Probe />
       </IdentitySessionProvider>,
     );
-    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/die'));
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith('/die'),
+    );
     expect(await screen.findByText('membership-staff')).toBeTruthy();
   });
 

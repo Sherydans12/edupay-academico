@@ -336,8 +336,8 @@ export function TeacherDashboardScreen({
               >
                 <div className="section-heading">
                   <div>
-                    <h2 id="teacher-route-title">Contenido autorizado</h2>
-                    <p>Abre un espacio para organizar sus unidades e ítems.</p>
+                    <h2 id="teacher-route-title">Mis asignaturas</h2>
+                    <p>Abre un curso para organizar unidades y contenido.</p>
                   </div>
                   <Link href="/docente/asignaturas">
                     Ver todas <Icon name="chevron-right" />
@@ -346,7 +346,7 @@ export function TeacherDashboardScreen({
 
                 {data.subjects.length ? (
                   <div className="subject-grid subject-grid--overview">
-                    {data.subjects.map((subject, index) => (
+                    {data.subjects.slice(0, 6).map((subject, index) => (
                       <SubjectCard
                         key={subject.id}
                         subject={subjectCard(subject, index, 'teacher')}
@@ -1584,20 +1584,34 @@ export function LegacyTeacherSubjectWorkspace({
                                             <Icon name="arrow-down" />
                                           </Button>
 
-                                          <Button
-                                            aria-label={`Editar ${item.title}`}
-                                            onClick={() => {
-                                              setItemFormDraft({
-                                                unitId: unit.id,
-                                                values: initialItemDraft(item),
-                                              });
-                                            }}
-                                            size="sm"
-                                            variant="secondary"
-                                          >
-                                            <Icon name="edit" />
-                                            Editar
-                                          </Button>
+                                          {item.publicationStatus !==
+                                          'ARCHIVED' ? (
+                                            <Button
+                                              aria-label={`Editar ${item.title}`}
+                                              onClick={() => {
+                                                if (
+                                                  item.publicationStatus ===
+                                                  'DRAFT'
+                                                ) {
+                                                  setItemFormDraft({
+                                                    unitId: unit.id,
+                                                    values:
+                                                      initialItemDraft(item),
+                                                  });
+                                                } else {
+                                                  setFullscreenEditorItem({
+                                                    item,
+                                                    unit,
+                                                  });
+                                                }
+                                              }}
+                                              size="sm"
+                                              variant="secondary"
+                                            >
+                                              <Icon name="edit" />
+                                              Editar
+                                            </Button>
+                                          ) : null}
 
                                           {attachmentSupported ? (
                                             <Button
@@ -2113,6 +2127,10 @@ export function TeacherReviewsScreen({
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const currentSession = useTrustedCurrentSession(session).session;
   const data = useTeacherReviewWorkspace(client);
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
+  const reviewContexts = data.contexts.filter(
+    (context) => context.items.length,
+  );
 
   return (
     <AppShell dataMode="real" session={currentSession}>
@@ -2126,33 +2144,56 @@ export function TeacherReviewsScreen({
         loading={data.loading}
         onRetry={() => void data.load()}
       >
-        {data.contexts.some((context) => context.items.length) ? (
-          <div className="review-contexts">
-            {data.contexts
-              .filter((context) => context.items.length)
-              .map((context) => (
-                <section className="review-context" key={context.subject.id}>
-                  <div className="section-heading">
-                    <div>
-                      <h2>
-                        {subjectName(context.subject)} ·{' '}
-                        {courseName(context.subject)}
-                      </h2>
-                      <p>Entregas y evaluaciones de esta asignatura.</p>
+        {reviewContexts.length ? (
+          <>
+            {reviewContexts.length > 1 ? (
+              <div className="teacher-list-controls">
+                <Select
+                  id="teacher-review-subject"
+                  label="Filtrar por asignatura"
+                  onChange={(event) => setSelectedSubjectId(event.target.value)}
+                  value={selectedSubjectId}
+                >
+                  <option value="">Todas las asignaturas</option>
+                  {reviewContexts.map(({ subject }) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subjectName(subject)} · {courseName(subject)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+            <div className="review-contexts">
+              {reviewContexts
+                .filter(
+                  (context) =>
+                    !selectedSubjectId ||
+                    context.subject.id === selectedSubjectId,
+                )
+                .map((context) => (
+                  <section className="review-context" key={context.subject.id}>
+                    <div className="section-heading">
+                      <div>
+                        <h2>
+                          {subjectName(context.subject)} ·{' '}
+                          {courseName(context.subject)}
+                        </h2>
+                        <p>Entregas y evaluaciones de esta asignatura.</p>
+                      </div>
+                      <Badge tone="info">
+                        {context.items.length} contenido
+                        {context.items.length === 1 ? '' : 's'}
+                      </Badge>
                     </div>
-                    <Badge tone="info">
-                      {context.items.length} contenido
-                      {context.items.length === 1 ? '' : 's'}
-                    </Badge>
-                  </div>
-                  <TeacherSubmissionQueue
-                    api={client}
-                    courseSubjectId={context.subject.id}
-                    items={context.items}
-                  />
-                </section>
-              ))}
-          </div>
+                    <TeacherSubmissionQueue
+                      api={client}
+                      courseSubjectId={context.subject.id}
+                      items={context.items}
+                    />
+                  </section>
+                ))}
+            </div>
+          </>
         ) : (
           <EmptyState
             description="Cuando tus estudiantes envíen actividades o evaluaciones aparecerán aquí."

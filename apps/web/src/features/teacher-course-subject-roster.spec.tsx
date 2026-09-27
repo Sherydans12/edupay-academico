@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -64,6 +64,45 @@ function client(overrides: Partial<AcademicApiClient>): AcademicApiClient {
 }
 
 describe('Teacher course subject roster route', () => {
+  it('searches all authorized students after paging', async () => {
+    const roster = Array.from({ length: 32 }, (_, index) => ({
+      access: ['COURSE_DEFAULT' as const],
+      student: {
+        id: `student-${index + 1}`,
+        identityUserId: null,
+        source: 'MANUAL',
+        externalReference: null,
+        firstName: 'Estudiante',
+        lastName: `Número ${String(index + 1).padStart(2, '0')}`,
+        email: null,
+        status: 'ACTIVE' as const,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    }));
+    render(
+      <TeacherCourseSubjectRosterScreen
+        api={client({
+          getTeacherContextSubjects: vi.fn(async () => [subject]),
+          getTeacherCourseSubjectRoster: vi.fn(async () => roster),
+        })}
+        courseSubjectId={subjectId}
+      />,
+    );
+    expect(await screen.findByText('32 estudiantes')).toBeTruthy();
+    expect(screen.queryByText('Estudiante Número 32')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    expect(screen.getByText('Estudiante Número 32')).toBeTruthy();
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: 'Buscar estudiante' }),
+      {
+        target: { value: 'Número 32' },
+      },
+    );
+    expect(screen.getByText('Estudiante Número 32')).toBeTruthy();
+    expect(screen.queryByText('Página 2 de 2')).toBeNull();
+  });
+
   it('loads the authorized roster using the synthetic teacher session', async () => {
     const getTeacherCourseSubjectRoster = vi.fn(async () => [
       {

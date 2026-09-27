@@ -1,6 +1,14 @@
 'use client';
 
-import { Alert, Badge, Button, Card, EmptyState, Skeleton } from '@edupay/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  Skeleton,
+} from '@edupay/ui';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -131,23 +139,15 @@ export function TeacherAcademicSubjectsScreen({
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const currentSession = useTrustedCurrentSession(session).session;
   const { error, items, load, loading } = useContextSubjects(client, 'teacher');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [roster, setRoster] = useState<
-    Awaited<ReturnType<AcademicApiClient['getTeacherCourseSubjectRoster']>>
-  >([]);
-  const [rosterLoading, setRosterLoading] = useState(false);
-
-  async function showRoster(id: string) {
-    setSelectedId(id);
-    setRosterLoading(true);
-    try {
-      setRoster(await client.getTeacherCourseSubjectRoster(id));
-    } catch {
-      setRoster([]);
-    } finally {
-      setRosterLoading(false);
-    }
-  }
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const filtered = items.filter((item) =>
+    `${subjectName(item)} ${courseName(item)}`
+      .toLocaleLowerCase('es-CL')
+      .includes(query.trim().toLocaleLowerCase('es-CL')),
+  );
+  const pageSize = 12;
+  const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   return (
     <AppShell dataMode="real" session={currentSession}>
@@ -157,65 +157,84 @@ export function TeacherAcademicSubjectsScreen({
       />
       <ContextState error={error} loading={loading} onRetry={() => void load()}>
         {items.length ? (
-          <div className="academic-context-grid">
-            {items.map((item) => (
-              <Card className="academic-context-card" key={item.id}>
-                <div className="academic-context-card__mark">
-                  {subjectName(item).slice(0, 3).toUpperCase()}
-                </div>
-                <div>
-                  <h2>{subjectName(item)}</h2>
-                  <p>{courseName(item)}</p>
-                  <Badge tone="success">Asignado por Académico</Badge>
-                </div>
-                <div className="context-card__actions">
-                  <Button
-                    onClick={() => void showRoster(item.id)}
-                    variant="secondary"
-                  >
-                    <Icon name="people" />
-                    Ver estudiantes
-                  </Button>
-                  <Link
-                    className="button-link button-link--primary"
-                    href={`/docente/asignaturas/${item.id}`}
-                  >
-                    Abrir espacio <Icon name="chevron-right" />
-                  </Link>
-                </div>
-                <div className="academic-context-card__boundary">
-                  <Icon name="layers" />
-                  <span>
-                    Organiza el contenido y las actividades de esta asignatura.
-                  </span>
-                </div>
-                {selectedId === item.id ? (
-                  <div aria-live="polite" className="academic-roster">
-                    {rosterLoading ? (
-                      <Skeleton />
-                    ) : roster.length ? (
-                      <ul>
-                        {roster.map((entry) => (
-                          <li key={entry.student.id}>
-                            <span>
-                              {entry.student.firstName} {entry.student.lastName}
-                            </span>
-                            <small>
-                              {entry.access.includes('DIRECT')
-                                ? 'Acceso directo'
-                                : 'Curso por defecto'}
-                            </small>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>No hay estudiantes disponibles para mostrar.</p>
-                    )}
-                  </div>
-                ) : null}
-              </Card>
-            ))}
-          </div>
+          <>
+            <div className="teacher-list-controls">
+              <Input
+                id="teacher-subject-search"
+                label="Buscar por asignatura o curso"
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(0);
+                }}
+                type="search"
+                value={query}
+              />
+              <span aria-live="polite">
+                {filtered.length} asignatura{filtered.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {filtered.length ? (
+              <div className="academic-context-grid teacher-context-grid">
+                {visible.map((item) => (
+                  <Card className="academic-context-card" key={item.id}>
+                    <div className="academic-context-card__mark">
+                      {subjectName(item).slice(0, 3).toUpperCase()}
+                    </div>
+                    <div>
+                      <h2>{subjectName(item)}</h2>
+                      <p>{courseName(item)}</p>
+                      <Badge tone="success">Asignación activa</Badge>
+                    </div>
+                    <div className="context-card__actions">
+                      <Link
+                        className="button-link button-link--secondary"
+                        href={`/docente/asignaturas/${item.id}/estudiantes`}
+                      >
+                        <Icon name="people" />
+                        Ver estudiantes
+                      </Link>
+                      <Link
+                        className="button-link button-link--primary"
+                        href={`/docente/asignaturas/${item.id}`}
+                      >
+                        Abrir espacio <Icon name="chevron-right" />
+                      </Link>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={<Icon name="book" />}
+                title="Sin coincidencias"
+                description="Prueba con otra asignatura o curso."
+              />
+            )}
+            {filtered.length > pageSize ? (
+              <nav
+                aria-label="Páginas de asignaturas"
+                className="teacher-list-pages"
+              >
+                <Button
+                  disabled={page === 0}
+                  onClick={() => setPage(page - 1)}
+                  variant="secondary"
+                >
+                  Anterior
+                </Button>
+                <span>
+                  Página {page + 1} de {Math.ceil(filtered.length / pageSize)}
+                </span>
+                <Button
+                  disabled={(page + 1) * pageSize >= filtered.length}
+                  onClick={() => setPage(page + 1)}
+                  variant="secondary"
+                >
+                  Siguiente
+                </Button>
+              </nav>
+            ) : null}
+          </>
         ) : (
           <EmptyState
             icon={<Icon name="book" />}

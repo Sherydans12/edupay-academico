@@ -517,6 +517,7 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       const api = {
         getLearningRoute,
         getTeacherContextSubjects,
+        getLearningItemDraft: vi.fn().mockResolvedValue({ draft: null }),
       } as unknown as AcademicApiClient;
 
       render(<TeacherSubjectScreen api={api} courseSubjectId={subject.id} />);
@@ -535,6 +536,15 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       expect(
         screen.getByRole('button', { name: `Editar ${item.title}` }),
       ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole('button', { name: `Editar ${item.title}` }),
+      );
+      expect(
+        await screen.findByText(/estás editando un borrador de trabajo/i),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole('button', { name: 'Guardar contenido' }),
+      ).toBeNull();
       expect(screen.getByText('No hay contenido en esta unidad.')).toBeTruthy();
       expect(
         screen.getByRole('button', {
@@ -572,7 +582,14 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
     });
 
     it('renders teacher reviews screen with submission queue per subject', async () => {
-      const getTeacherContextSubjects = vi.fn().mockResolvedValue([subject]);
+      const otherSubject = {
+        ...subject,
+        id: 'course-subject-2',
+        subject: { ...subject.subject, name: 'Matemática' },
+      };
+      const getTeacherContextSubjects = vi
+        .fn()
+        .mockResolvedValue([subject, otherSubject]);
       const getLearningRoute = vi.fn().mockResolvedValue({
         courseSubjectId: subject.id,
         units: [unit],
@@ -591,8 +608,22 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
         await screen.findByRole('heading', { name: 'Revisiones' }),
       ).toBeTruthy();
       expect(
-        await screen.findByText('Lenguaje y Comunicación · 7º Básico A'),
+        await screen.findByRole('heading', {
+          name: 'Lenguaje y Comunicación · 7º Básico A',
+        }),
       ).toBeTruthy();
+      fireEvent.change(
+        screen.getByRole('combobox', { name: 'Filtrar por asignatura' }),
+        { target: { value: otherSubject.id } },
+      );
+      expect(
+        screen.getByRole('heading', { name: 'Matemática · 7º Básico A' }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole('heading', {
+          name: 'Lenguaje y Comunicación · 7º Básico A',
+        }),
+      ).toBeNull();
     });
   });
 });
