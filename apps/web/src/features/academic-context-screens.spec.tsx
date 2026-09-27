@@ -44,7 +44,7 @@ function client(overrides: Partial<AcademicApiClient>): AcademicApiClient {
 }
 
 describe('Academic context screens', () => {
-  it('renders the teacher assigned-subject view and authorized roster', async () => {
+  it('shows only assigned subjects and links to the authorized roster', async () => {
     render(
       <TeacherAcademicSubjectsScreen
         api={client({
@@ -72,9 +72,18 @@ describe('Academic context screens', () => {
     expect(
       await screen.findByRole('heading', { name: 'Lenguaje y Comunicación' }),
     ).toBeTruthy();
-    expect(await screen.findByText(/asignado por académico/i)).toBeTruthy();
+    expect(await screen.findByText(/asignación activa/i)).toBeTruthy();
     expect(screen.queryByText(/learning api|coursesubjects/i)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /ver estudiantes/i }));
-    expect(await screen.findByText('Emilia Vargas')).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: /ver estudiantes/i })
+        .getAttribute('href'),
+    ).toBe(`/docente/asignaturas/${id}/estudiantes`);
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: /buscar por asignatura o curso/i }),
+      { target: { value: 'matemática' } },
+    );
+    expect(screen.getByText('Sin coincidencias')).toBeTruthy();
+    expect(screen.queryByText('Emilia Vargas')).toBeNull();
   });
 });

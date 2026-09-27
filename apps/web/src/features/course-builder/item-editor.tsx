@@ -21,7 +21,9 @@ export interface ItemEditorProps {
   unitId: string;
   expectedItemVersion?: number | undefined;
   saving?: boolean | undefined;
-  onSave: (values: ItemEditorFormValues) => Promise<void> | void;
+  onSave: (
+    values: ItemEditorFormValues,
+  ) => Promise<boolean | void> | boolean | void;
   onCancel: () => void;
   onOpenAdvancedEditor?: (() => void) | undefined;
 }
@@ -144,8 +146,7 @@ export function ItemEditor({
           ? legacyBody
           : values.instructions,
     };
-    await onSave(nextValues);
-    reset(nextValues); // resets isDirty after successful save
+    if ((await onSave(nextValues)) !== false) reset(nextValues);
   };
 
   return (

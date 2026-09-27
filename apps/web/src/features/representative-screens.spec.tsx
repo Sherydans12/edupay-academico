@@ -104,7 +104,7 @@ describe('representative workspaces', () => {
       screen.getByRole('heading', { name: 'Buenos días, Camila' }),
     ).toBeTruthy();
     expect(
-      await screen.findByRole('heading', { name: 'Contenido autorizado' }),
+      await screen.findByRole('heading', { name: 'Mis asignaturas' }),
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: /ver contenido/i })).toBeTruthy();
     expect(screen.queryByText('Emilia Vargas')).toBeNull();

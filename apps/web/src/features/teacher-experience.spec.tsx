@@ -572,7 +572,14 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
     });
 
     it('renders teacher reviews screen with submission queue per subject', async () => {
-      const getTeacherContextSubjects = vi.fn().mockResolvedValue([subject]);
+      const otherSubject = {
+        ...subject,
+        id: 'course-subject-2',
+        subject: { ...subject.subject, name: 'Matemática' },
+      };
+      const getTeacherContextSubjects = vi
+        .fn()
+        .mockResolvedValue([subject, otherSubject]);
       const getLearningRoute = vi.fn().mockResolvedValue({
         courseSubjectId: subject.id,
         units: [unit],
@@ -591,8 +598,22 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
         await screen.findByRole('heading', { name: 'Revisiones' }),
       ).toBeTruthy();
       expect(
-        await screen.findByText('Lenguaje y Comunicación · 7º Básico A'),
+        await screen.findByRole('heading', {
+          name: 'Lenguaje y Comunicación · 7º Básico A',
+        }),
       ).toBeTruthy();
+      fireEvent.change(
+        screen.getByRole('combobox', { name: 'Filtrar por asignatura' }),
+        { target: { value: otherSubject.id } },
+      );
+      expect(
+        screen.getByRole('heading', { name: 'Matemática · 7º Básico A' }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole('heading', {
+          name: 'Lenguaje y Comunicación · 7º Básico A',
+        }),
+      ).toBeNull();
     });
   });
 });

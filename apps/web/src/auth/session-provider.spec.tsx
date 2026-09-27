@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 
 import {
   IdentityApiError,
@@ -106,6 +107,37 @@ afterEach(() => {
 });
 
 describe('IdentitySessionProvider', () => {
+  it('clears teacher-local view state when the active membership changes', async () => {
+    navigation.pathname = '/docente';
+    const first = { ...membership, roles: ['TEACHER' as const] };
+    const second = {
+      ...first,
+      membershipId: 'membership-2',
+      tenantId: 'tenant-2',
+    };
+    const client = fakeClient({
+      refresh: vi.fn(async () => ({ ...token, activeMembership: first })),
+      switchContext: vi.fn(async () => ({
+        ...token,
+        activeMembership: second,
+      })),
+    });
+    function LocalState() {
+      const [count, setCount] = useState(0);
+      return <button onClick={() => setCount(count + 1)}>local:{count}</button>;
+    }
+    render(
+      <IdentitySessionProvider client={client}>
+        <Probe />
+        <LocalState />
+      </IdentitySessionProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'local:0' }));
+    expect(screen.getByRole('button', { name: 'local:1' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'switch' }));
+    expect(await screen.findByText('membership-2')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'local:0' })).toBeTruthy();
+  });
   it('blocks protected content until refresh-cookie bootstrap resolves and keeps the token out of browser persistence', async () => {
     let resolveRefresh!: (value: typeof token) => void;
     const refresh = vi.fn(

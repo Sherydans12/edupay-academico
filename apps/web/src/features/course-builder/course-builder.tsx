@@ -196,6 +196,7 @@ export function CourseBuilder({
         await action();
         dispatch({ commandId, type: 'CONFIRM_COMMAND' });
         setActionStatus(successMsg);
+        return true;
       } catch (err) {
         const handled409 = await handleConcurrencyError(commandId, err);
         if (!handled409) {
@@ -219,6 +220,7 @@ export function CourseBuilder({
       } finally {
         setSaving(false);
       }
+      return false;
     },
     [handleConcurrencyError],
   );
@@ -240,7 +242,7 @@ export function CourseBuilder({
           title: values.title.trim(),
         },
       });
-      await runCommand(
+      const saved = await runCommand(
         commandId,
         async () => {
           await api.updateLearningUnit(
@@ -257,9 +259,11 @@ export function CourseBuilder({
         },
         'Unidad actualizada.',
       );
+      if (saved) setActiveUnitEditor(null);
+      return saved;
     } else {
       // Create new unit
-      await runCommand(
+      const saved = await runCommand(
         commandId,
         async () => {
           await api.createLearningUnit(
@@ -277,8 +281,9 @@ export function CourseBuilder({
         },
         'Unidad creada.',
       );
+      if (saved) setActiveUnitEditor(null);
+      return saved;
     }
-    setActiveUnitEditor(null);
   };
 
   const handleMoveUnit = async (index: number, direction: -1 | 1) => {
@@ -450,12 +455,14 @@ export function CourseBuilder({
         if (onRefreshRoute) await onRefreshRoute();
       };
 
-      await runCommand(
+      const saved = await runCommand(
         commandId,
         () => executeUpdate(false),
         'Contenido guardado.',
         () => executeUpdate(true),
       );
+      if (saved) setActiveItemEditor(null);
+      return saved;
     } else {
       // Create new item
       const executeCreate = async () => {
@@ -471,10 +478,14 @@ export function CourseBuilder({
         if (onRefreshRoute) await onRefreshRoute();
       };
 
-      await runCommand(commandId, executeCreate, 'Contenido creado.');
+      const saved = await runCommand(
+        commandId,
+        executeCreate,
+        'Contenido creado.',
+      );
+      if (saved) setActiveItemEditor(null);
+      return saved;
     }
-
-    setActiveItemEditor(null);
   };
 
   const handleMoveItemInUnit = async (
@@ -688,6 +699,8 @@ export function CourseBuilder({
     try {
       await confirmation.run();
       setConfirmation(null);
+      setActiveUnitEditor(null);
+      setActiveItemEditor(null);
       setActionStatus('Cambios guardados.');
       if (onRefreshRoute) await onRefreshRoute();
     } catch (err) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { Alert, Button, Card, EmptyState, Skeleton } from '@edupay/ui';
+import { Alert, Button, Card, EmptyState, Input, Skeleton } from '@edupay/ui';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -134,6 +134,14 @@ export function TeacherCourseSubjectRosterScreen({
   const currentSession = useTrustedCurrentSession(session).session;
   const data = useTeacherCourseSubjectRoster(client, courseSubjectId);
   const missingSubject = !data.loading && !data.error && !data.subject;
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const filtered = data.roster.filter(({ student }) =>
+    `${student.firstName} ${student.lastName}`
+      .toLocaleLowerCase('es-CL')
+      .includes(query.trim().toLocaleLowerCase('es-CL')),
+  );
+  const pageSize = 25;
 
   return (
     <AppShell dataMode="real" session={currentSession}>
@@ -184,20 +192,67 @@ export function TeacherCourseSubjectRosterScreen({
             </div>
           </div>
           {data.roster.length ? (
-            <ul>
-              {data.roster.map((entry) => (
-                <li key={entry.student.id}>
+            <>
+              <div className="teacher-list-controls">
+                <Input
+                  id="teacher-roster-search"
+                  label="Buscar estudiante"
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setPage(0);
+                  }}
+                  type="search"
+                  value={query}
+                />
+                <span aria-live="polite">
+                  {filtered.length} estudiante{filtered.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {filtered.length ? (
+                <ul>
+                  {filtered
+                    .slice(page * pageSize, (page + 1) * pageSize)
+                    .map((entry) => (
+                      <li key={entry.student.id}>
+                        <span>
+                          {entry.student.firstName} {entry.student.lastName}
+                        </span>
+                        <small>
+                          {entry.access.includes('DIRECT')
+                            ? 'Acceso directo'
+                            : 'Curso por defecto'}
+                        </small>
+                      </li>
+                    ))}
+                </ul>
+              ) : (
+                <p>No hay estudiantes que coincidan con la búsqueda.</p>
+              )}
+              {filtered.length > pageSize ? (
+                <nav
+                  aria-label="Páginas de estudiantes"
+                  className="teacher-list-pages"
+                >
+                  <Button
+                    disabled={page === 0}
+                    onClick={() => setPage(page - 1)}
+                    variant="secondary"
+                  >
+                    Anterior
+                  </Button>
                   <span>
-                    {entry.student.firstName} {entry.student.lastName}
+                    Página {page + 1} de {Math.ceil(filtered.length / pageSize)}
                   </span>
-                  <small>
-                    {entry.access.includes('DIRECT')
-                      ? 'Acceso directo'
-                      : 'Curso por defecto'}
-                  </small>
-                </li>
-              ))}
-            </ul>
+                  <Button
+                    disabled={(page + 1) * pageSize >= filtered.length}
+                    onClick={() => setPage(page + 1)}
+                    variant="secondary"
+                  >
+                    Siguiente
+                  </Button>
+                </nav>
+              ) : null}
+            </>
           ) : (
             <p>No hay estudiantes disponibles para mostrar.</p>
           )}

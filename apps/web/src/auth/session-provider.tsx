@@ -4,6 +4,7 @@ import { Alert, Button, Skeleton } from '@edupay/ui';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import {
+  Fragment,
   useCallback,
   useContext,
   useEffect,
@@ -457,7 +458,11 @@ export function IdentitySessionProvider({
 
   return (
     <IdentitySessionContext.Provider value={value}>
-      {content}
+      {pathname.startsWith('/docente') && session ? (
+        <Fragment key={session.membershipId}>{content}</Fragment>
+      ) : (
+        content
+      )}
     </IdentitySessionContext.Provider>
   );
 }
