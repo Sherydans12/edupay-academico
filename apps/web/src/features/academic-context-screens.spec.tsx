@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TeacherAcademicSubjectsScreen } from '@/features/academic-context-screens';
 import type { AcademicApiClient } from '@/api/academic-client';
@@ -43,7 +43,35 @@ function client(overrides: Partial<AcademicApiClient>): AcademicApiClient {
   return overrides as AcademicApiClient;
 }
 
+afterEach(cleanup);
+
 describe('Academic context screens', () => {
+  it('searches all assigned subjects, including those beyond the first local page', async () => {
+    const subjects = Array.from({ length: 18 }, (_, index) => ({
+      ...contextSubject,
+      id: `subject-${index + 1}`,
+      subject: {
+        ...contextSubject.subject,
+        name: `Asignatura ${String(index + 1).padStart(2, '0')}`,
+      },
+    }));
+    render(
+      <TeacherAcademicSubjectsScreen
+        api={client({ getTeacherContextSubjects: vi.fn(async () => subjects) })}
+      />,
+    );
+    expect(await screen.findByText('18 asignaturas')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Asignatura 18' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    expect(screen.getByRole('heading', { name: 'Asignatura 18' })).toBeTruthy();
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: /buscar por asignatura o curso/i }),
+      { target: { value: 'Asignatura 18' } },
+    );
+    expect(screen.getByRole('heading', { name: 'Asignatura 18' })).toBeTruthy();
+    expect(screen.queryByText('Página 2 de 2')).toBeNull();
+  });
+
   it('shows only assigned subjects and links to the authorized roster', async () => {
     render(
       <TeacherAcademicSubjectsScreen

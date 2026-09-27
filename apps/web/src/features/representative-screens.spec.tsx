@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StudentDashboardScreen } from '@/features/student-screens';
 import { TeacherDashboardScreen } from '@/features/teacher-screens';
@@ -9,6 +9,8 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/estudiante',
   useRouter: () => ({ push: () => undefined }),
 }));
+
+afterEach(cleanup);
 
 describe('representative workspaces', () => {
   const subject = {
@@ -108,5 +110,25 @@ describe('representative workspaces', () => {
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: /ver contenido/i })).toBeTruthy();
     expect(screen.queryByText('Emilia Vargas')).toBeNull();
+  });
+
+  it('keeps access to the full list when the dashboard shows only six subjects', async () => {
+    const subjects = Array.from({ length: 8 }, (_, index) => ({
+      ...subject,
+      id: `subject-${index + 1}`,
+      subject: { ...subject.subject, name: `Ramo ${index + 1}` },
+    }));
+    const api = {
+      getTeacherContextSubjects: vi.fn(async () => subjects),
+    } as unknown as AcademicApiClient;
+    render(<TeacherDashboardScreen api={api} />);
+    expect(
+      await screen.findByRole('heading', { name: 'Mis asignaturas' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Ramo 6')).toBeTruthy();
+    expect(screen.queryByText('Ramo 7')).toBeNull();
+    expect(
+      screen.getByRole('link', { name: /ver todas/i }).getAttribute('href'),
+    ).toBe('/docente/asignaturas');
   });
 });

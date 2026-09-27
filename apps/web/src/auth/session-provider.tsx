@@ -100,7 +100,14 @@ function displayTenant(handle: string): string {
 
 function supportedRoles(roles: readonly string[]): IdentityRole[] {
   return roles.filter((role): role is IdentityRole =>
-    ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'STAFF', 'TEACHER', 'STUDENT', 'GUARDIAN'].includes(role),
+    [
+      'SYSTEM_ADMIN',
+      'TENANT_ADMIN',
+      'STAFF',
+      'TEACHER',
+      'STUDENT',
+      'GUARDIAN',
+    ].includes(role),
   );
 }
 
@@ -157,6 +164,7 @@ export function IdentitySessionProvider({
   const tokenRef = useRef<string | null>(null);
   const expiresAtRef = useRef(0);
   const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
+  const contextSwitchRef = useRef<Promise<TrustedCurrentSession> | null>(null);
   const client = useMemo(
     () =>
       suppliedClient ??
@@ -198,6 +206,10 @@ export function IdentitySessionProvider({
   );
 
   const refresh = useCallback(async (): Promise<string | null> => {
+    if (contextSwitchRef.current) {
+      await contextSwitchRef.current;
+      return tokenRef.current;
+    }
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
     const operation = (async () => {
       try {
@@ -315,15 +327,35 @@ export function IdentitySessionProvider({
 
   const switchMembership = useCallback(
     async (membershipId: string) => {
-      const token = tokenRef.current;
-      if (!token)
-        throw new IdentityApiError({
-          code: 'TOKEN_INVALID',
-          message: 'The access token is unavailable.',
-          status: 401,
-        });
-      const response = await client.switchContext(token, membershipId);
-      return consumeToken(response);
+      if (contextSwitchRef.current) return contextSwitchRef.current;
+      const operation = (async () => {
+        // Let an already-started refresh finish before replacing its token.
+        if (refreshPromiseRef.current) await refreshPromiseRef.current;
+        const token = tokenRef.current;
+        if (!token)
+          throw new IdentityApiError({
+            code: 'TOKEN_INVALID',
+            message: 'The access token is unavailable.',
+            status: 401,
+          });
+        // Remove the previous tenant's mounted views while Identity switches
+        // context and loads the replacement profile.
+        setStatus('loading');
+        setSession(null);
+        setMemberships([]);
+        const response = await client.switchContext(token, membershipId);
+        return consumeToken(response);
+      })();
+      contextSwitchRef.current = operation;
+      try {
+        return await operation;
+      } catch (error) {
+        setStatus('error');
+        throw error;
+      } finally {
+        if (contextSwitchRef.current === operation)
+          contextSwitchRef.current = null;
+      }
     },
     [client, consumeToken],
   );
