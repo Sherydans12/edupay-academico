@@ -30,8 +30,15 @@ Recurso Coolify: FRONT Académico `cct0rtf5iku6fkd3t9hldnv4`
 - Había una sesión estudiantil autenticada con el banner de contexto real. Sólo se hizo lectura y navegación; no se cargaron archivos ni se enviaron actividades. No se copiaron datos académicos al informe.
 - La captura de navegador se inspeccionó durante la comprobación; la integración de Chrome no ofreció exportación de la imagen a un archivo local.
 - CI verificado también sobre el merge commit exacto: `quality` y `postgresql-integration` pasaron con `head_sha=56ea2ae770f48d9b6ad6bdc0f3d184fcbe315fe6`. Los gates de release del piloto quedaron omitidos por sus condiciones normales de ejecución y no forman parte de la verificación de este despliegue manual.
+- La actualización documental PR #27 quedó integrada con merge commit `0c2544e5455b44c6505f4144befb1d727d8e016a`; `quality` y `postgresql-integration` pasaron. El diff de esa PR contenía sólo `docs/operations/student-experience-cut-2026-09-27.md` y `docs/operations/student-experience-release-2026-09-28.md`. El CI de push a `main` no publica imágenes y Coolify conserva `autoDeploy=false`. La historia de despliegues de Coolify siguió mostrando como más reciente el redeploy manual `lb4qetxxhgjtfttq95hqmomw` de las 12:46:57 UTC; el merge documental no inició otro deployment.
+
+## Recuperación de respuesta incierta
+
+- Validación adicional posterior, aislada y sintética, reutilizando `pnpm pilot:e2e`, Identity `93418b68eaf41976b4bc695039afcbc8eab4fdbc`, Académico y dos PostgreSQL 15 desechables. El runner montó temporalmente el componente real `StudentSubmissionWorkflow` y `AcademicApiClient` frente a esos servicios.
+- El harness cargó dos archivos sintéticos. La ejecución del componente reutilizó sus referencias autorizadas ya finalizadas, emitió un único `POST` real de entrega y esperó el `201` del API antes de descartar la respuesta para el cliente. La lectura posterior del componente fue contra el API real y encontró el comentario y ambos IDs en la revisión guardada; la UI mostró la confirmación, limpió la cola y quitó el formulario. Se verificaron dos lecturas de entrega (inicial `404`, reconciliación `200`) y una sola revisión en esa etapa; el smoke comprobó esa misma respuesta antes de continuar. No hubo otro POST ni revisión duplicada.
+- El smoke completo continuó y pasó. Su revisión 2 fue la reentrega normal posterior a la solicitud real de cambios del docente, no un duplicado. El test React/Vitest y el cambio de runner fueron temporales y se restauraron; no quedan cambios funcionales ni servicios del harness en ejecución.
 
 ## Pendientes
 
-- **Frontend:** etiqueta legible del año académico cuando exista un dato contractual; no inferirlo de nombres, identificadores ni fechas. La prueba integrada no fuerza una respuesta perdida después de un envío confirmado; la reconciliación está cubierta por pruebas de frontend con respuestas simuladas.
+- **Frontend:** etiqueta legible del año académico cuando exista un dato contractual; no inferirlo de nombres, identificadores ni fechas.
 - **Backend:** ninguno reproducido durante este corte. El aviso de validación DNS de Coolify corresponde a la configuración de dominio ya existente; no se cambió DNS y el dominio canónico y health del FRONT respondieron correctamente.
