@@ -9,9 +9,9 @@ Después de ese inventario se retiró por Coolify el servicio obsoleto `ajf4d2eb
 | Componente | Commit integrado | Imagen activa | Recurso |
 |---|---|---|---|
 | Académico API | `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b` | `ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d` | `iobfkpujjoa2kj5urbpnjvzi` |
-| Académico FRONT | `97e1721d704d83bb5fdab0ccb885c65cd99e0f7e` | `ghcr.io/sherydans12/edupay-academico-web@sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2` | `cct0rtf5iku6fkd3t9hldnv4` |
+| Académico FRONT | `56ea2ae770f48d9b6ad6bdc0f3d184fcbe315fe6` | `ghcr.io/sherydans12/edupay-academico-web@sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2` | `cct0rtf5iku6fkd3t9hldnv4` |
 
-Identity, BL, workers, ClamAV, redes, dominios y flags no cambiaron en este release. No se ejecutaron migraciones ni escrituras de prueba en producción. El rollback y las comprobaciones constan en [el cierre del corte docente](2026-09-27-teacher-release.md).
+Identity, BL, workers, ClamAV, redes, dominios y flags no cambiaron en este release. No se ejecutaron migraciones ni escrituras de prueba en producción. El rollback del FRONT y las comprobaciones constan en [el cierre del corte estudiantil](student-experience-release-2026-09-28.md); el rollback del API permanece en [el cierre docente](2026-09-27-teacher-release.md).
 
 ## Cierre DIE histórico — 2026-09-24
 

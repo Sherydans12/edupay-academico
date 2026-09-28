@@ -110,7 +110,7 @@
         "0vrvqepcukwcubxga0narorf"
       ],
       "observedState": "running:healthy",
-      "buildSourceSha": "97e1721d704d83bb5fdab0ccb885c65cd99e0f7e",
+      "buildSourceSha": "56ea2ae770f48d9b6ad6bdc0f3d184fcbe315fe6",
       "artifactDigest": "sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2",
       "repository": "Sherydans12/edupay-academico"
     },
