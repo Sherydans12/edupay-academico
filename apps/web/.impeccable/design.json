@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-08T00:00:00.000Z",
+  "generatedAt": "2026-09-28T05:31:21.000Z",
   "title": "Design System: EduPay Académico",
   "extensions": {
     "colorMeta": {
@@ -104,10 +104,22 @@
       }
     ],
     "breakpoints": [
-      { "name": "compact", "value": "400px" },
-      { "name": "mobile", "value": "680px" },
-      { "name": "shell", "value": "900px" },
-      { "name": "wide-grid", "value": "1180px" }
+      {
+        "name": "compact",
+        "value": "400px"
+      },
+      {
+        "name": "mobile",
+        "value": "680px"
+      },
+      {
+        "name": "shell",
+        "value": "900px"
+      },
+      {
+        "name": "wide-grid",
+        "value": "1180px"
+      }
     ]
   },
   "components": [
@@ -147,9 +159,9 @@
       "name": "Subject Card",
       "kind": "card",
       "refersTo": "card",
-      "description": "A calm subject entry with continuity and next-action context.",
-      "html": "<article class=\"ds-subject-card\"><span>LEN</span><h3>Lenguaje y Comunicación</h3><p>Continuidad 68%</p></article>",
-      "css": ".ds-subject-card{border-radius:16px;background:#fffefa;color:#263149;padding:17px;box-shadow:0 3px 12px rgba(25,41,64,.08);font-family:Montserrat,sans-serif;transition:transform 220ms ease,box-shadow 220ms ease}.ds-subject-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(25,41,64,.13)}.ds-subject-card span{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#e4e9f1;color:#1d2f70;font-weight:800}.ds-subject-card h3{margin:16px 0 6px;font-size:16px}.ds-subject-card p{margin:0;color:#5f687b;font-size:12px}"
+      "description": "A calm subject entry with course context and a clear route action.",
+      "html": "<a class=\"ds-subject-card\" href=\"#\"><span class=\"ds-subject-code\">LEN</span><div class=\"ds-subject-body\"><h3>Lenguaje y Comunicación</h3><p>7º Básico A</p></div><div class=\"ds-subject-route\"><span>Ruta de aprendizaje</span><strong>Ruta activa</strong></div></a>",
+      "css": ".ds-subject-card{min-width:0;min-height:15.5rem;display:flex;flex-direction:column;overflow:hidden;border-radius:var(--radius-lg);background:var(--surface-primary);padding:1.05rem;text-decoration:none;box-shadow:var(--shadow-sm);transition:transform var(--motion-standard) ease,box-shadow var(--motion-standard) ease}.ds-subject-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md)}.ds-subject-card:focus-visible{outline:auto;outline-offset:2px}.ds-subject-code{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--brand-primary) 11%,white);color:var(--brand-primary);font-size:.68rem;font-weight:850}.ds-subject-body{margin-top:1rem}.ds-subject-body h3{margin:0;font-size:.98rem;line-height:1.3}.ds-subject-body p{margin:.35rem 0 0;color:var(--text-secondary);font-size:.67rem;line-height:1.4}.ds-subject-route{min-height:2.5rem;display:flex;align-items:center;justify-content:space-between;gap:.65rem;margin-top:auto;border-top:1px solid var(--border-default);padding-top:.75rem;color:var(--text-secondary);font-size:.65rem}.ds-subject-route strong{color:var(--brand-primary);font-weight:750}"
     },
     {
       "name": "Institutional Navigation",
