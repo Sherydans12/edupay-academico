@@ -1,8 +1,23 @@
 {
   "schemaVersion": 1,
-  "verifiedDate": "2026-09-27",
+  "verifiedDate": "2026-09-28",
   "scope": "EduPay production only; not a full inventory of unrelated VPS projects",
-  "status": "TEACHER_RELEASE_DEPLOYED; DIE_PILOT_UNCONFIGURED; BL_FLAGS_OFF",
+  "status": "STUDENT_DOCS_MERGED; IDENTITY_MIGRATOR_SERVICE_REMOVED; ACTIVE_FRONT_API_IDENTITY_RUNNING; COOLIFY_INVENTORY_REFRESHED",
+  "projectResourceCountAfterCleanup": 27,
+  "lastCleanup": {
+    "date": "2026-09-28",
+    "action": "Removed obsolete Identity migration service through Coolify",
+    "resourceUuid": "ajf4d2ebozcpauguebm3alh1",
+    "resourceAbsentAfterAction": true,
+    "projectResourceCountBefore": 28,
+    "projectResourceCountAfter": 27,
+    "serviceConfigFilesRemoved": true,
+    "volumesRemoved": false,
+    "networksRemoved": false,
+    "globalDockerCleanup": false,
+    "postActionCoolifyStates": "Academic API, Identity API and active Academic FRONT displayed Running",
+    "postActionPublicHealthCheck": "Not verified; browser returned ERR_BLOCKED_BY_CLIENT"
+  },
   "project": {
     "name": "My first project",
     "uuid": "p5gswqrr8ot1oaoxwytrpsho"
@@ -81,7 +96,7 @@
       "uuid": "cct0rtf5iku6fkd3t9hldnv4",
       "name": "edupay-academico-web-die-20260924",
       "type": "application",
-      "image": "ghcr.io/sherydans12/edupay-academico-web@sha256:fe66c9ff716040e6d9d33b4696bc657458a23821b4b7d4b42548db51bd947f23",
+      "image": "ghcr.io/sherydans12/edupay-academico-web@sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2",
       "domain": "academico.edupay.baselogic.cl",
       "port": 3000,
       "health": "/login",
@@ -95,8 +110,8 @@
         "0vrvqepcukwcubxga0narorf"
       ],
       "observedState": "running:healthy",
-      "buildSourceSha": "c6916a7ba3676bac6f3cfa6a2299cb85cab77447",
-      "artifactDigest": "sha256:fe66c9ff716040e6d9d33b4696bc657458a23821b4b7d4b42548db51bd947f23",
+      "buildSourceSha": "56ea2ae770f48d9b6ad6bdc0f3d184fcbe315fe6",
+      "artifactDigest": "sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2",
       "repository": "Sherydans12/edupay-academico"
     },
     {
@@ -273,5 +288,6 @@
     "bl002RecoveryScope": "Protected real backup restore verified; live database consistency and uploads coverage remain limited"
   },
   "nextSchemaChangeRequiresReconciliation": true,
-  "verificationSource": "Read-only Coolify review and release evidence dated 2026-09-24; see docs/operations/die-release-closeout-2026-09-24.md. Runtime values are not rechecked by later Git-only edits."
+  "currentSnapshot": "docs/operations/coolify-resource-cleanup-2026-09-28.md",
+  "verificationSource": "Read-only Coolify UI and server-side container/Traefik-label inventory on 2026-09-28; see docs/operations/coolify-resource-cleanup-2026-09-28.md for the complete 28-resource snapshot, route/health/storage checks, PR #28 merge and cleanup disposition. Historical baselines retain their original dates."
 }
