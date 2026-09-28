@@ -178,7 +178,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Sherydans12/edupay-identity
-          ref: 98da17b013c9fbf74f618a2f54e0eea8779c5136
+          ref: 93418b68eaf41976b4bc695039afcbc8eab4fdbc
           path: EduPayIdentity
           fetch-depth: 0
       - name: Install pnpm
@@ -195,13 +195,13 @@ jobs:
         shell: bash
         run: |
           git switch -c release/pilot-validation
-          git -C EduPayIdentity switch -C main 98da17b013c9fbf74f618a2f54e0eea8779c5136
+          git -C EduPayIdentity switch -C main 93418b68eaf41976b4bc695039afcbc8eab4fdbc
           pnpm install --frozen-lockfile
           pnpm --dir EduPayIdentity install --frozen-lockfile
       - name: Run full pilot:e2e against private ClamAV
         env:
           EDUPAY_IDENTITY_DIR: ${{ github.workspace }}/EduPayIdentity
-          PILOT_IDENTITY_SHA: 98da17b013c9fbf74f618a2f54e0eea8779c5136
+          PILOT_IDENTITY_SHA: 93418b68eaf41976b4bc695039afcbc8eab4fdbc
           PILOT_MALWARE_SCANNER: clamav
           PILOT_CLAMAV_FAILURE_GATE: 'true'
         run: pnpm pilot:e2e
@@ -220,7 +220,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Sherydans12/edupay-identity
-          ref: 98da17b013c9fbf74f618a2f54e0eea8779c5136
+          ref: 93418b68eaf41976b4bc695039afcbc8eab4fdbc
           path: EduPayIdentity
           fetch-depth: 0
       - name: Install pnpm
@@ -238,7 +238,7 @@ jobs:
       - name: Run actual Identity and Academic bootstrap commands
         env:
           EDUPAY_IDENTITY_DIR: ${{ github.workspace }}/EduPayIdentity
-          PILOT_IDENTITY_SHA: 98da17b013c9fbf74f618a2f54e0eea8779c5136
+          PILOT_IDENTITY_SHA: 93418b68eaf41976b4bc695039afcbc8eab4fdbc
         run: pnpm pilot:bootstrap:smoke
 
   edupay-sync-gate:
@@ -305,7 +305,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Sherydans12/edupay-identity
-          ref: 98da17b013c9fbf74f618a2f54e0eea8779c5136
+          ref: 93418b68eaf41976b4bc695039afcbc8eab4fdbc
           path: EduPayIdentity
       - name: Install PostgreSQL client and repository dependencies
         shell: bash
