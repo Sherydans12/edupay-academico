@@ -4,7 +4,7 @@ import { Avatar, DropdownItem, DropdownMenu } from '@edupay/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { createAcademicApiClient } from '@/api/client-factory';
 import {
@@ -109,6 +109,8 @@ export function AppShell({
   const router = useRouter();
   const identity = useIdentitySession();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuRef = useRef<HTMLElement>(null);
   const [dieProbe, setDieProbe] = useState<{
     membershipId: string;
     allowed: boolean;
@@ -166,6 +168,16 @@ export function AppShell({
     staff: 'Espacio DIE',
   }[session.workspace];
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    mobileMenuRef.current?.querySelector<HTMLElement>('.sidebar-link')?.focus();
+  }, [mobileOpen]);
+
+  function closeMobileNavigation() {
+    setMobileOpen(false);
+    mobileMenuButtonRef.current?.focus();
+  }
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -174,6 +186,13 @@ export function AppShell({
       <aside
         aria-label="Navegación principal"
         className={`app-sidebar ${mobileOpen ? 'app-sidebar--open' : ''}`}
+        id="app-sidebar-navigation"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || !mobileOpen) return;
+          event.preventDefault();
+          closeMobileNavigation();
+        }}
+        ref={mobileMenuRef}
       >
         <div className="brand-lockup">
           <div aria-label="EduPay Académico" className="brand-mark" role="img">
@@ -186,7 +205,7 @@ export function AppShell({
           <button
             aria-label="Cerrar navegación"
             className="sidebar-close"
-            onClick={() => setMobileOpen(false)}
+            onClick={closeMobileNavigation}
             type="button"
           >
             <Icon name="close" />
@@ -243,7 +262,7 @@ export function AppShell({
         <button
           aria-label="Cerrar navegación"
           className="sidebar-scrim"
-          onClick={() => setMobileOpen(false)}
+          onClick={closeMobileNavigation}
           type="button"
         />
       ) : null}
@@ -252,9 +271,11 @@ export function AppShell({
         <header className="app-topbar">
           <button
             aria-expanded={mobileOpen}
+            aria-controls="app-sidebar-navigation"
             aria-label="Abrir navegación"
             className="topbar-icon mobile-menu-button"
             onClick={() => setMobileOpen(true)}
+            ref={mobileMenuButtonRef}
             type="button"
           >
             <Icon name="menu" />

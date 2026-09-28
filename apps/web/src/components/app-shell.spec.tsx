@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppShell } from '@/components/app-shell';
@@ -40,6 +46,30 @@ describe('AppShell', () => {
         name: 'Navegación por rol y módulo',
       }),
     ).toBeTruthy();
+  });
+
+  it('moves focus into mobile navigation and restores it when Escape closes it', () => {
+    render(
+      <AppShell session={demoSessions.student}>
+        <h1>Panel estudiante</h1>
+      </AppShell>,
+    );
+    const open = screen.getByRole('button', { name: 'Abrir navegación' });
+    fireEvent.click(open);
+    const sidebar = within(
+      screen.getByRole('complementary', { name: 'Navegación principal' }),
+    );
+    expect(document.activeElement).toBe(
+      sidebar.getByRole('link', { name: 'Inicio' }),
+    );
+    fireEvent.keyDown(
+      screen.getByRole('navigation', {
+        name: 'Navegación por rol y módulo',
+      }),
+      { key: 'Escape' },
+    );
+    expect(open.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(open);
   });
 
   it('keeps the notification surface keyboard-operable in the shell', () => {

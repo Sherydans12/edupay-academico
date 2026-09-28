@@ -620,7 +620,7 @@ export function StudentDashboardScreen({
             <EmptyState
               icon={<Icon name="book" />}
               title="No tienes asignaturas efectivas"
-              description="Académico aún no ha encontrado un CourseSubject activo para tu cuenta."
+              description="Académico aún no ha encontrado una asignatura activa para tu cuenta."
             />
           )}
         </section>
@@ -732,6 +732,10 @@ export function StudentSubjectScreen({
   const data = useStudentRoute(client, courseSubjectId);
   const units = data.route ? visibleStudentUnits(data.route.units) : [];
   const dueCount = deliverableItems(units).filter((item) => item.dueAt).length;
+  const visibleItemCount = units.reduce(
+    (sum, unit) => sum + unit.items.length,
+    0,
+  );
   const missingSubject =
     !data.loading && !data.error && (!data.selected || !data.route);
   return (
@@ -744,8 +748,8 @@ export function StudentSubjectScreen({
         {missingSubject ? (
           <EmptyState
             icon={<Icon name="book" />}
-            title="CourseSubject no disponible"
-            description="No tienes acceso a este espacio o ya no está activo."
+            title="Asignatura no disponible"
+            description="No tienes acceso a esta asignatura o ya no está activa."
           />
         ) : data.selected && data.route ? (
           <>
@@ -760,14 +764,16 @@ export function StudentSubjectScreen({
               </div>
               <div>
                 <h1>{subjectName(data.selected)}</h1>
-                <p>{courseName(data.selected)} · CourseSubject activo</p>
+                <p>{courseName(data.selected)} · Asignatura activa</p>
               </div>
               <div className="subject-hero__progress">
                 <span>Contenido visible</span>
-                <strong>
-                  {units.reduce((sum, unit) => sum + unit.items.length, 0)}
-                </strong>
-                <small>elementos publicados</small>
+                <strong>{visibleItemCount}</strong>
+                <small>
+                  {visibleItemCount === 1
+                    ? 'elemento publicado'
+                    : 'elementos publicados'}
+                </small>
               </div>
             </section>
             <div className="route-intro">
@@ -933,7 +939,7 @@ export function StudentAssignmentScreen({
                   <h1>{data.item.title}</h1>
                   <p>
                     {data.item.description ??
-                      'Contenido de aprendizaje publicado para tu CourseSubject.'}
+                      'Contenido publicado para esta asignatura.'}
                   </p>
                   <div className="item-context">
                     <span>{subjectName(data.subject)}</span>
