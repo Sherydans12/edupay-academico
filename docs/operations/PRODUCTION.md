@@ -2,6 +2,8 @@
 
 Verificado: **2026-09-28**. Estado: **corte estudiantil desplegado en FRONT; API e Identity saludables; piloto DIE sin configurar; BL flags apagados**. El [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) registran el estado operativo observado. Las observaciones anteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 
+Después de ese inventario se retiró por Coolify el servicio obsoleto `ajf4d2ebozcpauguebm3alh1` (migrador Identity); el contador del proyecto bajó de 28 a 27. La lista posterior mostró el API Académico, Identity y FRONT activo como `Running`. La comprobación HTTP pública posterior quedó pendiente porque el navegador bloqueó la navegación de health; el registro del retiro y sus límites está en el [informe de limpieza](coolify-resource-cleanup-2026-09-28.md).
+
 ## Estado operativo vigente — 2026-09-28
 
 | Componente | Commit integrado | Imagen activa | Recurso |

@@ -2,7 +2,22 @@
   "schemaVersion": 1,
   "verifiedDate": "2026-09-28",
   "scope": "EduPay production only; not a full inventory of unrelated VPS projects",
-  "status": "STUDENT_DOCS_MERGED; FRONT_API_IDENTITY_HEALTHY; COOLIFY_INVENTORY_REFRESHED",
+  "status": "STUDENT_DOCS_MERGED; IDENTITY_MIGRATOR_SERVICE_REMOVED; ACTIVE_FRONT_API_IDENTITY_RUNNING; COOLIFY_INVENTORY_REFRESHED",
+  "projectResourceCountAfterCleanup": 27,
+  "lastCleanup": {
+    "date": "2026-09-28",
+    "action": "Removed obsolete Identity migration service through Coolify",
+    "resourceUuid": "ajf4d2ebozcpauguebm3alh1",
+    "resourceAbsentAfterAction": true,
+    "projectResourceCountBefore": 28,
+    "projectResourceCountAfter": 27,
+    "serviceConfigFilesRemoved": true,
+    "volumesRemoved": false,
+    "networksRemoved": false,
+    "globalDockerCleanup": false,
+    "postActionCoolifyStates": "Academic API, Identity API and active Academic FRONT displayed Running",
+    "postActionPublicHealthCheck": "Not verified; browser returned ERR_BLOCKED_BY_CLIENT"
+  },
   "project": {
     "name": "My first project",
     "uuid": "p5gswqrr8ot1oaoxwytrpsho"
