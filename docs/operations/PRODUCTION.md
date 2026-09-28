@@ -1,13 +1,13 @@
 # Topología productiva EduPay
 
-Verificado: **2026-09-27**. Estado: **corte docente desplegado en API y FRONT; piloto DIE sin configurar; BL flags apagados**. El inventario estructurado y [el cierre del corte docente](2026-09-27-teacher-release.md) registran el estado operativo más reciente. Las observaciones anteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
+Verificado: **2026-09-28**. Estado: **corte estudiantil desplegado en FRONT; API e Identity saludables; piloto DIE sin configurar; BL flags apagados**. El [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) registran el estado operativo observado. Las observaciones anteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 
-## Estado operativo vigente — 2026-09-27
+## Estado operativo vigente — 2026-09-28
 
 | Componente | Commit integrado | Imagen activa | Recurso |
 |---|---|---|---|
 | Académico API | `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b` | `ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d` | `iobfkpujjoa2kj5urbpnjvzi` |
-| Académico FRONT | `c6916a7ba3676bac6f3cfa6a2299cb85cab77447` | `ghcr.io/sherydans12/edupay-academico-web@sha256:fe66c9ff716040e6d9d33b4696bc657458a23821b4b7d4b42548db51bd947f23` | `cct0rtf5iku6fkd3t9hldnv4` |
+| Académico FRONT | `97e1721d704d83bb5fdab0ccb885c65cd99e0f7e` | `ghcr.io/sherydans12/edupay-academico-web@sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2` | `cct0rtf5iku6fkd3t9hldnv4` |
 
 Identity, BL, workers, ClamAV, redes, dominios y flags no cambiaron en este release. No se ejecutaron migraciones ni escrituras de prueba en producción. El rollback y las comprobaciones constan en [el cierre del corte docente](2026-09-27-teacher-release.md).
 
