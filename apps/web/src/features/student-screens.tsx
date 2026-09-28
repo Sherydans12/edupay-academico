@@ -1,6 +1,15 @@
 'use client';
 
-import { Alert, Badge, Button, Card, EmptyState, Skeleton } from '@edupay/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  Select,
+  Skeleton,
+} from '@edupay/ui';
 import type {
   CourseSubjectLearningRoute,
   LearningItem,
@@ -33,23 +42,76 @@ import {
   courseName,
   deliverableItems,
   errorCopy,
-  formatDay,
-  formatInstant,
   isEffectivelyVisible,
   subjectCard,
   subjectName,
   visibleStudentUnits,
 } from '@/features/learning-screen-support';
+import {
+  formatLearningCalendarDay,
+  formatLearningInstant,
+  learningCalendarDayKey,
+  learningTimeZone,
+  LEARNING_OPERATIONAL_TIME_ZONE,
+} from '@/features/learning-datetime';
 
 type LearningRoute = CourseSubjectLearningRoute;
+type StudentSubject = Awaited<
+  ReturnType<AcademicApiClient['getStudentContextSubjects']>
+>[number];
 
-function useStudentWorkspace(api: AcademicApiClient) {
+type DeliverableRow = {
+  item: LearningItem;
+  subject: StudentSubject;
+  submission: Submission | null;
+  statusAvailable?: boolean;
+  statusError?: unknown;
+};
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  map: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex++;
+        results[index] = await map(values[index] as T);
+      }
+    }),
+  );
+  return results;
+}
+
+async function readStudentTimeZone(api: AcademicApiClient) {
+  if (typeof api.getTenantOperationalProfile !== 'function')
+    return LEARNING_OPERATIONAL_TIME_ZONE;
+  try {
+    return learningTimeZone((await api.getTenantOperationalProfile()).timeZone);
+  } catch {
+    return LEARNING_OPERATIONAL_TIME_ZONE;
+  }
+}
+
+function useStudentWorkspace(
+  api: AcademicApiClient,
+  includeDeliverables = false,
+) {
   const [subjects, setSubjects] = useState<
     Awaited<ReturnType<AcademicApiClient['getStudentContextSubjects']>>
   >([]);
   const [routes, setRoutes] = useState<
     Array<{ route: LearningRoute; subject: (typeof subjects)[number] }>
   >([]);
+  const [deliverables, setDeliverables] = useState<DeliverableRow[]>([]);
+  const [submissionStatusError, setSubmissionStatusError] =
+    useState<unknown>(null);
+  const [timeZone, setTimeZone] = useState<string>(
+    LEARNING_OPERATIONAL_TIME_ZONE,
+  );
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,27 +119,75 @@ function useStudentWorkspace(api: AcademicApiClient) {
     setLoading(true);
     setError(null);
     try {
-      const nextSubjects = await api.getStudentContextSubjects();
+      const [nextSubjects, nextTimeZone] = await Promise.all([
+        api.getStudentContextSubjects(),
+        readStudentTimeZone(api),
+      ]);
       const nextRoutes = await Promise.all(
         nextSubjects.map(async (subject) => ({
           route: await api.getLearningRoute(subject.id),
           subject,
         })),
       );
+      const flatDeliverables = nextRoutes.flatMap(({ route, subject }) =>
+        deliverableItems(visibleStudentUnits(route.units)).map((item) => ({
+          item,
+          subject,
+        })),
+      );
+      const nextDeliverables = includeDeliverables
+        ? await mapWithConcurrency(
+            flatDeliverables,
+            6,
+            async ({ item, subject }) => {
+              try {
+                return {
+                  item,
+                  subject,
+                  submission: await getOwnSubmissionSafe(api, item.id),
+                  statusAvailable: true,
+                };
+              } catch (statusError) {
+                return {
+                  item,
+                  subject,
+                  submission: null,
+                  statusAvailable: false,
+                  statusError,
+                };
+              }
+            },
+          )
+        : [];
       setSubjects(nextSubjects);
       setRoutes(nextRoutes);
+      setTimeZone(nextTimeZone);
+      setDeliverables(nextDeliverables);
+      setSubmissionStatusError(
+        nextDeliverables.find((row) => !row.statusAvailable)?.statusError ??
+          null,
+      );
     } catch (nextError) {
       setError(nextError);
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, includeDeliverables]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-  return { error, load, loading, routes, subjects };
+  return {
+    deliverables,
+    error,
+    load,
+    loading,
+    routes,
+    submissionStatusError,
+    subjects,
+    timeZone,
+  };
 }
 
 function useStudentRoute(
@@ -89,6 +199,9 @@ function useStudentRoute(
     Awaited<ReturnType<AcademicApiClient['getStudentContextSubjects']>>
   >([]);
   const [route, setRoute] = useState<LearningRoute | null>(null);
+  const [timeZone, setTimeZone] = useState<string>(
+    LEARNING_OPERATIONAL_TIME_ZONE,
+  );
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const selected =
@@ -99,8 +212,14 @@ function useStudentRoute(
     setLoading(true);
     setError(null);
     try {
-      const nextSubjects = await api.getStudentContextSubjects();
+      const [nextSubjects, nextTimeZone] = await Promise.all([
+        api.getStudentContextSubjects(),
+        loadRoute
+          ? readStudentTimeZone(api)
+          : Promise.resolve(LEARNING_OPERATIONAL_TIME_ZONE),
+      ]);
       setSubjects(nextSubjects);
+      setTimeZone(nextTimeZone);
       const nextSubject =
         nextSubjects.find(
           (subject) => subject.id === requestedCourseSubjectId,
@@ -122,7 +241,7 @@ function useStudentRoute(
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-  return { error, load, loading, route, selected, subjects };
+  return { error, load, loading, route, selected, subjects, timeZone };
 }
 
 function DataState({
@@ -178,6 +297,77 @@ function subjectCards(
   );
 }
 
+function normalizeStudentSearch(value: string) {
+  return value
+    .trim()
+    .toLocaleLowerCase('es-CL')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isAwaitingStudent(row: DeliverableRow) {
+  return (
+    row.statusAvailable !== false &&
+    (!row.submission ||
+      row.submission.status === 'PENDING' ||
+      row.submission.status === 'CHANGES_REQUESTED')
+  );
+}
+
+function compareDueDates(left: DeliverableRow, right: DeliverableRow) {
+  return (
+    (left.item.dueAt ? new Date(left.item.dueAt).getTime() : Infinity) -
+    (right.item.dueAt ? new Date(right.item.dueAt).getTime() : Infinity)
+  );
+}
+
+function StudentPagination({
+  count,
+  label,
+  onPageChange,
+  page,
+  pageSize,
+}: {
+  count: number;
+  label: string;
+  onPageChange: (page: number) => void;
+  page: number;
+  pageSize: number;
+}) {
+  const pageCount = Math.ceil(count / pageSize);
+  if (pageCount <= 1) return null;
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, count);
+  return (
+    <nav aria-label={label} className="student-pagination">
+      <span aria-live="polite">
+        Mostrando {start}–{end} de {count}
+      </span>
+      <div className="student-pagination__actions">
+        <Button
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          size="sm"
+          variant="secondary"
+        >
+          Anterior
+        </Button>
+        <span aria-current="page">
+          Página {page} de {pageCount}
+        </span>
+        <Button
+          disabled={page >= pageCount}
+          onClick={() => onPageChange(page + 1)}
+          size="sm"
+          variant="secondary"
+        >
+          Siguiente
+        </Button>
+      </div>
+    </nav>
+  );
+}
+
 function StudentShell({
   children,
   session,
@@ -202,26 +392,16 @@ export function StudentDashboardScreen({
 }) {
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const currentSession = useTrustedCurrentSession(session).session;
-  const data = useStudentWorkspace(client);
-  const attention = data.routes
-    .flatMap(({ route, subject }) =>
-      deliverableItems(visibleStudentUnits(route.units)).map((item) => ({
-        item,
-        subject,
-      })),
-    )
-    .filter(({ item }) => item.dueAt)
-    .sort(
-      (left, right) =>
-        new Date(left.item.dueAt ?? '').getTime() -
-        new Date(right.item.dueAt ?? '').getTime(),
-    );
+  const data = useStudentWorkspace(client, true);
+  const attention = data.deliverables
+    .filter(isAwaitingStudent)
+    .sort(compareDueDates);
   const next = attention[0];
 
   return (
     <AppShell dataMode="real" session={currentSession}>
       <PageHeading
-        description={`${formatDay(new Date().toISOString())} · Tu ruta se actualiza desde Académico.`}
+        description="Revisa tus pendientes, vuelve a tus asignaturas y consulta tus entregas."
         title={`Hola, ${currentSession.displayName.split(' ')[0]}`}
       />
       <DataState
@@ -232,14 +412,30 @@ export function StudentDashboardScreen({
         {next ? (
           <section aria-labelledby="next-title" className="student-next">
             <div className="student-next__copy">
-              <Badge tone="warning">
-                <Icon name="clock" />
-                Próxima entrega
+              <Badge
+                tone={
+                  next.submission?.status === 'CHANGES_REQUESTED'
+                    ? 'warning'
+                    : 'info'
+                }
+              >
+                <Icon
+                  name={
+                    next.submission?.status === 'CHANGES_REQUESTED'
+                      ? 'review'
+                      : 'clock'
+                  }
+                />
+                {next.submission?.status === 'CHANGES_REQUESTED'
+                  ? 'Cambios solicitados'
+                  : 'Pendiente'}
               </Badge>
               <h2 id="next-title">Tu próximo paso: {next.item.title}</h2>
               <p>
-                {subjectName(next.subject)} · {courseName(next.subject)} · vence{' '}
-                {formatInstant(next.item.dueAt ?? '')}
+                {subjectName(next.subject)} · {courseName(next.subject)} ·{' '}
+                {next.item.dueAt
+                  ? `vence ${formatLearningInstant(next.item.dueAt, data.timeZone)}`
+                  : 'sin fecha límite'}
               </p>
               <Link
                 className="button-link button-link--accent"
@@ -268,6 +464,26 @@ export function StudentDashboardScreen({
               </div>
             </div>
           </section>
+        ) : data.submissionStatusError ? (
+          <Card className="student-next student-next--empty">
+            <div>
+              <Badge tone="warning">
+                <Icon name="clock" />
+                Estado sin confirmar
+              </Badge>
+              <h2>No pudimos confirmar tus pendientes</h2>
+              <p>
+                Actualiza el estado de tus entregas para saber qué sigue por
+                hacer.
+              </p>
+              <Link
+                className="button-link button-link--accent"
+                href="/estudiante/entregas"
+              >
+                Revisar mis entregas <Icon name="chevron-right" />
+              </Link>
+            </div>
+          </Card>
         ) : (
           <Card className="student-next student-next--empty">
             <div>
@@ -275,7 +491,7 @@ export function StudentDashboardScreen({
                 <Icon name="check" />
                 Ruta al día
               </Badge>
-              <h2>No tienes entregas con fecha próxima</h2>
+              <h2>No tienes entregas pendientes</h2>
               <p>
                 Revisa tus asignaturas para continuar con el contenido
                 publicado.
@@ -290,6 +506,21 @@ export function StudentDashboardScreen({
           </Card>
         )}
 
+        {data.submissionStatusError ? (
+          <Alert
+            action={
+              <Button onClick={() => void data.load()} variant="secondary">
+                Actualizar estados
+              </Button>
+            }
+            title="No pudimos confirmar todas tus entregas"
+            tone="warning"
+          >
+            La lista de actividades cargó, pero algunos estados no están
+            disponibles. No los contamos como pendientes ni como enviadas.
+          </Alert>
+        ) : null}
+
         <div className="dashboard-layout">
           <section
             aria-labelledby="attention-title"
@@ -299,30 +530,39 @@ export function StudentDashboardScreen({
               <div>
                 <h2 id="attention-title">Próximas entregas</h2>
                 <p>
-                  Solo aparecen actividades y evaluaciones visibles para ti.
+                  Tus pendientes con fecha aparecen primero; las sin fecha
+                  quedan al final.
                 </p>
               </div>
             </div>
             <div className="attention-list">
               {attention.length ? (
-                attention.slice(0, 5).map(({ item, subject }) => (
+                attention.slice(0, 5).map((row) => (
                   <Link
                     className="attention-row"
-                    href={`/estudiante/asignaturas/${subject.id}/items/${item.id}`}
-                    key={item.id}
+                    href={`/estudiante/asignaturas/${row.subject.id}/items/${row.item.id}`}
+                    key={row.item.id}
                   >
                     <span className="attention-mark attention-mark--warning">
                       <Icon name="clock" />
                     </span>
                     <span className="attention-copy">
                       <small>
-                        {subjectName(subject)} · {courseName(subject)}
+                        {subjectName(row.subject)} · {courseName(row.subject)}
                       </small>
-                      <strong>{item.title}</strong>
-                      <span>Vence {formatInstant(item.dueAt ?? '')}</span>
+                      <strong>{row.item.title}</strong>
+                      <span>
+                        {row.item.dueAt
+                          ? `Vence ${formatLearningInstant(row.item.dueAt, data.timeZone)}`
+                          : 'Sin fecha límite'}
+                      </span>
                     </span>
                     <Badge tone="warning">
-                      {item.type === 'ASSESSMENT' ? 'Evaluación' : 'Actividad'}
+                      {row.submission?.status === 'CHANGES_REQUESTED'
+                        ? 'Cambios solicitados'
+                        : row.item.type === 'ASSESSMENT'
+                          ? 'Evaluación'
+                          : 'Actividad'}
                     </Badge>
                     <Icon className="attention-chevron" name="chevron-right" />
                   </Link>
@@ -337,13 +577,12 @@ export function StudentDashboardScreen({
             </div>
           </section>
           <aside className="teacher-note">
-            <Icon name="layers" />
+            <Icon name="book" />
             <div>
-              <h2>Contenido actualizado</h2>
+              <h2>Tu ruta de aprendizaje</h2>
               <p>
-                Las rutas visibles y sus fechas vienen del Learning API. El
-                servidor decide qué CourseSubjects y contenidos puedes
-                consultar.
+                Aquí aparecen las asignaturas y actividades publicadas para tu
+                matrícula actual.
               </p>
               <small>
                 {data.subjects.length} espacio
@@ -381,7 +620,7 @@ export function StudentDashboardScreen({
             <EmptyState
               icon={<Icon name="book" />}
               title="No tienes asignaturas efectivas"
-              description="Académico aún no ha encontrado un CourseSubject activo para tu cuenta."
+              description="Académico aún no ha encontrado una asignatura activa para tu cuenta."
             />
           )}
         </section>
@@ -404,6 +643,21 @@ export function StudentSubjectsScreen({
     undefined,
     false,
   );
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 9;
+  const filteredSubjects = useMemo(() => {
+    const normalized = normalizeStudentSearch(query);
+    return subjectCards(subjects).filter((subject) =>
+      normalizeStudentSearch(`${subject.title} ${subject.subtitle}`).includes(
+        normalized,
+      ),
+    );
+  }, [query, subjects]);
+  const visibleSubjects = filteredSubjects.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
   return (
     <AppShell dataMode="real" session={currentSession}>
       <PageHeading
@@ -412,11 +666,46 @@ export function StudentSubjectsScreen({
       />
       <DataState error={error} loading={loading} onRetry={() => void load()}>
         {subjects.length ? (
-          <div className="subject-grid subject-grid--overview">
-            {subjectCards(subjects).map((subject) => (
-              <SubjectCard key={subject.id} subject={subject} />
-            ))}
-          </div>
+          <>
+            <div className="student-list-controls student-subject-controls">
+              <Input
+                id="student-subject-search"
+                label="Buscar por asignatura o curso"
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                type="search"
+                value={query}
+              />
+              <span aria-live="polite">
+                {filteredSubjects.length} asignatura
+                {filteredSubjects.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {filteredSubjects.length ? (
+              <>
+                <div className="subject-grid subject-grid--overview">
+                  {visibleSubjects.map((subject) => (
+                    <SubjectCard key={subject.id} subject={subject} />
+                  ))}
+                </div>
+                <StudentPagination
+                  count={filteredSubjects.length}
+                  label="Paginación de asignaturas"
+                  onPageChange={setPage}
+                  page={page}
+                  pageSize={pageSize}
+                />
+              </>
+            ) : (
+              <EmptyState
+                icon={<Icon name="search" />}
+                title="No encontramos esa asignatura"
+                description="Prueba con otro nombre de asignatura o curso."
+              />
+            )}
+          </>
         ) : (
           <EmptyState
             icon={<Icon name="book" />}
@@ -443,6 +732,10 @@ export function StudentSubjectScreen({
   const data = useStudentRoute(client, courseSubjectId);
   const units = data.route ? visibleStudentUnits(data.route.units) : [];
   const dueCount = deliverableItems(units).filter((item) => item.dueAt).length;
+  const visibleItemCount = units.reduce(
+    (sum, unit) => sum + unit.items.length,
+    0,
+  );
   const missingSubject =
     !data.loading && !data.error && (!data.selected || !data.route);
   return (
@@ -455,8 +748,8 @@ export function StudentSubjectScreen({
         {missingSubject ? (
           <EmptyState
             icon={<Icon name="book" />}
-            title="CourseSubject no disponible"
-            description="No tienes acceso a este espacio o ya no está activo."
+            title="Asignatura no disponible"
+            description="No tienes acceso a esta asignatura o ya no está activa."
           />
         ) : data.selected && data.route ? (
           <>
@@ -471,14 +764,16 @@ export function StudentSubjectScreen({
               </div>
               <div>
                 <h1>{subjectName(data.selected)}</h1>
-                <p>{courseName(data.selected)} · CourseSubject activo</p>
+                <p>{courseName(data.selected)} · Asignatura activa</p>
               </div>
               <div className="subject-hero__progress">
                 <span>Contenido visible</span>
-                <strong>
-                  {units.reduce((sum, unit) => sum + unit.items.length, 0)}
-                </strong>
-                <small>elementos publicados</small>
+                <strong>{visibleItemCount}</strong>
+                <small>
+                  {visibleItemCount === 1
+                    ? 'elemento publicado'
+                    : 'elementos publicados'}
+                </small>
               </div>
             </section>
             <div className="route-intro">
@@ -499,6 +794,7 @@ export function StudentSubjectScreen({
             <LearningRoute
               audience="student"
               courseSubjectId={data.selected.id}
+              timeZone={data.timeZone}
               units={units}
             />
           </>
@@ -517,14 +813,21 @@ function useStudentItem(
     Awaited<ReturnType<AcademicApiClient['getStudentContextSubjects']>>
   >([]);
   const [item, setItem] = useState<LearningItem | null>(null);
+  const [timeZone, setTimeZone] = useState<string>(
+    LEARNING_OPERATIONAL_TIME_ZONE,
+  );
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const nextSubjects = await api.getStudentContextSubjects();
+      const [nextSubjects, nextTimeZone] = await Promise.all([
+        api.getStudentContextSubjects(),
+        readStudentTimeZone(api),
+      ]);
       setSubjects(nextSubjects);
+      setTimeZone(nextTimeZone);
       let nextItem: LearningItem | undefined;
       if (learningItemId) {
         nextItem = await api.getLearningItem(learningItemId);
@@ -558,7 +861,7 @@ function useStudentItem(
   const subject = subjects.find(
     (candidate) => candidate.id === item?.courseSubjectId,
   );
-  return { error, item, load, loading, subject };
+  return { error, item, load, loading, subject, timeZone };
 }
 
 export function StudentAssignmentScreen({
@@ -636,7 +939,7 @@ export function StudentAssignmentScreen({
                   <h1>{data.item.title}</h1>
                   <p>
                     {data.item.description ??
-                      'Contenido de aprendizaje publicado para tu CourseSubject.'}
+                      'Contenido publicado para esta asignatura.'}
                   </p>
                   <div className="item-context">
                     <span>{subjectName(data.subject)}</span>
@@ -650,9 +953,11 @@ export function StudentAssignmentScreen({
                             ? 'Material'
                             : 'Anuncio'}
                     </span>
-                    {data.item.dueAt ? (
-                      <span>Vence {formatInstant(data.item.dueAt)}</span>
-                    ) : null}
+                    <span>
+                      {data.item.dueAt
+                        ? `Vence ${formatLearningInstant(data.item.dueAt, data.timeZone)}`
+                        : 'Sin fecha límite'}
+                    </span>
                   </div>
                 </div>
                 {resourceError ? (
@@ -668,7 +973,9 @@ export function StudentAssignmentScreen({
                 {data.item.bodyDocument ||
                 data.item.instructions ||
                 data.item.content ||
-                data.item.body ? (
+                data.item.body ||
+                data.item.type === 'ASSIGNMENT' ||
+                data.item.type === 'ASSESSMENT' ? (
                   <section>
                     <h2>
                       {data.item.type === 'ANNOUNCEMENT'
@@ -678,17 +985,24 @@ export function StudentAssignmentScreen({
                           : 'Instrucciones'}
                     </h2>
                     <div className="learning-rich-text">
-                      <BodyDocumentRenderer
-                        document={data.item.bodyDocument}
-                        fallbackText={
-                          data.item.type === 'ANNOUNCEMENT'
-                            ? data.item.body
-                            : data.item.type === 'MATERIAL'
-                              ? data.item.content
-                              : data.item.instructions
-                        }
-                        onOpenFile={openResource}
-                      />
+                      {data.item.bodyDocument ||
+                      data.item.instructions ||
+                      data.item.content ||
+                      data.item.body ? (
+                        <BodyDocumentRenderer
+                          document={data.item.bodyDocument}
+                          fallbackText={
+                            data.item.type === 'ANNOUNCEMENT'
+                              ? data.item.body
+                              : data.item.type === 'MATERIAL'
+                                ? data.item.content
+                                : data.item.instructions
+                          }
+                          onOpenFile={openResource}
+                        />
+                      ) : (
+                        <p>No se agregaron instrucciones adicionales.</p>
+                      )}
                     </div>
                   </section>
                 ) : null}
@@ -700,15 +1014,21 @@ export function StudentAssignmentScreen({
                 ) : null}
                 {data.item.dueAt ? (
                   <Alert title="Fecha de entrega" tone="warning">
-                    {formatInstant(data.item.dueAt)}. La hora y la condición de
-                    atraso serán determinadas por el servidor.
+                    {formatLearningInstant(data.item.dueAt, data.timeZone)}. La
+                    hora y la condición de atraso serán determinadas por el
+                    servidor.
                   </Alert>
                 ) : null}
               </article>
               <aside>
                 {data.item.type === 'ASSIGNMENT' ||
                 data.item.type === 'ASSESSMENT' ? (
-                  <StudentSubmissionWorkflow api={client} item={data.item} />
+                  <StudentSubmissionWorkflow
+                    api={client}
+                    item={data.item}
+                    key={data.item.id}
+                    timeZone={data.timeZone}
+                  />
                 ) : (
                   <Card className="item-side-note">
                     <Icon name="layers" />
@@ -731,14 +1051,6 @@ export function StudentAssignmentScreen({
   );
 }
 
-type DeliverableRow = {
-  item: LearningItem;
-  subject: Awaited<
-    ReturnType<AcademicApiClient['getStudentContextSubjects']>
-  >[number];
-  submission: Submission | null;
-};
-
 function getOwnSubmissionSafe(
   api: AcademicApiClient,
   learningItemId: string,
@@ -750,63 +1062,15 @@ function getOwnSubmissionSafe(
   });
 }
 
-function useStudentDeliverables(api: AcademicApiClient) {
-  const [rows, setRows] = useState<DeliverableRow[]>([]);
-  const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const subjects = await api.getStudentContextSubjects();
-      const bySubject = await Promise.all(
-        subjects.map(async (subject) => ({
-          subject,
-          items: deliverableItems(
-            visibleStudentUnits((await api.getLearningRoute(subject.id)).units),
-          ),
-        })),
-      );
-      const flat = bySubject.flatMap(({ subject, items }) =>
-        items.map((item) => ({ item, subject })),
-      );
-      const nextRows = await Promise.all(
-        flat.map(async ({ item, subject }) => ({
-          item,
-          subject,
-          submission: await getOwnSubmissionSafe(api, item.id),
-        })),
-      );
-      setRows(nextRows);
-    } catch (nextError) {
-      setError(nextError);
-    } finally {
-      setLoading(false);
-    }
-  }, [api]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
-  return { error, load, loading, rows };
-}
-
 function deliverableStatusMeta(row: DeliverableRow) {
-  const status = row.submission?.status ?? 'PENDING';
-  const latest = row.submission?.revisions.at(-1);
-  if (
-    status === 'PENDING' &&
-    row.item.dueAt &&
-    new Date(row.item.dueAt).getTime() < Date.now()
-  ) {
+  if (row.statusAvailable === false)
     return {
       icon: 'clock' as const,
-      label: 'Atrasada',
+      label: 'Estado no disponible',
       tone: 'warning' as const,
     };
-  }
+  const status = row.submission?.status ?? 'PENDING';
+  const latest = row.submission?.revisions.at(-1);
   if (status === 'CHANGES_REQUESTED')
     return {
       icon: 'review' as const,
@@ -832,25 +1096,34 @@ function deliverableStatusMeta(row: DeliverableRow) {
   };
 }
 
-function deliverableTimeCopy(row: DeliverableRow) {
+function deliverableTimeCopy(row: DeliverableRow, timeZone: string) {
+  if (row.statusAvailable === false) return 'No pudimos actualizar el estado';
   const status = row.submission?.status ?? 'PENDING';
   const latest = row.submission?.revisions.at(-1);
   if (status === 'SUBMITTED' || status === 'REVIEWED')
-    return latest ? `Enviada ${formatInstant(latest.submittedAt)}` : 'Enviada';
+    return latest
+      ? `Enviada ${formatLearningInstant(latest.submittedAt, timeZone)}`
+      : 'Enviada';
   if (status === 'CHANGES_REQUESTED') {
     const requestedAt = latest?.reviews
       .filter((review) => review.action === 'CHANGES_REQUESTED')
       .at(-1)?.createdAt;
     return requestedAt
-      ? `Cambios solicitados ${formatInstant(requestedAt)}`
+      ? `Cambios solicitados ${formatLearningInstant(requestedAt, timeZone)}`
       : 'Cambios solicitados';
   }
   return row.item.dueAt
-    ? `Vence ${formatInstant(row.item.dueAt)}`
+    ? `Vence ${formatLearningInstant(row.item.dueAt, timeZone)}`
     : 'Sin fecha límite';
 }
 
-function DeliverableRowLink({ row }: { row: DeliverableRow }) {
+function DeliverableRowLink({
+  row,
+  timeZone,
+}: {
+  row: DeliverableRow;
+  timeZone: string;
+}) {
   const meta = deliverableStatusMeta(row);
   return (
     <Link
@@ -868,7 +1141,7 @@ function DeliverableRowLink({ row }: { row: DeliverableRow }) {
         </small>
       </span>
       <span className="submission-time">
-        <small>{deliverableTimeCopy(row)}</small>
+        <small>{deliverableTimeCopy(row, timeZone)}</small>
       </span>
       <Badge tone={meta.tone}>{meta.label}</Badge>
       <Icon name="chevron-right" />
@@ -885,25 +1158,89 @@ export function StudentDeliverablesScreen({
 }) {
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const currentSession = useTrustedCurrentSession(session).session;
-  const data = useStudentDeliverables(client);
-
-  const attention = data.rows
-    .filter(
-      (row) =>
-        row.submission?.status !== 'SUBMITTED' &&
-        row.submission?.status !== 'REVIEWED',
-    )
-    .sort(
-      (left, right) =>
-        (left.item.dueAt ? new Date(left.item.dueAt).getTime() : Infinity) -
-        (right.item.dueAt ? new Date(right.item.dueAt).getTime() : Infinity),
-    );
-  const inReview = data.rows.filter(
-    (row) => row.submission?.status === 'SUBMITTED',
+  const data = useStudentWorkspace(client, true);
+  const [query, setQuery] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
+  const filteredRows = useMemo(() => {
+    const normalized = normalizeStudentSearch(query);
+    return data.deliverables
+      .filter(
+        (row) => subjectFilter === 'all' || row.subject.id === subjectFilter,
+      )
+      .filter((row) =>
+        normalizeStudentSearch(
+          `${row.item.title} ${subjectName(row.subject)} ${courseName(row.subject)}`,
+        ).includes(normalized),
+      )
+      .filter((row) => {
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'unavailable')
+          return row.statusAvailable === false;
+        if (row.statusAvailable === false) return false;
+        const status = row.submission?.status ?? 'PENDING';
+        return statusFilter === 'pending'
+          ? status === 'PENDING'
+          : status === statusFilter;
+      })
+      .sort((left, right) => {
+        const rank = (row: DeliverableRow) => {
+          if (row.statusAvailable === false) return 2;
+          if (row.submission?.status === 'CHANGES_REQUESTED') return 1;
+          if (!row.submission || row.submission.status === 'PENDING') return 0;
+          if (row.submission.status === 'SUBMITTED') return 3;
+          return 4;
+        };
+        const rankDifference = rank(left) - rank(right);
+        if (rankDifference) return rankDifference;
+        if (rank(left) >= 3) {
+          const leftTime = left.submission?.revisions.at(-1)?.submittedAt ?? '';
+          const rightTime =
+            right.submission?.revisions.at(-1)?.submittedAt ?? '';
+          return rightTime.localeCompare(leftTime);
+        }
+        return compareDueDates(left, right);
+      });
+  }, [data.deliverables, query, statusFilter, subjectFilter]);
+  const visibleRows = filteredRows.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
   );
-  const reviewed = data.rows.filter(
-    (row) => row.submission?.status === 'REVIEWED',
-  );
+  const sections = [
+    {
+      key: 'attention',
+      title: 'Requiere tu atención',
+      description:
+        'Actividades pendientes y cambios solicitados por tu docente.',
+      rows: visibleRows.filter(
+        (row) =>
+          row.statusAvailable !== false &&
+          (!row.submission ||
+            row.submission.status === 'PENDING' ||
+            row.submission.status === 'CHANGES_REQUESTED'),
+      ),
+    },
+    {
+      key: 'unavailable',
+      title: 'Estado sin confirmar',
+      description: 'No pudimos cargar el estado de estas actividades.',
+      rows: visibleRows.filter((row) => row.statusAvailable === false),
+    },
+    {
+      key: 'in-review',
+      title: 'En revisión',
+      description: 'Ya las enviaste; tu docente aún no termina de revisarlas.',
+      rows: visibleRows.filter((row) => row.submission?.status === 'SUBMITTED'),
+    },
+    {
+      key: 'reviewed',
+      title: 'Revisadas',
+      description: 'Tu docente ya completó la revisión de estas entregas.',
+      rows: visibleRows.filter((row) => row.submission?.status === 'REVIEWED'),
+    },
+  ].filter((section) => section.rows.length);
 
   return (
     <StudentShell session={currentSession}>
@@ -916,75 +1253,124 @@ export function StudentDeliverablesScreen({
         loading={data.loading}
         onRetry={() => void data.load()}
       >
-        {data.rows.length ? (
+        {data.deliverables.length ? (
           <>
-            {attention.length ? (
-              <section
-                aria-labelledby="attention-deliverables-title"
-                className="content-section"
+            <div className="student-list-controls student-deliverable-controls">
+              <Input
+                id="student-deliverable-search"
+                label="Buscar por actividad, asignatura o curso"
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                type="search"
+                value={query}
+              />
+              <Select
+                id="student-deliverable-subject"
+                label="Asignatura"
+                onChange={(event) => {
+                  setSubjectFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={subjectFilter}
               >
-                <div className="section-heading">
-                  <div>
-                    <h2 id="attention-deliverables-title">
-                      Requiere tu atención
-                    </h2>
-                    <p>
-                      Trabajos pendientes o con cambios solicitados por tu
-                      docente.
-                    </p>
-                  </div>
-                </div>
-                <div className="submission-list">
-                  {attention.map((row) => (
-                    <DeliverableRowLink key={row.item.id} row={row} />
-                  ))}
-                </div>
-              </section>
-            ) : null}
-            {inReview.length ? (
-              <section
-                aria-labelledby="in-review-deliverables-title"
-                className="content-section"
+                <option value="all">Todas las asignaturas</option>
+                {data.subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subjectName(subject)} · {courseName(subject)}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                id="student-deliverable-status"
+                label="Estado"
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={statusFilter}
               >
-                <div className="section-heading">
-                  <div>
-                    <h2 id="in-review-deliverables-title">En revisión</h2>
-                    <p>
-                      Ya las enviaste; tu docente aún no termina de revisarlas.
-                    </p>
-                  </div>
-                </div>
-                <div className="submission-list">
-                  {inReview.map((row) => (
-                    <DeliverableRowLink key={row.item.id} row={row} />
-                  ))}
-                </div>
-              </section>
-            ) : null}
-            {reviewed.length ? (
-              <section
-                aria-labelledby="reviewed-deliverables-title"
-                className="content-section"
+                <option value="all">Todos los estados</option>
+                <option value="pending">Pendientes</option>
+                <option value="CHANGES_REQUESTED">Cambios solicitados</option>
+                <option value="SUBMITTED">En revisión</option>
+                <option value="REVIEWED">Revisadas</option>
+                <option value="unavailable">Estado no disponible</option>
+              </Select>
+              <span aria-live="polite">
+                {filteredRows.length} actividad
+                {filteredRows.length === 1 ? '' : 'es'}
+              </span>
+            </div>
+            {data.submissionStatusError ? (
+              <Alert
+                action={
+                  <Button onClick={() => void data.load()} variant="secondary">
+                    Actualizar estados
+                  </Button>
+                }
+                title="Algunos estados no se pudieron consultar"
+                tone="warning"
               >
-                <div className="section-heading">
-                  <div>
-                    <h2 id="reviewed-deliverables-title">Revisadas</h2>
-                    <p>Tu docente ya completó la revisión de estas entregas.</p>
-                  </div>
-                </div>
-                <div className="submission-list">
-                  {reviewed.map((row) => (
-                    <DeliverableRowLink key={row.item.id} row={row} />
-                  ))}
-                </div>
-              </section>
+                Las actividades siguen visibles. Los estados sin respuesta no se
+                cuentan como pendientes ni como entregadas.
+              </Alert>
             ) : null}
+            {filteredRows.length ? (
+              <>
+                {sections.map((section) => (
+                  <section
+                    aria-labelledby={`student-deliverables-${section.key}`}
+                    className="content-section"
+                    key={section.key}
+                  >
+                    <div className="section-heading">
+                      <div>
+                        <h2 id={`student-deliverables-${section.key}`}>
+                          {section.title}
+                        </h2>
+                        <p>{section.description}</p>
+                      </div>
+                    </div>
+                    <div className="submission-list">
+                      {section.rows.map((row) => (
+                        <DeliverableRowLink
+                          key={row.item.id}
+                          row={row}
+                          timeZone={data.timeZone}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+                <StudentPagination
+                  count={filteredRows.length}
+                  label="Paginación de entregas"
+                  onPageChange={setPage}
+                  page={page}
+                  pageSize={pageSize}
+                />
+              </>
+            ) : (
+              <EmptyState
+                icon={<Icon name="search" />}
+                title="No hay actividades con esos filtros"
+                description="Cambia la búsqueda o los filtros para ver otras entregas."
+              />
+            )}
           </>
-        ) : (
+        ) : data.subjects.length ? (
           <EmptyState
             icon={<Icon name="clipboard" />}
-            title="Aún no tienes actividades pendientes"
-            description="Cuando tus profesores publiquen contenido nuevo, aparecerá aquí."
+            title="Aún no tienes actividades para entregar"
+            description="Cuando tus profesores publiquen actividades o evaluaciones, aparecerán aquí."
+          />
+        ) : (
+          <EmptyState
+            icon={<Icon name="book" />}
+            title="Aún no tienes asignaturas activas"
+            description="Cuando aparezca una matrícula o asignación vigente, verás aquí las actividades."
           />
         )}
       </DataState>
@@ -992,48 +1378,17 @@ export function StudentDeliverablesScreen({
   );
 }
 
-function startOfLocalDay(value: string) {
-  const date = new Date(value);
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  ).getTime();
-}
-
-function dayKey(value: string) {
-  const date = new Date(value);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function dayLabel(value: string) {
-  const diffDays = Math.round(
-    (startOfLocalDay(value) - startOfLocalDay(new Date().toISOString())) /
-      86_400_000,
-  );
-  if (diffDays === 0) return 'Hoy';
-  if (diffDays === 1) return 'Mañana';
-  if (diffDays === -1) return 'Ayer';
-  const formatted = new Intl.DateTimeFormat('es-CL', {
-    day: 'numeric',
-    month: 'long',
-    weekday: 'long',
-  }).format(new Date(value));
-  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-}
-
-function groupDeliverablesByDay(
-  rows: Array<{ item: LearningItem; subject: DeliverableRow['subject'] }>,
-) {
+function groupDeliverablesByDay(rows: DeliverableRow[], timeZone: string) {
   const groups: Array<{ key: string; label: string; rows: typeof rows }> = [];
   for (const row of rows) {
-    const key = dayKey(row.item.dueAt as string);
+    if (!row.item.dueAt) continue;
+    const key = learningCalendarDayKey(row.item.dueAt, timeZone);
     const existing = groups.find((group) => group.key === key);
     if (existing) existing.rows.push(row);
     else
       groups.push({
         key,
-        label: dayLabel(row.item.dueAt as string),
+        label: formatLearningCalendarDay(row.item.dueAt, Date.now(), timeZone),
         rows: [row],
       });
   }
@@ -1049,26 +1404,46 @@ export function StudentCalendarScreen({
 }) {
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
   const currentSession = useTrustedCurrentSession(session).session;
-  const data = useStudentWorkspace(client);
-  const upcoming = data.routes
-    .flatMap(({ route, subject }) =>
-      deliverableItems(visibleStudentUnits(route.units)).map((item) => ({
-        item,
-        subject,
-      })),
-    )
-    .filter(({ item }) => item.dueAt)
-    .sort(
-      (left, right) =>
-        new Date(left.item.dueAt as string).getTime() -
-        new Date(right.item.dueAt as string).getTime(),
-    );
-  const groups = groupDeliverablesByDay(upcoming);
+  const data = useStudentWorkspace(client, true);
+  const [query, setQuery] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const filteredRows = useMemo(() => {
+    const normalized = normalizeStudentSearch(query);
+    return data.deliverables
+      .filter((row) => row.item.dueAt)
+      .filter(
+        (row) => subjectFilter === 'all' || row.subject.id === subjectFilter,
+      )
+      .filter((row) =>
+        normalizeStudentSearch(
+          `${row.item.title} ${subjectName(row.subject)} ${courseName(row.subject)}`,
+        ).includes(normalized),
+      )
+      .filter((row) => {
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'unavailable')
+          return row.statusAvailable === false;
+        if (row.statusAvailable === false) return false;
+        const status = row.submission?.status ?? 'PENDING';
+        return statusFilter === 'pending'
+          ? status === 'PENDING'
+          : status === statusFilter;
+      })
+      .sort((left, right) => compareDueDates(left, right));
+  }, [data.deliverables, query, statusFilter, subjectFilter]);
+  const visibleRows = filteredRows.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
+  const groups = groupDeliverablesByDay(visibleRows, data.timeZone);
 
   return (
     <StudentShell session={currentSession}>
       <PageHeading
-        description="Fechas de entrega de tus actividades y evaluaciones publicadas."
+        description="Consulta las fechas y estados de actividades publicadas para tus asignaturas."
         title="Calendario"
       />
       <DataState
@@ -1076,54 +1451,143 @@ export function StudentCalendarScreen({
         loading={data.loading}
         onRetry={() => void data.load()}
       >
-        {groups.length ? (
-          <div className="calendar-agenda">
-            {groups.map((group) => (
-              <section
-                aria-labelledby={`calendar-day-${group.key}`}
-                className="calendar-day"
-                key={group.key}
+        {data.deliverables.some((row) => row.item.dueAt) ? (
+          <>
+            <div className="student-list-controls student-calendar-controls">
+              <Input
+                id="student-calendar-search"
+                label="Buscar por actividad, asignatura o curso"
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                type="search"
+                value={query}
+              />
+              <Select
+                id="student-calendar-subject"
+                label="Asignatura"
+                onChange={(event) => {
+                  setSubjectFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={subjectFilter}
               >
-                <h2 id={`calendar-day-${group.key}`}>{group.label}</h2>
-                <div className="learning-items">
-                  {group.rows.map(({ item, subject }) => (
-                    <Link
-                      className="learning-item"
-                      href={`/estudiante/asignaturas/${subject.id}/items/${item.id}`}
-                      key={item.id}
+                <option value="all">Todas las asignaturas</option>
+                {data.subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subjectName(subject)} · {courseName(subject)}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                id="student-calendar-status"
+                label="Estado"
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={statusFilter}
+              >
+                <option value="all">Todos los estados</option>
+                <option value="pending">Pendientes</option>
+                <option value="CHANGES_REQUESTED">Cambios solicitados</option>
+                <option value="SUBMITTED">En revisión</option>
+                <option value="REVIEWED">Revisadas</option>
+                <option value="unavailable">Estado no disponible</option>
+              </Select>
+              <span aria-live="polite">
+                {filteredRows.length} fecha
+                {filteredRows.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {data.submissionStatusError ? (
+              <Alert
+                action={
+                  <Button onClick={() => void data.load()} variant="secondary">
+                    Actualizar estados
+                  </Button>
+                }
+                title="Algunos estados no se pudieron consultar"
+                tone="warning"
+              >
+                Las fechas se muestran; los estados sin respuesta se indican
+                como no disponibles.
+              </Alert>
+            ) : null}
+            {groups.length ? (
+              <>
+                <div className="calendar-agenda">
+                  {groups.map((group) => (
+                    <section
+                      aria-labelledby={`calendar-day-${group.key}`}
+                      className="calendar-day"
+                      key={group.key}
                     >
-                      <span
-                        className={`learning-item__icon learning-item__icon--${item.type.toLowerCase()}`}
-                      >
-                        <Icon
-                          name={
-                            item.type === 'ASSESSMENT'
-                              ? 'document'
-                              : 'clipboard'
-                          }
-                        />
-                      </span>
-                      <span className="learning-item__copy">
-                        <small>{subjectName(subject)}</small>
-                        <strong>{item.title}</strong>
-                        <span>{courseName(subject)}</span>
-                      </span>
-                      <span className="learning-item__meta">
-                        <small>
-                          <Icon name="clock" />
-                          {formatInstant(item.dueAt as string)}
-                        </small>
-                      </span>
-                      <Icon
-                        className="learning-item__chevron"
-                        name="chevron-right"
-                      />
-                    </Link>
+                      <h2 id={`calendar-day-${group.key}`}>{group.label}</h2>
+                      <div className="learning-items">
+                        {group.rows.map((row) => {
+                          const { item, subject } = row;
+                          const status = deliverableStatusMeta(row);
+                          return (
+                            <Link
+                              className="learning-item"
+                              href={`/estudiante/asignaturas/${subject.id}/items/${item.id}`}
+                              key={item.id}
+                            >
+                              <span
+                                className={`learning-item__icon learning-item__icon--${item.type.toLowerCase()}`}
+                              >
+                                <Icon
+                                  name={
+                                    item.type === 'ASSESSMENT'
+                                      ? 'document'
+                                      : 'clipboard'
+                                  }
+                                />
+                              </span>
+                              <span className="learning-item__copy">
+                                <small>{subjectName(subject)}</small>
+                                <strong>{item.title}</strong>
+                                <span>{courseName(subject)}</span>
+                              </span>
+                              <span className="learning-item__meta">
+                                <small>
+                                  <Icon name="clock" />
+                                  {formatLearningInstant(
+                                    item.dueAt ?? '',
+                                    data.timeZone,
+                                  )}
+                                </small>
+                                <Badge tone={status.tone}>{status.label}</Badge>
+                              </span>
+                              <Icon
+                                className="learning-item__chevron"
+                                name="chevron-right"
+                              />
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </section>
                   ))}
                 </div>
-              </section>
-            ))}
-          </div>
+                <StudentPagination
+                  count={filteredRows.length}
+                  label="Paginación del calendario"
+                  onPageChange={setPage}
+                  page={page}
+                  pageSize={pageSize}
+                />
+              </>
+            ) : (
+              <EmptyState
+                icon={<Icon name="search" />}
+                title="No hay fechas con esos filtros"
+                description="Cambia la búsqueda o los filtros para ver otras actividades."
+              />
+            )}
+          </>
         ) : (
           <EmptyState
             icon={<Icon name="calendar" />}

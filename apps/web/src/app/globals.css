@@ -714,6 +714,53 @@ svg {
   padding: clamp(1.25rem, 3vw, 1.85rem);
   box-shadow: var(--shadow-sm);
 }
+.student-list-controls {
+  display: grid;
+  align-items: end;
+  gap: 0.85rem;
+  margin: 1rem 0 1.2rem;
+}
+.student-list-controls .ui-field {
+  min-width: 0;
+  margin: 0;
+}
+.student-subject-controls {
+  grid-template-columns: minmax(14rem, 1fr) auto;
+}
+.student-deliverable-controls,
+.student-calendar-controls {
+  grid-template-columns: minmax(14rem, 1.5fr) repeat(2, minmax(10rem, 1fr)) auto;
+}
+.student-list-controls > span {
+  padding-bottom: 0.65rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.student-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0 2rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+.student-pagination__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.student-pagination__actions .ui-button {
+  min-height: 2.75rem;
+}
+.student-pagination [aria-current='page'] {
+  min-width: 5.5rem;
+  text-align: center;
+}
+.learning-item__meta .ui-badge {
+  max-width: 12rem;
+}
 .student-next__copy h2 {
   max-width: 22ch;
   margin: 0.85rem 0 0;
@@ -4904,12 +4951,19 @@ a.submission-row:hover {
 
 @media (max-width: 900px) {
   .app-sidebar {
+    visibility: hidden;
     transform: translateX(-104%);
-    transition: transform var(--motion-standard) ease;
+    transition:
+      transform var(--motion-standard) ease,
+      visibility 0s linear var(--motion-standard);
     box-shadow: var(--shadow-md);
   }
   .app-sidebar--open {
+    visibility: visible;
     transform: translateX(0);
+    transition:
+      transform var(--motion-standard) ease,
+      visibility 0s;
   }
   .sidebar-close {
     width: 44px;
@@ -5018,6 +5072,27 @@ a.submission-row:hover {
   .student-next__route {
     margin-inline: -0.25rem;
   }
+  .student-list-controls,
+  .student-subject-controls,
+  .student-deliverable-controls,
+  .student-calendar-controls {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+  .student-list-controls > span {
+    padding: 0;
+  }
+  .student-pagination {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+  .student-pagination__actions {
+    justify-content: space-between;
+  }
+  .student-pagination__actions .ui-button {
+    min-width: 5.5rem;
+  }
   .attention-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 0.65rem;
@@ -5076,6 +5151,9 @@ a.submission-row:hover {
   .learning-item__meta {
     grid-column: 2;
     justify-items: start;
+  }
+  .learning-item__meta .ui-badge {
+    max-width: 100%;
   }
   .learning-item__chevron {
     grid-column: 3;

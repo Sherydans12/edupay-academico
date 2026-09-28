@@ -8,6 +8,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { Icon } from '@/components/icons';
+import { formatLearningInstant } from '@/features/learning-datetime';
 
 type ItemIconName = 'book' | 'clipboard' | 'document' | 'message';
 
@@ -96,7 +97,8 @@ function itemDescription(item: LearningItem) {
   );
 }
 
-function formatDueAt(value: string) {
+function formatDueAt(value: string, timeZone?: string) {
+  if (timeZone) return formatLearningInstant(value, timeZone);
   return new Intl.DateTimeFormat('es-CL', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -128,12 +130,14 @@ export function LearningRoute({
   courseSubjectId,
   onItemSelect,
   onUnitSelect,
+  timeZone,
   units,
 }: {
   audience: 'student' | 'teacher';
   courseSubjectId?: string;
   onItemSelect?: (item: LearningItem, unit: LearningUnitWithItems) => ReactNode;
   onUnitSelect?: (unit: LearningUnitWithItems, index: number) => ReactNode;
+  timeZone?: string;
   units: CourseSubjectLearningRoute['units'];
 }) {
   const visibleUnits =
@@ -199,7 +203,7 @@ export function LearningRoute({
                           {item.dueAt ? (
                             <small>
                               <Icon name="clock" />
-                              Vence {formatDueAt(item.dueAt)}
+                              Vence {formatDueAt(item.dueAt, timeZone)}
                             </small>
                           ) : null}
                           {item.publicationStatus === 'SCHEDULED' &&
@@ -211,7 +215,7 @@ export function LearningRoute({
                                   ? 'Programado · disponible desde '
                                   : 'Disponible desde '
                                 : 'Disponible el '}
-                              {formatDueAt(item.publishAt)}
+                              {formatDueAt(item.publishAt, timeZone)}
                             </small>
                           ) : null}
                         </span>
