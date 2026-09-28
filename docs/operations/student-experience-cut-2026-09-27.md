@@ -40,3 +40,7 @@ No se infiere el año académico. Su etiqueta legible sigue siendo un pendiente 
 ### Backend
 
 - No queda un defecto backend reproducido. El pin del runner de validación se corrigió para usar la Identity compatible; no hubo cambios funcionales de Identity/API ni cambios de base de producción.
+
+## Publicación del frontend
+
+El cierre de la publicación manual del FRONT está en [student-experience-release-2026-09-28.md](student-experience-release-2026-09-28.md). PR #26 se integró como `56ea2ae770f48d9b6ad6bdc0f3d184fcbe315fe6`; la comprobación visual posterior al despliegue se hizo en la aplicación publicada, en modo sólo lectura.
