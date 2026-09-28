@@ -35,6 +35,7 @@ Exit criteria:
 - Teachers can organize CourseSubject learning units and create the four MVP item types.
 - Students can navigate assigned CourseSubjects and published content responsively.
 - Draft/publish visibility and access rules are verified.
+- The student context exposes an explicit human-readable academic-year label under a backend contract; the frontend displays only that provided label and never infers the year from names, IDs, or dates.
 
 ## Phase 4 — submissions and review
 
