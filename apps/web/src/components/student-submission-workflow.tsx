@@ -20,12 +20,13 @@ import {
   UploadQueueView,
   useFileUploadQueue,
 } from '@/components/file-upload-queue';
+import {
+  formatLearningInstant,
+  LEARNING_OPERATIONAL_TIME_ZONE,
+} from '@/features/learning-datetime';
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('es-CL', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
+function formatDate(value: string, timeZone: string): string {
+  return formatLearningInstant(value, timeZone);
 }
 
 function statusMeta(status: Submission['status'] | 'PENDING') {
@@ -68,18 +69,22 @@ function downloadBlob(blob: Blob, filename: string): void {
 export function StudentSubmissionWorkflow({
   api,
   item,
+  timeZone = LEARNING_OPERATIONAL_TIME_ZONE,
 }: {
   api: AcademicApiClient;
   item: LearningItem;
+  timeZone?: string;
 }) {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [policy, setPolicy] = useState<StoragePolicy | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState('');
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
+  const [submissionStateUnknown, setSubmissionStateUnknown] = useState(false);
   const queue = useFileUploadQueue({
     api,
     category: 'STUDENT_SUBMISSION',
@@ -87,7 +92,6 @@ export function StudentSubmissionWorkflow({
     policy,
     maxFiles: 20,
   });
-
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -117,8 +121,12 @@ export function StudentSubmissionWorkflow({
       ]);
       setSubmission(nextSubmission);
       setPolicy(nextPolicy);
+      setHasLoaded(true);
+      setSubmissionStateUnknown(false);
+      return nextSubmission;
     } catch (nextError) {
       setError(nextError);
+      return undefined;
     } finally {
       setLoading(false);
     }
@@ -128,6 +136,26 @@ export function StudentSubmissionWorkflow({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  async function verifyStatus() {
+    const refreshed = await load();
+    if (!refreshed) return;
+    const attemptedIds = queue.getCompletedFileIds();
+    const registeredIds = new Set(
+      latestRevision(refreshed)?.files.map((file) => file.id) ?? [],
+    );
+    if (
+      attemptedIds.length &&
+      attemptedIds.every((id) => registeredIds.has(id))
+    ) {
+      queue.clear();
+      setComment('');
+      setActionError('');
+      setSuccess(
+        'El servidor confirmó tu envío. Tus archivos quedaron registrados correctamente.',
+      );
+    }
+  }
 
   const status = submission?.status ?? 'PENDING';
   const meta = statusMeta(status);
@@ -143,7 +171,14 @@ export function StudentSubmissionWorkflow({
       setActionError('Selecciona al menos un archivo para continuar.');
       return;
     }
+    if (submissionStateUnknown) {
+      setActionError(
+        'Primero verifica el estado de la entrega. Mantuvimos tus archivos y comentario en esta página.',
+      );
+      return;
+    }
     setSaving(true);
+    let attemptedFileObjectIds: string[] = [];
     try {
       if (queue.hasWaiting && !(await queue.uploadPending())) {
         setActionError(
@@ -157,15 +192,15 @@ export function StudentSubmissionWorkflow({
         );
         return;
       }
-      const fileObjectIds = queue.getCompletedFileIds();
-      if (fileObjectIds.length === 0) {
+      attemptedFileObjectIds = queue.getCompletedFileIds();
+      if (attemptedFileObjectIds.length === 0) {
         setActionError(
           'No hay archivos finalizados para enviar. Revisa la lista e inténtalo nuevamente.',
         );
         return;
       }
       const input = {
-        fileObjectIds,
+        fileObjectIds: attemptedFileObjectIds,
         studentComment: comment.trim() || undefined,
       };
       const nextSubmission =
@@ -182,6 +217,47 @@ export function StudentSubmissionWorkflow({
       );
     } catch (nextError) {
       setActionError(submissionErrorMessage(nextError));
+      if (attemptedFileObjectIds.length) {
+        try {
+          const refreshed =
+            typeof api.getOwnSubmission === 'function'
+              ? await api
+                  .getOwnSubmission(item.id)
+                  .catch((error) =>
+                    isNotFound(error) ? null : Promise.reject(error),
+                  )
+              : null;
+          const latestRefreshed = latestRevision(refreshed);
+          const registeredFiles = new Set(
+            latestRefreshed?.files.map((file) => file.id) ?? [],
+          );
+          const requestWasRegistered =
+            attemptedFileObjectIds.every((id) => registeredFiles.has(id)) &&
+            Boolean(latestRefreshed);
+          if (submission && !refreshed) {
+            setSubmissionStateUnknown(true);
+            setActionError(
+              'No pudimos confirmar el estado de tu revisión. Conservamos los archivos y el comentario; verifica la entrega antes de continuar.',
+            );
+            return;
+          }
+          setSubmission(refreshed);
+          setSubmissionStateUnknown(false);
+          if (requestWasRegistered) {
+            setActionError('');
+            setComment('');
+            queue.clear();
+            setSuccess(
+              'El servidor confirmó tu envío. Tus archivos quedaron registrados correctamente.',
+            );
+          }
+        } catch {
+          setSubmissionStateUnknown(true);
+          setActionError(
+            'No pudimos confirmar si el envío quedó registrado. Conservamos tus archivos y comentario; verifica el estado antes de volver a enviar.',
+          );
+        }
+      }
     } finally {
       setSaving(false);
     }
@@ -205,7 +281,7 @@ export function StudentSubmissionWorkflow({
     .filter((review) => review.action === 'CHANGES_REQUESTED')
     .at(-1);
 
-  if (loading)
+  if (loading && !hasLoaded)
     return (
       <section
         aria-label="Cargando entrega"
@@ -217,7 +293,7 @@ export function StudentSubmissionWorkflow({
         </div>
       </section>
     );
-  if (error)
+  if (error && !hasLoaded)
     return (
       <section className="upload-panel submission-seam">
         <Alert
@@ -289,6 +365,39 @@ export function StudentSubmissionWorkflow({
           {success}
         </Alert>
       ) : null}
+      {error && hasLoaded ? (
+        <Alert
+          action={
+            <Button onClick={() => void load()} variant="secondary">
+              Reintentar actualización
+            </Button>
+          }
+          title="Mostramos la última información cargada"
+          tone="warning"
+        >
+          No pudimos actualizar la entrega. Tus archivos y comentario siguen en
+          esta página.
+        </Alert>
+      ) : null}
+      {submissionStateUnknown ? (
+        <Alert
+          action={
+            <Button onClick={() => void verifyStatus()} variant="secondary">
+              Verificar estado
+            </Button>
+          }
+          title="Falta confirmar el resultado del envío"
+          tone="warning"
+        >
+          No vuelvas a enviarlo hasta actualizar el estado. Los archivos y el
+          comentario siguen conservados en esta página.
+        </Alert>
+      ) : null}
+      {loading && hasLoaded ? (
+        <p aria-live="polite" className="ui-field-hint">
+          Actualizando la entrega…
+        </p>
+      ) : null}
       {actionError ? (
         <Alert title="No se pudo completar la entrega" tone="error">
           {actionError}
@@ -299,7 +408,9 @@ export function StudentSubmissionWorkflow({
         <>
           <UploadQueueView
             action={() => void submit()}
-            actionDisabled={queue.hasFailed || !queue.rows.length}
+            actionDisabled={
+              queue.hasFailed || !queue.rows.length || submissionStateUnknown
+            }
             actionLabel={revisionVerb}
             actionLoading={saving}
             id={`submission-files-${item.id}`}
@@ -347,8 +458,9 @@ export function StudentSubmissionWorkflow({
                   <div>
                     <h4>Revisión {revision.revisionNumber}</h4>
                     <p>
-                      Enviada {formatDate(revision.submittedAt)} · plazo
-                      efectivo {formatDate(revision.effectiveDueAt)}
+                      Enviada {formatDate(revision.submittedAt, timeZone)} ·
+                      plazo efectivo{' '}
+                      {formatDate(revision.effectiveDueAt, timeZone)}
                     </p>
                   </div>
                   <Badge tone={revision.isLate ? 'warning' : 'success'}>
@@ -400,7 +512,7 @@ export function StudentSubmissionWorkflow({
                         <span>
                           {review.comment ?? 'Sin comentario adicional.'}
                         </span>
-                        <small>{formatDate(review.createdAt)}</small>
+                        <small>{formatDate(review.createdAt, timeZone)}</small>
                       </div>
                     ))}
                   </div>

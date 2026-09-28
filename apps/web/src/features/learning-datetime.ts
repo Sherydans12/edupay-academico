@@ -6,6 +6,81 @@
  */
 export const LEARNING_OPERATIONAL_TIME_ZONE = 'America/Santiago' as const;
 
+const wallDateFormatter = (timeZone: string) =>
+  new Intl.DateTimeFormat('en-US', {
+    calendar: 'gregory',
+    day: '2-digit',
+    month: '2-digit',
+    numberingSystem: 'latn',
+    timeZone,
+    year: 'numeric',
+  });
+
+/** Use the tenant's configured zone when available; the pilot default is Santiago. */
+export function learningTimeZone(value?: string | null) {
+  const candidate = value?.trim();
+  if (!candidate) return LEARNING_OPERATIONAL_TIME_ZONE;
+  try {
+    wallDateFormatter(candidate).format(new Date(0));
+    return candidate;
+  } catch {
+    return LEARNING_OPERATIONAL_TIME_ZONE;
+  }
+}
+
+export function formatLearningInstant(value: string, timeZone?: string | null) {
+  return new Intl.DateTimeFormat('es-CL', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: learningTimeZone(timeZone),
+  }).format(new Date(value));
+}
+
+function wallDate(value: string | number, timeZone?: string | null) {
+  const parts = Object.fromEntries(
+    wallDateFormatter(learningTimeZone(timeZone))
+      .formatToParts(new Date(value))
+      .filter(({ type }) => type !== 'literal')
+      .map(({ type, value }) => [type, Number(value)]),
+  );
+  return {
+    day: parts.day as number,
+    month: parts.month as number,
+    year: parts.year as number,
+  };
+}
+
+export function learningCalendarDayKey(
+  value: string,
+  timeZone?: string | null,
+) {
+  const { day, month, year } = wallDate(value, timeZone);
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+export function formatLearningCalendarDay(
+  value: string,
+  now = Date.now(),
+  timeZone?: string | null,
+) {
+  const target = wallDate(value, timeZone);
+  const today = wallDate(now, timeZone);
+  const targetDay = Date.UTC(target.year, target.month - 1, target.day);
+  const todayDay = Date.UTC(today.year, today.month - 1, today.day);
+  const difference = (targetDay - todayDay) / 86_400_000;
+  if (difference === 0) return 'Hoy';
+  if (difference === 1) return 'Mañana';
+  if (difference === -1) return 'Ayer';
+  const formatted = new Intl.DateTimeFormat('es-CL', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: learningTimeZone(timeZone),
+    weekday: 'long',
+    year: 'numeric',
+  }).format(new Date(value));
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
 const dateTimeLocalPattern =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
 

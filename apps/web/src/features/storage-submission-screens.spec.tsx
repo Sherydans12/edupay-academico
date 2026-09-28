@@ -262,6 +262,75 @@ describe('student storage and submission workflow', () => {
     await waitFor(() => expect(downloadFile).toHaveBeenCalledWith(fileId));
   });
 
+  it('reconciles a lost submit response with the server before allowing another send', async () => {
+    const notFound = new AcademicApiError({
+      code: 'NOT_FOUND',
+      details: [],
+      message: 'not found',
+      requestId: 'req-missing',
+      status: 404,
+    });
+    const getOwnSubmission = vi
+      .fn()
+      .mockRejectedValueOnce(notFound)
+      .mockResolvedValueOnce(submission());
+    const submitLearningItem = vi
+      .fn()
+      .mockRejectedValue(new Error('connection lost after commit'));
+    const api = client({
+      getStudentContextSubjects: vi.fn(async () => [subject]),
+      getLearningItem: vi.fn(async () => item),
+      getOwnSubmission,
+      getStoragePolicy: vi.fn(async () => policy),
+      createUploadIntent: vi.fn(async (input) => ({
+        id: fileId,
+        parentType: 'LEARNING_ITEM' as const,
+        parentId: itemId,
+        category: 'STUDENT_SUBMISSION' as const,
+        filename: input.filename,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        status: 'RESERVED' as const,
+        expiresAt: '2099-08-08T12:15:00+00:00',
+        upload: {
+          method: 'POST' as const,
+          path: `/api/v1/file-upload-intents/${fileId}/content`,
+          fieldName: 'file' as const,
+          maxSizeBytes: 25_000_000 as const,
+        },
+      })),
+      completeUploadIntent: vi.fn(async () => file),
+      submitLearningItem,
+    });
+    render(
+      <StudentAssignmentScreen
+        api={api}
+        courseSubjectId={subjectId}
+        learningItemId={itemId}
+      />,
+    );
+    await screen.findByRole('heading', { name: 'Tu entrega' });
+    fireEvent.change(screen.getByLabelText('Selecciona tus archivos'), {
+      target: {
+        files: [new File(['pdf'], 'trabajo.pdf', { type: 'application/pdf' })],
+      },
+    });
+    fireEvent.change(screen.getByLabelText('Comentario opcional'), {
+      target: { value: 'Revisa la conclusión.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar trabajo' }));
+
+    expect(
+      await screen.findByText(
+        'El servidor confirmó tu envío. Tus archivos quedaron registrados correctamente.',
+      ),
+    ).toBeTruthy();
+    expect(submitLearningItem).toHaveBeenCalledTimes(1);
+    expect(getOwnSubmission).toHaveBeenCalledTimes(2);
+    expect(screen.queryByLabelText('Comentario opcional')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Enviar trabajo' })).toBeNull();
+  });
+
   it('shows an individual upload failure and retries only the failed file', async () => {
     const createUploadIntent = vi.fn(async (input) => ({
       id: `${fileId}-${input.filename}-${createUploadIntent.mock.calls.length}`,

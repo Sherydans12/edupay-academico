@@ -1,4 +1,10 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -7,6 +13,7 @@ import {
 } from '@/api/academic-client';
 import {
   StudentCalendarScreen,
+  StudentDashboardScreen,
   StudentDeliverablesScreen,
   StudentSubjectsScreen,
 } from '@/features/student-screens';
@@ -176,6 +183,68 @@ describe('StudentSubjectsScreen', () => {
       }),
     ).toBeTruthy();
   });
+
+  it('searches and paginates subjects beyond the first page', async () => {
+    const subjects = Array.from({ length: 11 }, (_, index) => ({
+      ...subject,
+      id: `00000000-0000-4000-8000-${String(index + 300).padStart(12, '0')}`,
+      course: { ...subject.course, label: `Curso ${index + 1}` },
+      subject: {
+        ...subject.subject,
+        name: `Asignatura ${index + 1}`,
+      },
+    }));
+    render(
+      <StudentSubjectsScreen
+        api={client({ getStudentContextSubjects: vi.fn(async () => subjects) })}
+      />,
+    );
+    expect(await screen.findByText('Asignatura 1')).toBeTruthy();
+    expect(screen.getByText('Página 1 de 2')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    expect(await screen.findByText('Asignatura 10')).toBeTruthy();
+    expect(screen.queryByText('Asignatura 1')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Buscar por asignatura o curso'), {
+      target: { value: 'Curso 11' },
+    });
+    expect(await screen.findByText('Asignatura 11')).toBeTruthy();
+    expect(screen.getByText('1 asignatura')).toBeTruthy();
+  });
+});
+
+describe('StudentDashboardScreen', () => {
+  it('chooses a pending activity instead of an earlier item already submitted', async () => {
+    const submittedItem = learningItem({
+      id: '00000000-0000-4000-8000-000000000209',
+      title: 'Actividad ya enviada',
+      dueAt: '2026-08-01T12:00:00+00:00',
+    });
+    const pendingItem = learningItem({
+      id: '00000000-0000-4000-8000-000000000208',
+      title: 'Próxima actividad pendiente',
+      dueAt: '2026-10-01T12:00:00+00:00',
+    });
+    const submitted = submission(
+      '00000000-0000-4000-8000-000000000207',
+      submittedItem.id,
+      'SUBMITTED',
+    );
+    const api = client({
+      getStudentContextSubjects: vi.fn(async () => [subject]),
+      getLearningRoute: vi.fn(async () => route([submittedItem, pendingItem])),
+      getOwnSubmission: vi.fn(async (id: string) => {
+        if (id === submittedItem.id) return submitted;
+        throw notFound();
+      }),
+    });
+    render(<StudentDashboardScreen api={api} />);
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Tu próximo paso: Próxima actividad pendiente',
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText('Actividad ya enviada')).toBeNull();
+  });
 });
 
 describe('StudentDeliverablesScreen', () => {
@@ -261,9 +330,11 @@ describe('StudentDeliverablesScreen', () => {
       await screen.findByRole('heading', { name: 'Requiere tu atención' }),
     ).toBeTruthy();
     expect(screen.getByText('Guía atrasada')).toBeTruthy();
-    expect(screen.getByText('Atrasada')).toBeTruthy();
+    expect(screen.getByText('Pendiente')).toBeTruthy();
     expect(screen.getByText('Ensayo con cambios')).toBeTruthy();
-    expect(screen.getByText('Cambios solicitados')).toBeTruthy();
+    expect(screen.getAllByText('Cambios solicitados').length).toBeGreaterThan(
+      1,
+    );
 
     expect(screen.getByRole('heading', { name: 'En revisión' })).toBeTruthy();
     expect(screen.getByText('Informe enviado')).toBeTruthy();
@@ -274,6 +345,15 @@ describe('StudentDeliverablesScreen', () => {
     expect(screen.getByText('Revisada')).toBeTruthy();
 
     expect(screen.queryByText('Guía de lectura')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Estado'), {
+      target: { value: 'REVIEWED' },
+    });
+    await waitFor(() =>
+      expect(screen.getByText('Control revisado')).toBeTruthy(),
+    );
+    expect(screen.queryByText('Guía atrasada')).toBeNull();
+    expect(screen.queryByText('Informe enviado')).toBeNull();
   });
 
   it('shows a human empty state when no subject has deliverable content', async () => {
@@ -292,9 +372,40 @@ describe('StudentDeliverablesScreen', () => {
     render(<StudentDeliverablesScreen api={api} />);
     expect(
       await screen.findByRole('heading', {
-        name: 'Aún no tienes actividades pendientes',
+        name: 'Aún no tienes actividades para entregar',
       }),
     ).toBeTruthy();
+  });
+
+  it('does not turn a failed status lookup into a false pending state', async () => {
+    const activity = learningItem({
+      id: '00000000-0000-4000-8000-000000000216',
+      title: 'Estado desconocido',
+    });
+    const api = client({
+      getStudentContextSubjects: vi.fn(async () => [subject]),
+      getLearningRoute: vi.fn(async () => route([activity])),
+      getOwnSubmission: vi.fn(async () => {
+        throw new AcademicApiError({
+          code: 'SERVICE_UNAVAILABLE',
+          details: [],
+          message: 'temporarily unavailable',
+          requestId: 'req-status',
+          status: 503,
+        });
+      }),
+    });
+    render(<StudentDeliverablesScreen api={api} />);
+    expect(
+      await screen.findByRole('heading', { name: 'Estado sin confirmar' }),
+    ).toBeTruthy();
+    expect(screen.getAllByText('Estado no disponible').length).toBeGreaterThan(
+      1,
+    );
+    expect(
+      screen.queryByRole('heading', { name: 'Requiere tu atención' }),
+    ).toBeNull();
+    expect(screen.queryByText('Pendiente')).toBeNull();
   });
 });
 
