@@ -270,6 +270,19 @@ export class LearningManagementController {
     );
   }
 
+  @Delete('learning-items/:id')
+  @HttpCode(204)
+  async deleteItem(
+    @Param('id', uuid) id: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+    @Headers('x-idempotency-key') xIdempotencyKey?: string,
+  ): Promise<void> {
+    await this.learning.deleteItem(
+      this.context(idempotencyKey ?? xIdempotencyKey),
+      id,
+    );
+  }
+
   @Post('learning-items/:id/move')
   @ContractBody(moveLearningItemSchema)
   @ContractResponse(learningItemSchema)

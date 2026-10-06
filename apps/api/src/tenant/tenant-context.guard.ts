@@ -16,6 +16,7 @@ const MEMBERSHIP_SELECTOR_KEYS = new Set(['membershipId', 'membership_id']);
 @Injectable()
 export class TenantContextGuard implements CanActivate {
   constructor(
+    @Inject(Reflector)
     private readonly reflector: Reflector,
     @Inject(SUPPORT_CONTEXT_POLICY)
     private readonly supportContextPolicy: SupportContextPolicy,

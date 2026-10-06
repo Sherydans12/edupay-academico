@@ -1560,6 +1560,65 @@ export class LearningService {
     return execution.data;
   }
 
+  async deleteItem(
+    context: AcademicRequestContext,
+    id: string,
+  ): Promise<object> {
+    const scope = this.managerScope(context);
+    const current = await this.learningItem(scope, id);
+    await this.requireCourseSubjectForMutation(
+      context,
+      scope,
+      current.courseSubjectId,
+    );
+
+    const submissionsCount = await this.prisma.submission.count({
+      where: {
+        tenantId: scope.tenantId,
+        learningItemId: id,
+      },
+    });
+
+    if (submissionsCount > 0) {
+      throw new ConflictException(
+        `No es posible eliminar este contenido porque tiene ${submissionsCount} entrega(s) de estudiantes registrada(s). Puedes archivarlo para ocultarlo de forma segura sin perder las evidencias.`,
+      );
+    }
+
+    const execution = await this.idempotency.execute({
+      tenantId: scope.tenantId,
+      actorIdentityUserId: context.principal.identityUserId,
+      commandName: 'DELETE_ITEM',
+      idempotencyKey: context.idempotencyKey,
+      payload: { id },
+      action: async (tx) => {
+        await tx.learningItemDraft.deleteMany({
+          where: { tenantId: scope.tenantId, learningItemId: id },
+        });
+
+        await tx.fileReference.deleteMany({
+          where: { tenantId: scope.tenantId, learningItemId: id },
+        });
+
+        await tx.learningItem.delete({
+          where: { tenantId_id: { tenantId: scope.tenantId, id } },
+        });
+
+        return { status: 200, data: { deleted: true, id } };
+      },
+    });
+
+    await this.recordAudit(
+      context,
+      'LEARNING_ITEM_DELETED',
+      'LearningItem',
+      id,
+      current.courseSubjectId,
+    );
+
+    return execution.data;
+  }
+
   async unpublishItem(
     context: AcademicRequestContext,
     id: string,

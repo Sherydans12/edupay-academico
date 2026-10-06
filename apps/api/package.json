@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "predev": "pnpm build",
+    "dev": "node --watch dist/main.js",
     "bootstrap:tenant": "tsx src/bootstrap/tenant-bootstrap-main.ts",
     "sync:configure": "tsx src/sync/sync-configure-main.ts",
     "sync:run": "tsx src/sync/sync-run-main.ts",
