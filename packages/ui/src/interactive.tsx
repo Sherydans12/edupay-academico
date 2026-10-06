@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from './components';
 
@@ -213,6 +213,40 @@ export function Tabs({
 }) {
   const fallback = items[0]?.id ?? '';
   const [active, setActive] = useState(defaultTab ?? fallback);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [hasScrolledOnce, setHasScrolledOnce] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 6);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 6);
+    if (el.scrollLeft > 15) {
+      setHasScrolledOnce(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(checkScroll);
+      observer.observe(el);
+    }
+    const timer = setTimeout(checkScroll, 60);
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+      observer?.disconnect();
+      clearTimeout(timer);
+    };
+  }, [checkScroll]);
 
   const activateByKeyboard = (currentIndex: number, key: string) => {
     if (!items.length) return;
@@ -229,33 +263,123 @@ export function Tabs({
     document.getElementById(`${next.id}-tab`)?.focus();
   };
 
+  const scrollBy = (amount: number) => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollBy({ left: amount, behavior: 'smooth' });
+    setHasScrolledOnce(true);
+  };
+
   return (
     <div className="ui-tabs">
-      <div aria-label={label} className="ui-tabs__list" role="tablist">
-        {items.map((item, index) => (
+      <div
+        className={`ui-tabs__nav-wrapper scroll-affordance-wrapper ${canScrollLeft ? 'scroll-affordance--has-left' : ''} ${canScrollRight ? 'scroll-affordance--has-right' : ''}`}
+      >
+        {canScrollLeft ? (
           <button
-            aria-controls={`${item.id}-panel`}
-            aria-selected={active === item.id}
-            className="ui-tabs__tab"
-            id={`${item.id}-tab`}
-            key={item.id}
-            onKeyDown={(event) => {
-              if (
-                ['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)
-              ) {
-                event.preventDefault();
-                activateByKeyboard(index, event.key);
-              }
-            }}
-            onClick={() => setActive(item.id)}
-            role="tab"
-            tabIndex={active === item.id ? 0 : -1}
+            aria-label="Desplazar pestañas hacia la izquierda"
+            className="scroll-affordance-btn scroll-affordance-btn--left ui-tabs__scroll-btn"
+            onClick={() => scrollBy(-180)}
+            tabIndex={-1}
             type="button"
           >
-            {item.label}
+            <svg
+              aria-hidden="true"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2.2"
+              viewBox="0 0 24 24"
+              width="16"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
           </button>
-        ))}
+        ) : null}
+
+        <div
+          aria-label={label}
+          className="ui-tabs__list scroll-affordance-scroller"
+          ref={listRef}
+          role="tablist"
+        >
+          {items.map((item, index) => (
+            <button
+              aria-controls={`${item.id}-panel`}
+              aria-selected={active === item.id}
+              className="ui-tabs__tab"
+              id={`${item.id}-tab`}
+              key={item.id}
+              onClick={() => setActive(item.id)}
+              onKeyDown={(event) => {
+                if (
+                  ['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)
+                ) {
+                  event.preventDefault();
+                  activateByKeyboard(index, event.key);
+                }
+              }}
+              role="tab"
+              tabIndex={active === item.id ? 0 : -1}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {canScrollRight ? (
+          <>
+            {!hasScrolledOnce ? (
+              <div
+                aria-hidden="true"
+                className="scroll-affordance-cue ui-tabs__scroll-cue"
+                onClick={() => scrollBy(180)}
+              >
+                <span>Desliza</span>
+                <svg
+                  aria-hidden="true"
+                  fill="none"
+                  height="12"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                  viewBox="0 0 24 24"
+                  width="12"
+                >
+                  <line x1="5" x2="19" y1="12" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </div>
+            ) : null}
+            <button
+              aria-label="Desplazar pestañas hacia la derecha"
+              className="scroll-affordance-btn scroll-affordance-btn--right ui-tabs__scroll-btn"
+              onClick={() => scrollBy(180)}
+              tabIndex={-1}
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                fill="none"
+                height="16"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.2"
+                viewBox="0 0 24 24"
+                width="16"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </>
+        ) : null}
       </div>
+
       {items.map((item) => (
         <div
           aria-labelledby={`${item.id}-tab`}
