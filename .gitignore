@@ -42,6 +42,10 @@ deploy/env/*.env
 *.swp
 *.swo
 *.swn
+AGENTS.md
+CLAUDE.md
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
 
 # Operating-system metadata
 .DS_Store
