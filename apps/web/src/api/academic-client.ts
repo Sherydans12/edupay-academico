@@ -1246,6 +1246,15 @@ export class AcademicApiClient {
     });
   }
 
+  deleteLearningItem(id: string, options?: { idempotencyKey?: string }) {
+    return this.requestVoid(`learning-items/${id}`, {
+      method: 'DELETE',
+      ...(options?.idempotencyKey
+        ? { headers: { 'Idempotency-Key': options.idempotencyKey } }
+        : {}),
+    });
+  }
+
   moveLearningItem(
     id: string,
     input: MoveLearningItem,
@@ -1475,6 +1484,7 @@ export type LearningApiClient = Pick<
   | 'unpublishLearningItem'
   | 'archiveLearningItem'
   | 'restoreLearningItem'
+  | 'deleteLearningItem'
   | 'moveLearningItem'
   | 'duplicateLearningItem'
   | 'saveLearningItemDraft'

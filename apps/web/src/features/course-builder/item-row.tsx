@@ -1,11 +1,12 @@
 'use client';
 
-import { Badge, Button, DropdownItem, DropdownMenu } from '@edupay/ui';
+import { Badge, Button } from '@edupay/ui';
 import type { LearningItem } from '@edupay/contracts';
 import React, { memo, useRef } from 'react';
 
 import { Icon } from '@/components/icons';
 import { formatInstant } from '@/features/learning-screen-support';
+import { ItemActionsMenu } from './item-actions-menu';
 
 export interface ItemRowProps {
   item: LearningItem;
@@ -26,6 +27,7 @@ export interface ItemRowProps {
   onMoveToUnit: (item: LearningItem) => void;
   onOpenAdvancedEditor: (item: LearningItem) => void;
   onOpenHistory: (item: LearningItem) => void;
+  onDelete?: ((item: LearningItem) => void) | undefined;
 }
 
 export const ItemRow = memo(function ItemRow({
@@ -33,6 +35,7 @@ export const ItemRow = memo(function ItemRow({
   item,
   itemIndex,
   onArchive,
+  onDelete,
   onDuplicate,
   onEdit,
   onManageAttachments,
@@ -88,14 +91,16 @@ export const ItemRow = memo(function ItemRow({
               : item.type === 'ASSIGNMENT'
                 ? 'clipboard'
                 : item.type === 'MATERIAL'
-                  ? 'book'
+                  ? 'book-open'
                   : 'message'
           }
         />
       </span>
 
       <div className="learning-item__copy">
-        <small>
+        <small
+          className={`learning-item__type-chip learning-item__type-chip--${item.type.toLowerCase()}`}
+        >
           {item.type === 'ASSESSMENT'
             ? 'Evaluación en documento'
             : item.type === 'ASSIGNMENT'
@@ -116,6 +121,19 @@ export const ItemRow = memo(function ItemRow({
 
       <div className="learning-item__meta">
         <Badge
+          icon={
+            <Icon
+              name={
+                item.publicationStatus === 'PUBLISHED'
+                  ? 'check-circle'
+                  : item.publicationStatus === 'SCHEDULED'
+                    ? 'clock'
+                    : item.publicationStatus === 'ARCHIVED'
+                      ? 'archive'
+                      : 'edit'
+              }
+            />
+          }
           tone={
             item.publicationStatus === 'PUBLISHED'
               ? 'success'
@@ -134,14 +152,14 @@ export const ItemRow = memo(function ItemRow({
         </Badge>
 
         {deliverable && item.dueAt ? (
-          <small>
+          <small className="learning-item__due-badge">
             <Icon name="clock" />
             Vence {formatInstant(item.dueAt)}
           </small>
         ) : null}
 
         {item.publicationStatus === 'SCHEDULED' && item.publishAt ? (
-          <small>
+          <small className="learning-item__schedule-badge">
             <Icon name="calendar" />
             Publica el {formatInstant(item.publishAt)}
           </small>
@@ -149,100 +167,74 @@ export const ItemRow = memo(function ItemRow({
       </div>
 
       <div className="learning-item__actions">
-        {/* Reordering Accessibility Buttons */}
-        <Button
-          aria-label={`Mover ${item.title} hacia arriba`}
-          disabled={itemIndex === 0 || saving}
-          onClick={handleMoveUp}
-          size="icon"
-          title="Mover hacia arriba"
-          variant="ghost"
-        >
-          <Icon name="arrow-up" />
-        </Button>
-        <Button
-          aria-label={`Mover ${item.title} hacia abajo`}
-          disabled={itemIndex === totalItems - 1 || saving}
-          onClick={handleMoveDown}
-          size="icon"
-          title="Mover hacia abajo"
-          variant="ghost"
-        >
-          <Icon name="arrow-down" />
-        </Button>
-
-        {item.publicationStatus === 'ARCHIVED' ? (
+        <div className="learning-item__reorder-group">
+          {/* Reordering Accessibility Buttons */}
           <Button
-            aria-label={`Restaurar ${item.title} como borrador`}
-            onClick={() => onRestore(item)}
-            size="sm"
-            variant="secondary"
+            aria-label={`Mover ${item.title} hacia arriba`}
+            disabled={itemIndex === 0 || saving}
+            onClick={handleMoveUp}
+            size="icon"
+            title="Mover hacia arriba"
+            variant="ghost"
           >
-            <Icon name="history" />
-            Restaurar
+            <Icon name="arrow-up" />
           </Button>
-        ) : (
           <Button
-            aria-label={`Editar ${item.title}`}
-            onClick={() => onEdit(item)}
-            size="sm"
-            variant="secondary"
+            aria-label={`Mover ${item.title} hacia abajo`}
+            disabled={itemIndex === totalItems - 1 || saving}
+            onClick={handleMoveDown}
+            size="icon"
+            title="Mover hacia abajo"
+            variant="ghost"
           >
-            <Icon name="edit" />
-            Editar
+            <Icon name="arrow-down" />
           </Button>
-        )}
+        </div>
 
-        {item.publicationStatus === 'DRAFT' ? (
-          <Button onClick={() => onPublish(item)} size="sm">
-            Publicar
-          </Button>
-        ) : null}
+        <div className="learning-item__primary-actions">
+          {item.publicationStatus === 'ARCHIVED' ? (
+            <Button
+              aria-label={`Restaurar ${item.title} como borrador`}
+              onClick={() => onRestore(item)}
+              size="sm"
+              variant="secondary"
+            >
+              <Icon name="history" />
+              Restaurar
+            </Button>
+          ) : (
+            <Button
+              aria-label={`Editar ${item.title}`}
+              onClick={() => onEdit(item)}
+              size="sm"
+              variant="secondary"
+            >
+              <Icon name="edit" />
+              Editar
+            </Button>
+          )}
 
-        <DropdownMenu
-          label={`Más opciones para ${item.title}`}
-          trigger={
-            <span aria-label="Más opciones" className="dropdown-trigger-icon">
-              <Icon name="more" />
-            </span>
-          }
-        >
-          <DropdownItem onSelect={() => onOpenAdvancedEditor(item)}>
-            <Icon name="edit" />
-            Editor avanzado y borrador
-          </DropdownItem>
-          {attachmentSupported ? (
-            <DropdownItem onSelect={() => onManageAttachments(item)}>
-              <Icon name="paperclip" />
-              Archivos adjuntos
-            </DropdownItem>
+          {item.publicationStatus === 'DRAFT' ? (
+            <Button onClick={() => onPublish(item)} size="sm">
+              <Icon name="sparkles" />
+              Publicar
+            </Button>
           ) : null}
-          {item.publicationStatus === 'DRAFT' ||
-          item.publicationStatus === 'SCHEDULED' ? (
-            <DropdownItem onSelect={() => onSchedule(item)}>
-              <Icon name="calendar" />
-              Programar publicación
-            </DropdownItem>
-          ) : null}
-          <DropdownItem onSelect={() => onMoveToUnit(item)}>
-            <Icon name="move" />
-            Mover a otra unidad
-          </DropdownItem>
-          <DropdownItem onSelect={() => onDuplicate(item)}>
-            <Icon name="copy" />
-            Duplicar contenido
-          </DropdownItem>
-          <DropdownItem onSelect={() => onOpenHistory(item)}>
-            <Icon name="history" />
-            Historial de versiones
-          </DropdownItem>
-          {item.publicationStatus !== 'ARCHIVED' ? (
-            <DropdownItem onSelect={() => onArchive(item)}>
-              <Icon name="archive" />
-              Archivar contenido
-            </DropdownItem>
-          ) : null}
-        </DropdownMenu>
+
+          <ItemActionsMenu
+            attachmentSupported={attachmentSupported}
+            item={item}
+            onArchive={onArchive}
+            onDelete={onDelete}
+            onDuplicate={onDuplicate}
+            onManageAttachments={onManageAttachments}
+            onMoveToUnit={onMoveToUnit}
+            onOpenAdvancedEditor={onOpenAdvancedEditor}
+            onOpenHistory={onOpenHistory}
+            onRestore={onRestore}
+            onSchedule={onSchedule}
+          />
+        </div>
       </div>
     </div>
   );

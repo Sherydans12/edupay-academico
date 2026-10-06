@@ -1,6 +1,14 @@
 'use client';
 
-import { Alert, Button, Card, EmptyState, Input, Skeleton } from '@edupay/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  Skeleton,
+} from '@edupay/ui';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -121,6 +129,16 @@ function RosterErrorState({
   );
 }
 
+function studentInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0];
+  const second = parts[1];
+  if (first && second) {
+    return `${first.charAt(0)}${second.charAt(0)}`.toUpperCase();
+  }
+  return (name.slice(0, 2) || 'ES').toUpperCase();
+}
+
 export function TeacherCourseSubjectRosterScreen({
   api,
   courseSubjectId,
@@ -181,82 +199,137 @@ export function TeacherCourseSubjectRosterScreen({
           title="Asignatura no disponible"
         />
       ) : (
-        <Card className="academic-roster">
-          <div className="section-heading">
-            <div>
-              <h2>Estudiantes con acceso</h2>
-              <p>
-                La lista se entrega según la matrícula del curso y los accesos
-                directos vigentes.
-              </p>
-            </div>
-          </div>
-          {data.roster.length ? (
-            <>
-              <div className="teacher-list-controls">
-                <Input
-                  id="teacher-roster-search"
-                  label="Buscar estudiante"
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    setPage(0);
-                  }}
-                  type="search"
-                  value={query}
-                />
-                <span aria-live="polite">
-                  {filtered.length} estudiante{filtered.length === 1 ? '' : 's'}
+        <div className="academic-roster-workspace">
+          {data.subject ? (
+            <div className="roster-hero-banner">
+              <div className="roster-hero-banner__main">
+                <div className="roster-hero-banner__icon" aria-hidden="true">
+                  <Icon name="people" />
+                </div>
+                <div className="roster-hero-banner__text">
+                  <div className="roster-hero-banner__badges">
+                    <Badge tone="info">{courseName(data.subject)}</Badge>
+                    <Badge tone="success">
+                      <span className="status-dot status-dot--active" /> Matrícula oficial activa
+                    </Badge>
+                  </div>
+                  <h3>Nómina y Registro de Estudiantes</h3>
+                  <p>
+                    {subjectName(data.subject)} · Consulta de estudiantes autorizados para acceder a contenidos, evaluaciones y calificaciones.
+                  </p>
+                </div>
+              </div>
+              <div className="roster-hero-banner__stat">
+                <span className="roster-hero-banner__stat-num">{data.roster.length}</span>
+                <span className="roster-hero-banner__stat-label">
+                  Matrícula oficial vigente
                 </span>
               </div>
-              {filtered.length ? (
-                <ul>
-                  {filtered
-                    .slice(page * pageSize, (page + 1) * pageSize)
-                    .map((entry) => (
-                      <li key={entry.student.id}>
-                        <span>
-                          {entry.student.firstName} {entry.student.lastName}
-                        </span>
-                        <small>
-                          {entry.access.includes('DIRECT')
-                            ? 'Acceso directo'
-                            : 'Curso por defecto'}
-                        </small>
-                      </li>
-                    ))}
-                </ul>
-              ) : (
-                <p>No hay estudiantes que coincidan con la búsqueda.</p>
-              )}
-              {filtered.length > pageSize ? (
-                <nav
-                  aria-label="Páginas de estudiantes"
-                  className="teacher-list-pages"
-                >
-                  <Button
-                    disabled={page === 0}
-                    onClick={() => setPage(page - 1)}
-                    variant="secondary"
-                  >
-                    Anterior
-                  </Button>
-                  <span>
-                    Página {page + 1} de {Math.ceil(filtered.length / pageSize)}
+            </div>
+          ) : null}
+
+          <Card className="academic-roster">
+            <div className="section-heading">
+              <div>
+                <h2>Estudiantes con acceso</h2>
+                <p>
+                  La lista se entrega según la matrícula del curso y los accesos
+                  directos vigentes.
+                </p>
+              </div>
+            </div>
+            {data.roster.length ? (
+              <>
+                <div className="teacher-list-controls roster-toolbar">
+                  <div className="roster-search-field">
+                    <Input
+                      id="teacher-roster-search"
+                      label="Buscar estudiante"
+                      onChange={(event) => {
+                        setQuery(event.target.value);
+                        setPage(0);
+                      }}
+                      placeholder="Buscar por nombre o apellido…"
+                      type="search"
+                      value={query}
+                    />
+                  </div>
+                  <span aria-live="polite" className="roster-count-pill">
+                    {filtered.length} estudiante{filtered.length === 1 ? '' : 's'}
                   </span>
-                  <Button
-                    disabled={(page + 1) * pageSize >= filtered.length}
-                    onClick={() => setPage(page + 1)}
-                    variant="secondary"
+                </div>
+                {filtered.length ? (
+                  <ul className="roster-students-list">
+                    {filtered
+                      .slice(page * pageSize, (page + 1) * pageSize)
+                      .map((entry) => {
+                        const fullName = `${entry.student.firstName} ${entry.student.lastName}`;
+                        const initials = studentInitials(fullName);
+                        const isDirect = entry.access.includes('DIRECT');
+                        return (
+                          <li className="roster-student-item" key={entry.student.id}>
+                            <div className="roster-student-item__leading">
+                              <span className="roster-student-avatar" aria-hidden="true">
+                                {initials}
+                              </span>
+                              <div className="roster-student-info">
+                                <span className="roster-student-name">
+                                  {entry.student.firstName} {entry.student.lastName}
+                                </span>
+                                <small className="roster-student-sub">
+                                  ID: {entry.student.id.slice(0, 8)}
+                                </small>
+                              </div>
+                            </div>
+                            <div className="roster-student-item__trailing">
+                              <Badge tone={isDirect ? 'info' : 'neutral'}>
+                                <small>
+                                  {isDirect
+                                    ? 'Acceso directo'
+                                    : 'Curso por defecto'}
+                                </small>
+                              </Badge>
+                              <span className="roster-student-status">
+                                <span className="status-dot status-dot--active" /> Activo
+                              </span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                  </ul>
+                ) : (
+                  <p>No hay estudiantes que coincidan con la búsqueda.</p>
+                )}
+                {filtered.length > pageSize ? (
+                  <nav
+                    aria-label="Páginas de estudiantes"
+                    className="teacher-list-pages roster-pagination"
                   >
-                    Siguiente
-                  </Button>
-                </nav>
-              ) : null}
-            </>
-          ) : (
-            <p>No hay estudiantes disponibles para mostrar.</p>
-          )}
-        </Card>
+                    <Button
+                      disabled={page === 0}
+                      onClick={() => setPage(page - 1)}
+                      variant="secondary"
+                    >
+                      Anterior
+                    </Button>
+                    <span className="roster-page-indicator">
+                      Página {page + 1} de {Math.ceil(filtered.length / pageSize)}
+                    </span>
+                    <Button
+                      disabled={(page + 1) * pageSize >= filtered.length}
+                      onClick={() => setPage(page + 1)}
+                      variant="secondary"
+                    >
+                      Siguiente
+                    </Button>
+                  </nav>
+                ) : null}
+              </>
+            ) : (
+              <p>No hay estudiantes disponibles para mostrar.</p>
+            )}
+          </Card>
+        </div>
       )}
     </AppShell>
   );

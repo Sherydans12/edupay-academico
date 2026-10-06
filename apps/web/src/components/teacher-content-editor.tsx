@@ -31,6 +31,7 @@ import {
   legacyTextToBodyDocument,
 } from '@/components/body-document';
 import { Icon } from '@/components/icons';
+import { ScrollableTabsBar } from './scrollable-tabs-bar';
 import { TeacherAttachmentManager } from '@/components/teacher-attachment-manager';
 import {
   learningDateTimeLocalToInstant,
@@ -63,6 +64,38 @@ interface TeacherContentEditorProps {
   onClose: () => void;
   onSaved: () => void;
 }
+
+const ITEM_TYPES: Array<{
+  type: LearningItem['type'];
+  label: string;
+  description: string;
+  icon: 'file-text' | 'document' | 'award' | 'bell';
+}> = [
+  {
+    type: 'MATERIAL',
+    label: 'Material',
+    description: 'Guías, lecturas y recursos de consulta.',
+    icon: 'file-text',
+  },
+  {
+    type: 'ASSIGNMENT',
+    label: 'Actividad',
+    description: 'Tarea con entrega de archivos del estudiante.',
+    icon: 'document',
+  },
+  {
+    type: 'ASSESSMENT',
+    label: 'Evaluación',
+    description: 'Evaluación formal con control de plazo estricto.',
+    icon: 'award',
+  },
+  {
+    type: 'ANNOUNCEMENT',
+    label: 'Anuncio',
+    description: 'Comunicado informativo para todo el curso.',
+    icon: 'bell',
+  },
+];
 
 function initialFormState(
   item?: LearningItem | null,
@@ -136,6 +169,8 @@ export function TeacherContentEditor({
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [unpublishDialogOpen, setUnpublishDialogOpen] = useState(false);
   const [unpublishing, setUnpublishing] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
 
   // Check if form is dirty compared to saved state
   const isDirty = useMemo(() => {
@@ -418,13 +453,10 @@ export function TeacherContentEditor({
             <div className="teacher-editor-header__left">
               <Button
                 aria-label="Volver a la asignatura"
+                className="teacher-editor-back-btn"
                 onClick={() => {
-                  if (
-                    isDirty &&
-                    !window.confirm(
-                      'Tienes cambios sin guardar. ¿Deseas salir de todas formas?',
-                    )
-                  ) {
+                  if (isDirty) {
+                    setShowExitDialog(true);
                     return;
                   }
                   onClose();
@@ -435,17 +467,39 @@ export function TeacherContentEditor({
                 <Icon name="arrow-left" />
               </Button>
 
-              <div>
-                <div className="teacher-editor-breadcrumbs">
-                  <span>{subjectName(subject)}</span>
+              <div className="teacher-editor-heading-wrap">
+                <nav className="teacher-editor-breadcrumbs" aria-label="Ruta de navegación">
+                  <span className="breadcrumb-item breadcrumb-subject">{subjectName(subject)}</span>
                   <Icon name="chevron-right" />
-                  <span>{unit.title}</span>
+                  <span className="breadcrumb-item breadcrumb-unit">{unit.title}</span>
+                </nav>
+                <div className="teacher-editor-title-row">
+                  <span className={`editor-type-pill editor-type-pill--${form.type.toLowerCase()}`}>
+                    <Icon
+                      name={
+                        form.type === 'MATERIAL'
+                          ? 'file-text'
+                          : form.type === 'ASSIGNMENT'
+                            ? 'document'
+                            : form.type === 'ASSESSMENT'
+                              ? 'award'
+                              : 'bell'
+                      }
+                    />
+                    {form.type === 'MATERIAL'
+                      ? 'Material'
+                      : form.type === 'ASSIGNMENT'
+                        ? 'Actividad'
+                        : form.type === 'ASSESSMENT'
+                          ? 'Evaluación'
+                          : 'Anuncio'}
+                  </span>
+                  <h1>
+                    {isEditing
+                      ? form.title || 'Contenido sin título'
+                      : 'Nuevo contenido'}
+                  </h1>
                 </div>
-                <h1>
-                  {isEditing
-                    ? form.title || 'Contenido sin título'
-                    : 'Nuevo contenido'}
-                </h1>
               </div>
             </div>
 
@@ -500,12 +554,16 @@ export function TeacherContentEditor({
 
               {isEditing ? (
                 <Button
+                  className="editor-history-btn"
                   onClick={() => setHistoryOpen(true)}
                   size="sm"
                   variant="secondary"
                 >
                   <Icon name="history" />
-                  Historial
+                  <span>Historial</span>
+                  {item?.version ? (
+                    <span className="editor-version-tag">v{item.version}</span>
+                  ) : null}
                 </Button>
               ) : null}
             </div>
@@ -514,8 +572,10 @@ export function TeacherContentEditor({
           {/* Published Item Working Draft Banner */}
           {isPublished ? (
             <div className="working-draft-banner">
-              <Icon name="layers" />
-              <div>
+              <div className="working-draft-banner__icon">
+                <Icon name="layers" />
+              </div>
+              <div className="working-draft-banner__copy">
                 <strong>Estás editando un borrador de trabajo</strong>
                 <p>
                   Los estudiantes continúan viendo la versión publicada. Tus
@@ -525,12 +585,14 @@ export function TeacherContentEditor({
               </div>
               {serverDraft ? (
                 <Button
+                  className="working-draft-discard-btn"
                   disabled={discarding}
                   loading={discarding}
                   onClick={() => void handleDiscardDraft()}
                   size="sm"
                   variant="ghost"
                 >
+                  <Icon name="trash" />
                   Descartar borrador
                 </Button>
               ) : null}
@@ -565,53 +627,56 @@ export function TeacherContentEditor({
           ) : null}
 
           {/* Navigation Tabs Bar */}
-          <div className="editor-tabs-bar" role="tablist">
-            <button
-              aria-selected={activeTab === 'content'}
-              className={`editor-nav-tab ${activeTab === 'content' ? 'editor-nav-tab--active' : ''}`}
-              onClick={() => setActiveTab('content')}
-              role="tab"
-              type="button"
-            >
-              <Icon name="document" />
-              <span>Contenido</span>
-            </button>
-
-            {item && item.type !== 'ANNOUNCEMENT' ? (
+          <ScrollableTabsBar ariaLabel="Pestañas del editor de contenido">
+            <div className="editor-tabs-bar" role="tablist">
               <button
-                aria-selected={activeTab === 'files'}
-                className={`editor-nav-tab ${activeTab === 'files' ? 'editor-nav-tab--active' : ''}`}
-                onClick={() => setActiveTab('files')}
+                aria-selected={activeTab === 'content'}
+                className={`editor-nav-tab ${activeTab === 'content' ? 'editor-nav-tab--active' : ''}`}
+                onClick={() => setActiveTab('content')}
                 role="tab"
                 type="button"
               >
-                <Icon name="paperclip" />
-                <span>Archivos</span>
+                <Icon name="document" />
+                <span>Contenido</span>
               </button>
-            ) : null}
 
-            <button
-              aria-selected={activeTab === 'settings'}
-              className={`editor-nav-tab ${activeTab === 'settings' ? 'editor-nav-tab--active' : ''}`}
-              onClick={() => setActiveTab('settings')}
-              role="tab"
-              type="button"
-            >
-              <Icon name="settings" />
-              <span>Publicación y plazos</span>
-            </button>
+              {item && item.type !== 'ANNOUNCEMENT' ? (
+                <button
+                  aria-selected={activeTab === 'files'}
+                  className={`editor-nav-tab ${activeTab === 'files' ? 'editor-nav-tab--active' : ''}`}
+                  onClick={() => setActiveTab('files')}
+                  role="tab"
+                  type="button"
+                >
+                  <Icon name="paperclip" />
+                  <span>Archivos</span>
+                </button>
+              ) : null}
 
-            <button
-              aria-selected={activeTab === 'preview'}
-              className={`editor-nav-tab ${activeTab === 'preview' ? 'editor-nav-tab--active' : ''}`}
-              onClick={() => setActiveTab('preview')}
-              role="tab"
-              type="button"
-            >
-              <Icon name="eye" />
-              <span>Vista previa alumno</span>
-            </button>
-          </div>
+              <button
+                aria-selected={activeTab === 'settings'}
+                className={`editor-nav-tab ${activeTab === 'settings' ? 'editor-nav-tab--active' : ''}`}
+                onClick={() => setActiveTab('settings')}
+                role="tab"
+                type="button"
+              >
+                <Icon name="settings" />
+                <span>Publicación y plazos</span>
+              </button>
+
+              <button
+                aria-selected={activeTab === 'preview'}
+                className={`editor-nav-tab ${activeTab === 'preview' ? 'editor-nav-tab--active' : ''}`}
+                onClick={() => setActiveTab('preview')}
+                role="tab"
+                type="button"
+              >
+                <Icon name="eye" />
+                <span>Vista previa alumno</span>
+                <span className="editor-tab-badge">Simulación</span>
+              </button>
+            </div>
+          </ScrollableTabsBar>
         </div>
 
         {/* Dedicated Scrollable Content Body */}
@@ -623,57 +688,101 @@ export function TeacherContentEditor({
               {activeTab === 'content' ? (
                 <div className="editor-form-layout">
                   <div className="editor-form-fields">
-                    <div className="editor-fields-group">
-                      <Select
-                        id="editor-type"
-                        label="Tipo de contenido"
-                        onChange={(event) => {
-                          setForm({
-                            ...form,
-                            type: event.target.value as LearningItem['type'],
-                          });
-                          window.requestAnimationFrame(() =>
-                            document.getElementById('editor-title')?.focus(),
-                          );
-                        }}
-                        value={form.type}
-                      >
-                        <option value="MATERIAL">
-                          Material (lecturas, guías y recursos)
-                        </option>
-                        <option value="ASSIGNMENT">
-                          Actividad (tarea con entrega de estudiante)
-                        </option>
-                        <option value="ASSESSMENT">
-                          Evaluación en documento (evaluación formal)
-                        </option>
-                        <option value="ANNOUNCEMENT">
-                          Anuncio (comunicado para el curso)
-                        </option>
-                      </Select>
+                    <Card className="editor-primary-data-card">
+                      <div className="item-type-selector-group">
+                        <span className="item-type-selector-label">
+                          Tipo de contenido pedagógico
+                        </span>
+                        <div
+                          aria-label="Tipo de contenido"
+                          className="item-type-cards-grid"
+                          role="radiogroup"
+                        >
+                          {ITEM_TYPES.map((t) => (
+                            <button
+                              aria-checked={form.type === t.type}
+                              className={`item-type-card item-type-card--${t.type.toLowerCase()} ${
+                                form.type === t.type
+                                  ? 'item-type-card--active'
+                                  : ''
+                              }`}
+                              key={t.type}
+                              onClick={() => {
+                                setForm({ ...form, type: t.type });
+                                window.requestAnimationFrame(() =>
+                                  document
+                                    .getElementById('editor-title')
+                                    ?.focus(),
+                                );
+                              }}
+                              role="radio"
+                              type="button"
+                            >
+                              <div className="item-type-card__icon">
+                                <Icon name={t.icon} />
+                              </div>
+                              <div className="item-type-card__text">
+                                <strong>{t.label}</strong>
+                                <small>{t.description}</small>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
 
-                      <Input
-                        id="editor-title"
-                        label="Título del contenido"
-                        maxLength={160}
-                        onChange={(event) =>
-                          setForm({ ...form, title: event.target.value })
-                        }
-                        placeholder="Ej: Guía de comprensión lectora Nº 1"
-                        required
-                        value={form.title}
-                      />
+                        {/* Accessible select for form submission, tests and screen readers */}
+                        <div className="sr-only">
+                          <Select
+                            id="editor-type"
+                            label="Tipo de contenido"
+                            onChange={(event) => {
+                              setForm({
+                                ...form,
+                                type: event.target
+                                  .value as LearningItem['type'],
+                              });
+                            }}
+                            value={form.type}
+                          >
+                            <option value="MATERIAL">
+                              Material (lecturas, guías y recursos)
+                            </option>
+                            <option value="ASSIGNMENT">
+                              Actividad (tarea con entrega de estudiante)
+                            </option>
+                            <option value="ASSESSMENT">
+                              Evaluación en documento (evaluación formal)
+                            </option>
+                            <option value="ANNOUNCEMENT">
+                              Anuncio (comunicado para el curso)
+                            </option>
+                          </Select>
+                        </div>
+                      </div>
 
-                      <Textarea
-                        id="editor-description"
-                        label="Descripción breve (opcional)"
-                        onChange={(event) =>
-                          setForm({ ...form, description: event.target.value })
-                        }
-                        placeholder="Resumen o contexto visible en el listado…"
-                        value={form.description}
-                      />
-                    </div>
+                      <div className="editor-fields-group">
+                        <Input
+                          id="editor-title"
+                          label="Título del contenido"
+                          maxLength={160}
+                          onChange={(event) =>
+                            setForm({ ...form, title: event.target.value })
+                          }
+                          placeholder="Ej: Guía de comprensión lectora Nº 1"
+                          required
+                          value={form.title}
+                        />
+
+                        <Textarea
+                          id="editor-description"
+                          label="Descripción breve (opcional)"
+                          onChange={(event) =>
+                            setForm({ ...form, description: event.target.value })
+                          }
+                          placeholder="Resumen o contexto visible en el listado…"
+                          value={form.description}
+                        />
+                      </div>
+                    </Card>
 
                     {/* Specific Body Fields with Markdown */}
                     {form.type === 'MATERIAL' ? (
@@ -1082,13 +1191,10 @@ export function TeacherContentEditor({
         <footer className="teacher-editor-footer">
           <div className="editor-footer-left">
             <Button
+              className="editor-footer-close-btn"
               onClick={() => {
-                if (
-                  isDirty &&
-                  !window.confirm(
-                    'Tienes cambios locales sin guardar. ¿Deseas descartarlos?',
-                  )
-                ) {
+                if (isDirty) {
+                  setShowExitDialog(true);
                   return;
                 }
                 onClose();
@@ -1101,13 +1207,15 @@ export function TeacherContentEditor({
 
             {isDirty ? (
               <Button
+                className="editor-footer-reset-btn"
                 onClick={() => {
-                  setForm(savedFormSnapshot);
+                  setShowResetDialog(true);
                 }}
                 size="sm"
                 type="button"
                 variant="ghost"
               >
+                <Icon name="history" />
                 Restablecer cambios
               </Button>
             ) : null}
@@ -1115,6 +1223,7 @@ export function TeacherContentEditor({
 
           <div className="editor-footer-right">
             <Button
+              className="editor-footer-draft-btn"
               disabled={saving || publishing}
               loading={saving}
               onClick={() => void handleSaveDraft()}
@@ -1126,6 +1235,7 @@ export function TeacherContentEditor({
 
             {!isPublished && form.publishAt ? (
               <Button
+                className="editor-footer-schedule-btn"
                 disabled={saving || publishing}
                 loading={publishing}
                 onClick={() => void handlePublish(false)}
@@ -1138,6 +1248,7 @@ export function TeacherContentEditor({
             ) : null}
 
             <Button
+              className="editor-footer-publish-btn"
               disabled={saving || publishing}
               loading={publishing}
               onClick={() => {
@@ -1253,6 +1364,86 @@ export function TeacherContentEditor({
                 Quitar publicación
               </Button>
             </div>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {/* Exit with unsaved changes dialog */}
+      {showExitDialog ? (
+        <Dialog
+          description="Tienes modificaciones sin guardar en el editor avanzado. Si sales ahora, se descartarán todos los cambios locales recientes."
+          onOpenChange={(open) => {
+            if (!open) setShowExitDialog(false);
+          }}
+          open
+          title="¿Salir sin guardar cambios?"
+        >
+          <div
+            className="showcase-dialog-actions"
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end',
+              marginTop: '1.25rem',
+            }}
+          >
+            <Button
+              onClick={() => setShowExitDialog(false)}
+              type="button"
+              variant="secondary"
+            >
+              Seguir editando
+            </Button>
+            <Button
+              onClick={() => {
+                setShowExitDialog(false);
+                onClose();
+              }}
+              type="button"
+              variant="danger"
+            >
+              Salir sin guardar
+            </Button>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {/* Reset local changes dialog */}
+      {showResetDialog ? (
+        <Dialog
+          description="Se descartarán todos los cambios locales no guardados y se recuperará la versión guardada más reciente."
+          onOpenChange={(open) => {
+            if (!open) setShowResetDialog(false);
+          }}
+          open
+          title="¿Restablecer cambios?"
+        >
+          <div
+            className="showcase-dialog-actions"
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end',
+              marginTop: '1.25rem',
+            }}
+          >
+            <Button
+              onClick={() => setShowResetDialog(false)}
+              type="button"
+              variant="secondary"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowResetDialog(false);
+                setForm(savedFormSnapshot);
+              }}
+              type="button"
+              variant="danger"
+            >
+              Restablecer cambios
+            </Button>
           </div>
         </Dialog>
       ) : null}

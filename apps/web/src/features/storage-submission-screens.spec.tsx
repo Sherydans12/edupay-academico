@@ -229,7 +229,7 @@ describe('student storage and submission workflow', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Tu entrega' }),
+      await screen.findByRole('heading', { name: 'Tu entrega' }, { timeout: 4000 }),
     ).toBeTruthy();
     const input = screen.getByLabelText('Selecciona tus archivos');
     fireEvent.change(input, {

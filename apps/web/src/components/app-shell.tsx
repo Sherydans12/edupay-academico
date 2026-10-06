@@ -51,17 +51,22 @@ const workspaceNavigation: Record<WorkspaceKind, NavigationItem[]> = {
     { href: '/docente', icon: 'home', label: 'Inicio', mobile: true },
     {
       href: '/docente/asignaturas',
-      icon: 'book',
+      icon: 'book-open',
       label: 'Asignaturas',
       mobile: true,
     },
     {
       href: '/docente/revisiones',
-      icon: 'review',
+      icon: 'file-text',
       label: 'Revisiones',
       mobile: true,
     },
-    { href: '/docente/calendario', icon: 'calendar', label: 'Calendario' },
+    {
+      href: '/docente/calendario',
+      icon: 'calendar',
+      label: 'Calendario',
+      mobile: true,
+    },
   ],
   'tenant-admin': [
     { href: '/administracion', icon: 'home', label: 'Resumen', mobile: true },
@@ -84,6 +89,59 @@ const workspaceNavigation: Record<WorkspaceKind, NavigationItem[]> = {
     },
   ],
 };
+
+const accountNavigation: Record<WorkspaceKind, NavigationItem[]> = {
+  staff: [],
+  student: [
+    { href: '/estudiante/perfil', icon: 'users', label: 'Mi perfil' },
+    {
+      href: '/estudiante/configuracion',
+      icon: 'settings',
+      label: 'Configuración',
+    },
+  ],
+  teacher: [
+    { href: '/docente/perfil', icon: 'users', label: 'Mi perfil' },
+    {
+      href: '/docente/configuracion',
+      icon: 'settings',
+      label: 'Configuración',
+    },
+  ],
+  'tenant-admin': [
+    { href: '/administracion/perfil', icon: 'users', label: 'Mi perfil' },
+    {
+      href: '/administracion/configuracion',
+      icon: 'settings',
+      label: 'Configuración',
+    },
+  ],
+};
+
+function getAccountHrefs(workspace: WorkspaceKind) {
+  switch (workspace) {
+    case 'teacher':
+      return {
+        profileHref: '/docente/perfil',
+        settingsHref: '/docente/configuracion',
+      };
+    case 'student':
+      return {
+        profileHref: '/estudiante/perfil',
+        settingsHref: '/estudiante/configuracion',
+      };
+    case 'tenant-admin':
+      return {
+        profileHref: '/administracion/perfil',
+        settingsHref: '/administracion/configuracion',
+      };
+    default:
+      return {
+        profileHref: '/docente/perfil',
+        settingsHref: '/docente/configuracion',
+      };
+  }
+}
 
 function isCurrentPath(pathname: string, href: string) {
   if (pathname === href) return true;
@@ -145,7 +203,9 @@ export function AppShell({
   const dieAllowed =
     dieAccessGranted ??
     (dieProbe?.membershipId === session.membershipId && dieProbe.allowed);
+  const { profileHref, settingsHref } = getAccountHrefs(session.workspace);
   const workspaceItems = workspaceNavigation[session.workspace];
+  const accountItems = accountNavigation[session.workspace] ?? [];
   const moduleItems: NavigationItem[] = dieAllowed
     ? [
         {
@@ -156,7 +216,7 @@ export function AppShell({
         },
       ]
     : [];
-  const navigation = [...workspaceItems, ...moduleItems];
+  const navigation = [...workspaceItems, ...moduleItems, ...accountItems];
   const mobileNavigation = navigation.filter((item) => item.mobile);
   const activeNavigationItem = navigation.find((item) =>
     isCurrentPath(pathname, item.href),
@@ -179,13 +239,14 @@ export function AppShell({
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-workspace={session.workspace}>
       <a className="skip-link" href="#main-content">
         Saltar al contenido
       </a>
       <aside
         aria-label="Navegación principal"
         className={`app-sidebar ${mobileOpen ? 'app-sidebar--open' : ''}`}
+        data-workspace={session.workspace}
         id="app-sidebar-navigation"
         onKeyDown={(event) => {
           if (event.key !== 'Escape' || !mobileOpen) return;
@@ -196,11 +257,15 @@ export function AppShell({
       >
         <div className="brand-lockup">
           <div aria-label="EduPay Académico" className="brand-mark" role="img">
-            EP
+            <Icon name="graduation-cap" />
           </div>
           <div className="brand-copy">
             <strong>{session.tenantDisplayName}</strong>
-            <span>EduPay Académico</span>
+            <span className="brand-badge">
+              {session.workspace === 'teacher'
+                ? 'Portal Docente'
+                : 'EduPay Académico'}
+            </span>
           </div>
           <button
             aria-label="Cerrar navegación"
@@ -225,8 +290,10 @@ export function AppShell({
                   key={item.href}
                   onClick={() => setMobileOpen(false)}
                 >
-                  <Icon name={item.icon} />
-                  <span>{item.label}</span>
+                  <span className="sidebar-link__icon">
+                    <Icon name={item.icon} />
+                  </span>
+                  <span className="sidebar-link__label">{item.label}</span>
                 </Link>
               ))}
             </div>
@@ -244,17 +311,52 @@ export function AppShell({
                   key={item.href}
                   onClick={() => setMobileOpen(false)}
                 >
-                  <Icon name={item.icon} />
-                  <span>{item.label}</span>
+                  <span className="sidebar-link__icon">
+                    <Icon name={item.icon} />
+                  </span>
+                  <span className="sidebar-link__label">{item.label}</span>
                 </Link>
               ))}
             </div>
           ) : null}
         </nav>
         <div className="sidebar-context">
-          <span>Rol actual</span>
-          <strong>{session.roleLabel}</strong>
-          <p>{session.tenantDisplayName}</p>
+          <div className="sidebar-user">
+            <div className="sidebar-user__avatar-wrap">
+              <Avatar name={session.displayName} size="md" />
+              <span className="sidebar-user__online-dot" aria-hidden="true" />
+            </div>
+            <div className="sidebar-user__info">
+              <strong>{session.displayName}</strong>
+              <span className="sidebar-user__role">{session.roleLabel}</span>
+            </div>
+          </div>
+          <div className="sidebar-user__quick-actions">
+            <Link
+              aria-label="Ir a mi perfil"
+              className="sidebar-user__quick-btn"
+              href={profileHref}
+              onClick={() => setMobileOpen(false)}
+              title="Ir a mi perfil"
+            >
+              <Icon name="users" />
+              <span>Mi perfil</span>
+            </Link>
+            <Link
+              aria-label="Configuración"
+              className="sidebar-user__quick-btn"
+              href={settingsHref}
+              onClick={() => setMobileOpen(false)}
+              title="Configuración"
+            >
+              <Icon name="settings" />
+              <span>Configuración</span>
+            </Link>
+          </div>
+          <div className="sidebar-context__tenant">
+            <span className="tenant-status-dot" aria-hidden="true" />
+            <p>{session.tenantDisplayName}</p>
+          </div>
         </div>
       </aside>
 
@@ -281,12 +383,38 @@ export function AppShell({
             <Icon name="menu" />
           </button>
           <div aria-label="Contexto actual" className="topbar-location">
-            <span>{session.tenantDisplayName}</span>
-            <strong>
-              {activeNavigationItem?.label ?? 'Espacio académico'}
-            </strong>
+            <div className="topbar-location__crumb">
+              <span className="topbar-location__tenant">
+                <span className="topbar-location__tenant-dot" aria-hidden="true" />
+                {session.tenantDisplayName}
+              </span>
+              <span className="topbar-location__sep" aria-hidden="true">/</span>
+              <strong className="topbar-location__page">
+                {activeNavigationItem?.label ?? 'Espacio académico'}
+              </strong>
+            </div>
           </div>
           <div className="topbar-actions">
+            <div className="topbar-quick-links" aria-label="Accesos rápidos de cuenta">
+              <Link
+                aria-label="Ir a mi perfil"
+                className={`topbar-quick-link ${isCurrentPath(pathname, profileHref) ? 'topbar-quick-link--active' : ''}`}
+                href={profileHref}
+                title="Ir a mi perfil"
+              >
+                <Icon name="users" />
+                <span className="topbar-quick-link__text">Mi perfil</span>
+              </Link>
+              <Link
+                aria-label="Configuración"
+                className={`topbar-quick-link ${isCurrentPath(pathname, settingsHref) ? 'topbar-quick-link--active' : ''}`}
+                href={settingsHref}
+                title="Configuración"
+              >
+                <Icon name="settings" />
+                <span className="topbar-quick-link__text">Configuración</span>
+              </Link>
+            </div>
             <NotificationCenter api={notificationApi} />
             <DropdownMenu
               label="Cuenta"
@@ -301,6 +429,12 @@ export function AppShell({
                 </span>
               }
             >
+              <DropdownItem onSelect={() => router.push(profileHref)}>
+                Ir a mi perfil
+              </DropdownItem>
+              <DropdownItem onSelect={() => router.push(settingsHref)}>
+                Configuración
+              </DropdownItem>
               {identity?.memberships
                 .filter(
                   (membership) =>

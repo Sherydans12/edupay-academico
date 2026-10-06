@@ -17,6 +17,7 @@ import { CourseBuilder } from './course-builder';
 vi.mock('next/navigation', () => ({
   usePathname: () => '/docente/asignaturas/space-1',
   useRouter: () => ({ push: () => undefined }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 afterEach(cleanup);

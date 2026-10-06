@@ -155,6 +155,20 @@ export function TeacherAttachmentManager({
     }
   }
 
+function fileIcon(mime: string): 'file-text' | 'image' | 'paperclip' {
+  if (mime.includes('image')) return 'image';
+  if (
+    mime.includes('pdf') ||
+    mime.includes('document') ||
+    mime.includes('text') ||
+    mime.includes('presentation') ||
+    mime.includes('sheet')
+  ) {
+    return 'file-text';
+  }
+  return 'paperclip';
+}
+
   if (!category) return null;
   const uploadsBlocked = usage?.state === 'FULL';
 
@@ -164,9 +178,14 @@ export function TeacherAttachmentManager({
       aria-labelledby={`attachments-title-${item.id}`}
     >
       <div className="section-heading">
-        <div>
-          <h3 id={`attachments-title-${item.id}`}>Archivos adjuntos</h3>
-          <p>Agrega materiales de apoyo para este contenido.</p>
+        <div className="section-heading-title">
+          <div className="attachment-header-icon">
+            <Icon name="paperclip" />
+          </div>
+          <div>
+            <h3 id={`attachments-title-${item.id}`}>Archivos adjuntos</h3>
+            <p>Agrega materiales de apoyo y recursos descargables para este contenido.</p>
+          </div>
         </div>
         <Badge tone={uploadsBlocked ? 'warning' : 'info'}>
           {attachments.length} archivo{attachments.length === 1 ? '' : 's'}
@@ -184,6 +203,17 @@ export function TeacherAttachmentManager({
                 {usage.remainingPercentage}% libre)
               </span>
             </span>
+          </div>
+          <div className="storage-meter-progress">
+            <div
+              className={`storage-meter-progress__bar storage-meter-progress__bar--${usage.state.toLowerCase()}`}
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.round((usage.usedBytes / usage.quotaBytes) * 100),
+                )}%`,
+              }}
+            />
           </div>
           {usage.state !== 'NORMAL' ? (
             <Alert
@@ -229,19 +259,25 @@ export function TeacherAttachmentManager({
         <div className="attachment-list">
           {attachments.map((file) => (
             <div className="attachment-row" key={file.id}>
-              <Icon name="paperclip" />
-              <span>
+              <div
+                className={`attachment-file-icon attachment-file-icon--${fileIcon(
+                  file.detectedMime,
+                )}`}
+              >
+                <Icon name={fileIcon(file.detectedMime)} />
+              </div>
+              <div className="attachment-file-details">
                 <strong>{file.originalFilename}</strong>
                 <small>
                   {formatFileSize(file.sizeBytes)} · {file.detectedMime}
                 </small>
-              </span>
+              </div>
               <div className="attachment-row-actions">
                 <Button
                   aria-label={`Descargar ${file.originalFilename}`}
                   onClick={() => void download(file)}
                   size="icon"
-                  title="Descargar"
+                  title="Descargar archivo"
                   variant="ghost"
                 >
                   <Icon name="download" />
@@ -262,9 +298,16 @@ export function TeacherAttachmentManager({
       ) : null}
 
       {!loading && !attachments.length ? (
-        <p className="attachment-empty">
-          Aún no hay archivos adjuntos en este contenido.
-        </p>
+        <div className="attachment-empty">
+          <div className="attachment-empty__icon">
+            <Icon name="paperclip" />
+          </div>
+          <h4>Aún no hay archivos adjuntos en este contenido</h4>
+          <p>
+            Utiliza la zona de carga inferior para adjuntar guías en PDF,
+            lecturas complementarias o imágenes.
+          </p>
+        </div>
       ) : null}
 
       {uploadError ? (

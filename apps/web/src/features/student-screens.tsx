@@ -1127,14 +1127,14 @@ function DeliverableRowLink({
   const meta = deliverableStatusMeta(row);
   return (
     <Link
-      className="submission-row"
+      className="submission-row submission-row--student-link"
       href={`/estudiante/asignaturas/${row.subject.id}/items/${row.item.id}`}
       key={row.item.id}
     >
-      <span className="submission-row__icon">
+      <span className={`submission-row__icon-box submission-row__icon-box--${meta.tone}`}>
         <Icon name={meta.icon} />
       </span>
-      <span>
+      <span className="submission-row__main">
         <strong>{row.item.title}</strong>
         <small>
           {subjectName(row.subject)} · {courseName(row.subject)}
@@ -1144,7 +1144,7 @@ function DeliverableRowLink({
         <small>{deliverableTimeCopy(row, timeZone)}</small>
       </span>
       <Badge tone={meta.tone}>{meta.label}</Badge>
-      <Icon name="chevron-right" />
+      <Icon className="submission-row__chevron" name="chevron-right" />
     </Link>
   );
 }

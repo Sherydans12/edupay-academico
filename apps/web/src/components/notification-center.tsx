@@ -22,15 +22,15 @@ const NOTIFICATION_REFRESH_MS = 60_000;
 
 const notificationTypeMeta: Record<
   NotificationType,
-  { icon: IconName; label: string }
+  { icon: IconName; label: string; tone: string }
 > = {
-  ASSIGNMENT_PUBLISHED: { icon: 'clipboard', label: 'Actividad publicada' },
-  ASSESSMENT_PUBLISHED: { icon: 'document', label: 'Evaluación publicada' },
-  ANNOUNCEMENT_PUBLISHED: { icon: 'message', label: 'Aviso publicado' },
-  SUBMISSION_RECEIVED: { icon: 'upload', label: 'Entrega recibida' },
-  RESUBMISSION_RECEIVED: { icon: 'upload', label: 'Reentrega recibida' },
-  SUBMISSION_REVIEWED: { icon: 'check', label: 'Entrega revisada' },
-  CHANGES_REQUESTED: { icon: 'review', label: 'Correcciones solicitadas' },
+  ASSIGNMENT_PUBLISHED: { icon: 'clipboard', label: 'Actividad publicada', tone: 'assignment' },
+  ASSESSMENT_PUBLISHED: { icon: 'document', label: 'Evaluación publicada', tone: 'assessment' },
+  ANNOUNCEMENT_PUBLISHED: { icon: 'message', label: 'Aviso publicado', tone: 'announcement' },
+  SUBMISSION_RECEIVED: { icon: 'upload', label: 'Entrega recibida', tone: 'submission' },
+  RESUBMISSION_RECEIVED: { icon: 'upload', label: 'Reentrega recibida', tone: 'resubmission' },
+  SUBMISSION_REVIEWED: { icon: 'check', label: 'Entrega revisada', tone: 'reviewed' },
+  CHANGES_REQUESTED: { icon: 'review', label: 'Correcciones solicitadas', tone: 'changes' },
 };
 
 export function getSafeNotificationTargetPath(
@@ -88,6 +88,7 @@ export function NotificationCenter({
   const pendingReadIds = useRef(new Set<string>());
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(api ? null : 0);
+  const [filterTab, setFilterTab] = useState<'ALL' | 'UNREAD'>('ALL');
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [listLoaded, setListLoaded] = useState(!api);
@@ -97,6 +98,32 @@ export function NotificationCenter({
   const [countError, setCountError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleMarkSingleRead = async (
+    e: React.MouseEvent,
+    notification: InAppNotification,
+  ) => {
+    e.stopPropagation();
+    if (notification.readAt || !api || pendingReadIds.current.has(notification.id)) {
+      return;
+    }
+    pendingReadIds.current.add(notification.id);
+    try {
+      const updated = await api.markNotificationRead(notification.id);
+      setNotifications((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setUnreadCount((current) =>
+        current === null ? current : Math.max(0, current - 1),
+      );
+    } catch {
+      setActionError(
+        'No pudimos marcar esta notificación como leída. Puedes reintentarlo.',
+      );
+    } finally {
+      pendingReadIds.current.delete(notification.id);
+    }
+  };
 
   const refreshUnreadCount = useCallback(async () => {
     if (!api) return;
@@ -347,6 +374,36 @@ export function NotificationCenter({
             </button>
           </div>
 
+          {/* Filter tabs: Todas vs Sin leer */}
+          {notifications.length > 0 ? (
+            <div className="notification-panel__tabs" role="tablist">
+              <button
+                aria-selected={filterTab === 'ALL'}
+                className={`notification-tab ${filterTab === 'ALL' ? 'notification-tab--active' : ''}`}
+                onClick={() => setFilterTab('ALL')}
+                role="tab"
+                type="button"
+              >
+                <span>Todas</span>
+                <span className="notification-tab__pill">{notifications.length}</span>
+              </button>
+              <button
+                aria-selected={filterTab === 'UNREAD'}
+                className={`notification-tab ${filterTab === 'UNREAD' ? 'notification-tab--active' : ''}`}
+                onClick={() => setFilterTab('UNREAD')}
+                role="tab"
+                type="button"
+              >
+                <span>Sin leer</span>
+                {unreadCount && unreadCount > 0 ? (
+                  <span className="notification-tab__pill notification-tab__pill--unread">
+                    {unreadCount}
+                  </span>
+                ) : null}
+              </button>
+            </div>
+          ) : null}
+
           <div
             aria-busy={loadingList || loadingMore}
             className="notification-list-wrap"
@@ -368,12 +425,21 @@ export function NotificationCenter({
                 </p>
               </div>
             ) : null}
-            {!loadingList && notifications.length > 0 ? (
+            {!loadingList && filterTab === 'UNREAD' && notifications.length > 0 && notifications.filter((n) => !n.readAt).length === 0 ? (
+              <div className="notification-empty" role="status">
+                <span className="notification-empty__icon">
+                  <Icon name="check-circle" />
+                </span>
+                <strong>¡Todo al día!</strong>
+                <p>No tienes notificaciones pendientes sin leer.</p>
+              </div>
+            ) : null}
+            {!loadingList && (filterTab === 'UNREAD' ? notifications.filter((n) => !n.readAt) : notifications).length > 0 ? (
               <ul
                 aria-label="Lista de notificaciones"
                 className="notification-list"
               >
-                {notifications.map((notification) => {
+                {(filterTab === 'UNREAD' ? notifications.filter((n) => !n.readAt) : notifications).map((notification) => {
                   const meta = notificationTypeMeta[notification.type];
                   const unread = !notification.readAt;
                   return (
@@ -381,38 +447,51 @@ export function NotificationCenter({
                       className={`notification-list__item ${unread ? 'notification-list__item--unread' : ''}`}
                       key={notification.id}
                     >
-                      <button
-                        className="notification-item"
-                        onClick={() =>
-                          void handleOpenNotification(notification)
-                        }
-                        type="button"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="notification-item__icon"
+                      <div className="notification-item-wrap">
+                        <button
+                          className="notification-item"
+                          onClick={() =>
+                            void handleOpenNotification(notification)
+                          }
+                          type="button"
                         >
-                          <Icon name={meta.icon} />
-                        </span>
-                        <span className="notification-item__content">
-                          <span className="notification-item__meta">
-                            <span>{meta.label}</span>
-                            <time dateTime={notification.createdAt}>
-                              {formatNotificationDate(notification.createdAt)}
-                            </time>
+                          <span
+                            aria-hidden="true"
+                            className={`notification-item__icon notification-item__icon--${meta.tone}`}
+                          >
+                            <Icon name={meta.icon} />
                           </span>
-                          <strong>{notification.title}</strong>
-                          <span>{notification.body}</span>
-                          <span className="notification-item__state">
-                            {unread ? 'Sin leer · Abrir' : 'Leída · Abrir'}
+                          <span className="notification-item__content">
+                            <span className="notification-item__meta">
+                              <span className="notification-item__type-label">{meta.label}</span>
+                              <time dateTime={notification.createdAt}>
+                                {formatNotificationDate(notification.createdAt)}
+                              </time>
+                            </span>
+                            <strong>{notification.title}</strong>
+                            <span>{notification.body}</span>
+                            <span className="notification-item__state">
+                              {unread ? 'Sin leer · Abrir' : 'Leída · Abrir'}
+                            </span>
                           </span>
-                        </span>
-                        <Icon
-                          aria-hidden="true"
-                          className="notification-item__chevron"
-                          name="chevron-right"
-                        />
-                      </button>
+                          <Icon
+                            aria-hidden="true"
+                            className="notification-item__chevron"
+                            name="chevron-right"
+                          />
+                        </button>
+                        {unread && api ? (
+                          <button
+                            aria-label="Marcar como leída"
+                            className="notification-item__quick-read-btn"
+                            onClick={(e) => void handleMarkSingleRead(e, notification)}
+                            title="Marcar como leída"
+                            type="button"
+                          >
+                            <Icon name="check" />
+                          </button>
+                        ) : null}
+                      </div>
                     </li>
                   );
                 })}

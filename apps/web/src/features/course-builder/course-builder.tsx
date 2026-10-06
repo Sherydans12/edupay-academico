@@ -7,6 +7,7 @@ import type {
   LearningUnitWithItems,
 } from '@edupay/contracts';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import React, {
   useCallback,
   useEffect,
@@ -61,6 +62,8 @@ export interface CourseBuilderProps {
   subject: CourseSubject;
   initialUnits: LearningUnitWithItems[];
   onRefreshRoute?: () => Promise<void>;
+  initialTab?: string | undefined;
+  initialActivityId?: string | undefined;
 }
 
 export function CourseBuilder({
@@ -68,6 +71,8 @@ export function CourseBuilder({
   initialUnits,
   onRefreshRoute,
   subject,
+  initialTab,
+  initialActivityId,
 }: CourseBuilderProps) {
   const [state, dispatch] = useReducer(
     courseBuilderReducer,
@@ -77,6 +82,11 @@ export function CourseBuilder({
       units,
     }),
   );
+
+  const searchParams = useSearchParams();
+  const activeTabParam = initialTab || searchParams?.get('tab') || 'content';
+  const activityIdParam =
+    initialActivityId || searchParams?.get('activityId') || undefined;
 
   // Synchronize incoming units from route loader if they update
   useEffect(() => {
@@ -138,6 +148,10 @@ export function CourseBuilder({
     body: string;
     run: () => Promise<void>;
   } | null>(null);
+  const [archiveItemCandidate, setArchiveItemCandidate] =
+    useState<LearningItem | null>(null);
+  const [deleteItemCandidate, setDeleteItemCandidate] =
+    useState<LearningItem | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   // Concurrency conflict handler (409 STALE_REVISION)
@@ -637,13 +651,18 @@ export function CourseBuilder({
     );
   };
 
-  const handleArchiveItem = async (item: LearningItem) => {
+  const handleArchiveItem = (item: LearningItem) => {
+    setArchiveItemCandidate(item);
+  };
+
+  const executeArchiveItem = async (item: LearningItem) => {
     const commandId = newClientUUID();
     dispatch({
       commandId,
       itemId: item.id,
       type: 'OPTIMISTIC_ARCHIVE_ITEM',
     });
+    setArchiveItemCandidate(null);
     await runCommand(
       commandId,
       async () => {
@@ -652,7 +671,31 @@ export function CourseBuilder({
         });
         if (onRefreshRoute) await onRefreshRoute();
       },
-      'Contenido archivado.',
+      'Contenido archivado. Puedes restaurarlo o gestionarlo desde la pestaña de archivados.',
+    );
+  };
+
+  const handleDeleteItem = (item: LearningItem) => {
+    setDeleteItemCandidate(item);
+  };
+
+  const executeDeleteItem = async (item: LearningItem) => {
+    const commandId = newClientUUID();
+    dispatch({
+      commandId,
+      itemId: item.id,
+      type: 'OPTIMISTIC_DELETE_ITEM',
+    });
+    setDeleteItemCandidate(null);
+    await runCommand(
+      commandId,
+      async () => {
+        await api.deleteLearningItem(item.id, {
+          idempotencyKey: commandId,
+        });
+        if (onRefreshRoute) await onRefreshRoute();
+      },
+      'Contenido eliminado definitivamente.',
     );
   };
 
@@ -729,49 +772,89 @@ export function CourseBuilder({
 
   return (
     <>
-      {/* Breadcrumb Navigation */}
-      <nav aria-label="Ruta de navegación" className="breadcrumbs">
-        <Link href="/docente/asignaturas">Asignaturas</Link>
-        <Icon name="chevron-right" />
-        <span>
+      {/* 1. Breadcrumb Navigation */}
+      <nav
+        aria-label="Ruta de navegación"
+        className="breadcrumbs teacher-builder-breadcrumbs"
+      >
+        <Link
+          className="teacher-builder-breadcrumb-back"
+          href="/docente/asignaturas"
+        >
+          <Icon name="arrow-left" />
+          <span>Mis asignaturas</span>
+        </Link>
+        <span className="teacher-builder-breadcrumb-sep">/</span>
+        <span className="teacher-builder-breadcrumb-current">
           {subjectName(subject)} · {courseName(subject)}
         </span>
       </nav>
 
-      {/* Authoring Workspace Header */}
-      <section className="teacher-subject-header">
-        <div className="teacher-subject-header__title-area">
-          <div className="subject-hero__mark">
+      {/* 2. Authoring Workspace Header Hero Card */}
+      <section className="teacher-subject-header teacher-builder-hero">
+        <div className="teacher-subject-header__title-area teacher-builder-hero__title-area">
+          <div className="subject-hero__mark teacher-builder-hero__mark">
             {subjectName(subject).slice(0, 3).toUpperCase()}
           </div>
-          <div>
+          <div className="teacher-builder-hero__info">
+            <div className="teacher-builder-hero__pill-row">
+              <span className="teacher-pill teacher-pill--primary">
+                <Icon name="sparkles" />
+                Espacio Curricular
+              </span>
+              <span className="teacher-pill">
+                <Icon name="book-open" />
+                {courseName(subject)}
+              </span>
+            </div>
             <h1>{subjectName(subject)}</h1>
-            <p>{courseName(subject)} · Espacio de autoría docente</p>
+            <p>
+              {courseName(subject)} · Planificación y gestión de contenidos
+              didácticos
+            </p>
           </div>
         </div>
 
-        <div className="header-actions">
-          <div className="header-status-pills">
-            <Badge tone="neutral">Borradores: {counts.drafts}</Badge>
-            <Badge tone="info">Programados: {counts.scheduled}</Badge>
-            <Badge tone="success">Publicados: {counts.published}</Badge>
+        <div className="header-actions teacher-builder-hero__actions">
+          <div className="header-status-pills teacher-builder-kpis">
+            <div className="teacher-builder-kpi-chip teacher-builder-kpi-chip--draft">
+              <Icon name="edit" />
+              <span>
+                Borradores: <strong>{counts.drafts}</strong>
+              </span>
+            </div>
+            <div className="teacher-builder-kpi-chip teacher-builder-kpi-chip--scheduled">
+              <Icon name="clock" />
+              <span>
+                Programados: <strong>{counts.scheduled}</strong>
+              </span>
+            </div>
+            <div className="teacher-builder-kpi-chip teacher-builder-kpi-chip--published">
+              <Icon name="check-circle" />
+              <span>
+                Publicados: <strong>{counts.published}</strong>
+              </span>
+            </div>
           </div>
 
-          <Button
-            onClick={() => setActiveUnitEditor({ unit: null })}
-            variant="secondary"
-          >
-            <Icon name="plus" />
-            Nueva unidad
-          </Button>
+          <div className="teacher-builder-btn-group">
+            <Link
+              className="teacher-builder-btn teacher-builder-btn--secondary"
+              href={`/docente/asignaturas/${subject.id}/estudiantes`}
+            >
+              <Icon name="people" />
+              <span>Ver estudiantes</span>
+            </Link>
 
-          <Link
-            className="button-link button-link--primary"
-            href={`/docente/asignaturas/${subject.id}/estudiantes`}
-          >
-            <Icon name="people" />
-            Ver estudiantes
-          </Link>
+            <Button
+              className="teacher-builder-btn teacher-builder-btn--primary"
+              onClick={() => setActiveUnitEditor({ unit: null })}
+              variant="primary"
+            >
+              <Icon name="plus" />
+              Nueva unidad
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -844,141 +927,175 @@ export function CourseBuilder({
       ) : null}
 
       {/* Main Tabs: Content / Submissions / Collaboration */}
-      <Tabs
-        items={[
-          {
-            content: (
-              <div className="authoring-workspace-body">
-                <div className="authoring-toolbar">
-                  <div>
-                    <h2>Ruta de aprendizaje</h2>
-                    <p>
-                      Organiza unidades, materiales, actividades, evaluaciones y
-                      anuncios de esta asignatura.
-                    </p>
+      <div className="course-builder-tabs-wrapper">
+        <Tabs
+          defaultTab={activeTabParam}
+          items={[
+            {
+              content: (
+                <div className="authoring-workspace-body teacher-route-workspace">
+                  <div className="authoring-toolbar teacher-route-toolbar">
+                    <div className="teacher-route-toolbar__left">
+                      <div className="teacher-route-toolbar__icon">
+                        <Icon name="layers" />
+                      </div>
+                      <div>
+                        <h2>Ruta de aprendizaje</h2>
+                        <p>
+                          Organiza unidades, materiales, actividades,
+                          evaluaciones y anuncios de esta asignatura.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="teacher-route-toolbar__right">
+                      <span className="teacher-pill teacher-pill--primary">
+                        <Icon name="eye" />
+                        Vista docente
+                      </span>
+                      <span className="teacher-pill">
+                        <Icon name="book-open" />
+                        {state.units.length}{' '}
+                        {state.units.length === 1 ? 'unidad' : 'unidades'}
+                      </span>
+                    </div>
                   </div>
-                  <Badge tone="info">Vista docente</Badge>
-                </div>
 
-                {/* Extracted CourseOutline Component */}
-                <CourseOutline
-                  onActivateUnit={handleActivateUnit}
-                  onAddItem={(unit) =>
-                    setActiveItemEditor({ item: null, unitId: unit.id })
-                  }
-                  onArchiveItem={handleArchiveItem}
-                  onArchiveUnit={handleArchiveUnit}
-                  onCancelSchedule={() => setScheduleDraft(null)}
-                  onChangeScheduleDraftValue={(value) => {
-                    if (scheduleDraft) {
-                      setScheduleDraft({ ...scheduleDraft, value });
+                  {/* Extracted CourseOutline Component */}
+                  <CourseOutline
+                    onActivateUnit={handleActivateUnit}
+                    onAddItem={(unit) =>
+                      setActiveItemEditor({ item: null, unitId: unit.id })
                     }
-                  }}
-                  onDuplicateItem={handleDuplicateItem}
-                  onDuplicateUnit={handleDuplicateUnit}
-                  onEditItem={(unit, it) => {
-                    if (it.publicationStatus === 'DRAFT') {
-                      setActiveItemEditor({ item: it, unitId: unit.id });
-                    } else {
-                      setFullscreenEditorItem({ item: it, unit });
-                    }
-                  }}
-                  onEditUnit={(unit) => setActiveUnitEditor({ unit })}
-                  onManageAttachments={(it) => setAttachmentItem(it)}
-                  onMoveItemDown={(unit, it, idx) =>
-                    void handleMoveItemInUnit(unit, it, idx, 1)
-                  }
-                  onMoveItemToUnit={(unit, it) =>
-                    setMoveItemData({ currentUnit: unit, item: it })
-                  }
-                  onMoveItemUp={(unit, it, idx) =>
-                    void handleMoveItemInUnit(unit, it, idx, -1)
-                  }
-                  onMoveUnitDown={(idx) => void handleMoveUnit(idx, 1)}
-                  onMoveUnitUp={(idx) => void handleMoveUnit(idx, -1)}
-                  onOpenAdvancedEditor={(unit, it) =>
-                    setFullscreenEditorItem({ item: it, unit })
-                  }
-                  onOpenItemHistory={(it) =>
-                    setHistoryEntity({
-                      id: it.id,
-                      title: it.title,
-                      type: 'LEARNING_ITEM',
-                      version: it.version,
-                    })
-                  }
-                  onOpenUnitHistory={(unit) =>
-                    setHistoryEntity({
-                      id: unit.id,
-                      title: unit.title,
-                      type: 'LEARNING_UNIT',
-                      version: unit.version,
-                    })
-                  }
-                  onPublishItem={handlePublishItem}
-                  onRestoreItem={handleRestoreItem}
-                  onRestoreUnit={handleRestoreUnit}
-                  onSaveSchedule={handleSaveSchedule}
-                  onScheduleItemClick={(it) =>
-                    setScheduleDraft({
-                      itemId: it.id,
-                      value: it.publishAt ?? '',
-                    })
-                  }
-                  saving={saving}
-                  scheduleDraft={scheduleDraft}
-                  units={state.units}
-                />
-
-                {/* Attachments Dialog */}
-                {attachmentItem ? (
-                  <TeacherAttachmentDialog
-                    api={api}
-                    item={attachmentItem}
-                    onChanged={() => {
-                      if (onRefreshRoute) void onRefreshRoute();
+                    onArchiveItem={handleArchiveItem}
+                    onDeleteItem={handleDeleteItem}
+                    onArchiveUnit={handleArchiveUnit}
+                    onCancelSchedule={() => setScheduleDraft(null)}
+                    onChangeScheduleDraftValue={(value) => {
+                      if (scheduleDraft) {
+                        setScheduleDraft({ ...scheduleDraft, value });
+                      }
                     }}
-                    onClose={() => setAttachmentItem(null)}
+                    onDuplicateItem={handleDuplicateItem}
+                    onDuplicateUnit={handleDuplicateUnit}
+                    onEditItem={(unit, it) => {
+                      if (it.publicationStatus === 'DRAFT') {
+                        setActiveItemEditor({ item: it, unitId: unit.id });
+                      } else {
+                        setFullscreenEditorItem({ item: it, unit });
+                      }
+                    }}
+                    onEditUnit={(unit) => setActiveUnitEditor({ unit })}
+                    onManageAttachments={(it) => setAttachmentItem(it)}
+                    onMoveItemDown={(unit, it, idx) =>
+                      void handleMoveItemInUnit(unit, it, idx, 1)
+                    }
+                    onMoveItemToUnit={(unit, it) =>
+                      setMoveItemData({ currentUnit: unit, item: it })
+                    }
+                    onMoveItemUp={(unit, it, idx) =>
+                      void handleMoveItemInUnit(unit, it, idx, -1)
+                    }
+                    onMoveUnitDown={(idx) => void handleMoveUnit(idx, 1)}
+                    onMoveUnitUp={(idx) => void handleMoveUnit(idx, -1)}
+                    onOpenAdvancedEditor={(unit, it) =>
+                      setFullscreenEditorItem({ item: it, unit })
+                    }
+                    onOpenItemHistory={(it) =>
+                      setHistoryEntity({
+                        id: it.id,
+                        title: it.title,
+                        type: 'LEARNING_ITEM',
+                        version: it.version,
+                      })
+                    }
+                    onOpenUnitHistory={(unit) =>
+                      setHistoryEntity({
+                        id: unit.id,
+                        title: unit.title,
+                        type: 'LEARNING_UNIT',
+                        version: unit.version,
+                      })
+                    }
+                    onPublishItem={handlePublishItem}
+                    onRestoreItem={handleRestoreItem}
+                    onRestoreUnit={handleRestoreUnit}
+                    onSaveSchedule={handleSaveSchedule}
+                    onScheduleItemClick={(it) =>
+                      setScheduleDraft({
+                        itemId: it.id,
+                        value: it.publishAt ?? '',
+                      })
+                    }
+                    saving={saving}
+                    scheduleDraft={scheduleDraft}
+                    units={state.units}
                   />
-                ) : null}
-              </div>
-            ),
-            id: 'content',
-            label: 'Ruta y contenido',
-          },
-          {
-            content: (
-              <TeacherSubmissionQueue
-                api={api}
-                courseSubjectId={subject.id}
-                items={state.units.flatMap((u) =>
-                  u.items.filter(
-                    (i) => i.type === 'ASSIGNMENT' || i.type === 'ASSESSMENT',
-                  ),
-                )}
-              />
-            ),
-            id: 'submissions',
-            label: 'Entregas',
-          },
-          {
-            content: (
-              <Card className="team-panel">
-                <Icon name="people" />
-                <div>
-                  <strong>Equipo docente</strong>
-                  <small>
-                    Los docentes asignados comparten este espacio de trabajo.
-                  </small>
+
+                  {/* Attachments Dialog */}
+                  {attachmentItem ? (
+                    <TeacherAttachmentDialog
+                      api={api}
+                      item={attachmentItem}
+                      onChanged={() => {
+                        if (onRefreshRoute) void onRefreshRoute();
+                      }}
+                      onClose={() => setAttachmentItem(null)}
+                    />
+                  ) : null}
                 </div>
-              </Card>
-            ),
-            id: 'team',
-            label: 'Colaboración',
-          },
-        ]}
-        label="Secciones de la asignatura"
-      />
+              ),
+              id: 'content',
+              label: 'Ruta y contenido',
+            },
+            {
+              content: (
+                <div className="teacher-submissions-workspace">
+                  <TeacherSubmissionQueue
+                    api={api}
+                    courseSubjectId={subject.id}
+                    initialSelectedItemId={activityIdParam}
+                    items={state.units.flatMap((u) =>
+                      u.items.filter(
+                        (i) =>
+                          i.type === 'ASSIGNMENT' || i.type === 'ASSESSMENT',
+                      ),
+                    )}
+                    units={state.units}
+                  />
+                </div>
+              ),
+              id: 'submissions',
+              label: 'Entregas',
+            },
+            {
+              content: (
+                <div className="teacher-collab-section">
+                  <Card className="team-panel teacher-collab-card">
+                    <div className="teacher-collab-card__icon">
+                      <Icon name="people" />
+                    </div>
+                    <div className="teacher-collab-card__content">
+                      <h3>Equipo docente</h3>
+                      <p>
+                        Los docentes asignados comparten la autoría pedagógica,
+                        la publicación de contenidos y el seguimiento de las
+                        entregas de los estudiantes.
+                      </p>
+                      <div className="teacher-collab-card__badge">
+                        <Icon name="check-circle" />
+                        <span>Co-docencia activa para este curso</span>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              ),
+              id: 'team',
+              label: 'Colaboración',
+            },
+          ]}
+          label="Secciones de la asignatura"
+        />
+      </div>
 
       {/* FULLSCREEN ADVANCED EDITOR OVERLAY */}
       {fullscreenEditorItem ? (
@@ -1042,6 +1159,70 @@ export function CourseBuilder({
               void handleSaveSchedule(scheduledItem, scheduleDraft.value);
             }}
           >
+            {/* Header info banner */}
+            <div className="schedule-dialog-banner">
+              <div className="schedule-dialog-banner__icon">
+                <Icon name="calendar" />
+              </div>
+              <div className="schedule-dialog-banner__text">
+                <span className="schedule-dialog-banner__type">
+                  {scheduledItem.type === 'ASSESSMENT'
+                    ? 'Evaluación'
+                    : scheduledItem.type === 'ASSIGNMENT'
+                      ? 'Actividad'
+                      : scheduledItem.type === 'MATERIAL'
+                        ? 'Material'
+                        : 'Anuncio'}
+                </span>
+                <strong>{scheduledItem.title}</strong>
+              </div>
+            </div>
+
+            {/* Quick date presets */}
+            <div className="schedule-presets">
+              <span className="schedule-presets__label">Atajos rápidos:</span>
+              <div className="schedule-presets__chips">
+                <button
+                  className="schedule-preset-chip"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 1);
+                    d.setHours(8, 0, 0, 0);
+                    setScheduleDraft({ ...scheduleDraft, value: learningInstantToDateTimeLocal(d.toISOString()) });
+                  }}
+                  type="button"
+                >
+                  Mañana 08:00
+                </button>
+                <button
+                  className="schedule-preset-chip"
+                  onClick={() => {
+                    const d = new Date();
+                    const day = d.getDay();
+                    const diff = (8 - day) % 7 || 7;
+                    d.setDate(d.getDate() + diff);
+                    d.setHours(8, 0, 0, 0);
+                    setScheduleDraft({ ...scheduleDraft, value: learningInstantToDateTimeLocal(d.toISOString()) });
+                  }}
+                  type="button"
+                >
+                  Próximo lunes 08:00
+                </button>
+                <button
+                  className="schedule-preset-chip"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 7);
+                    d.setHours(8, 0, 0, 0);
+                    setScheduleDraft({ ...scheduleDraft, value: learningInstantToDateTimeLocal(d.toISOString()) });
+                  }}
+                  type="button"
+                >
+                  En 1 semana
+                </button>
+              </div>
+            </div>
+
             <div className="learning-editor-grid">
               <Input
                 hint="El contenido pasará automáticamente a estado 'Publicado' en la fecha y hora seleccionada."
@@ -1059,10 +1240,13 @@ export function CourseBuilder({
                 value={scheduleDraft.value}
               />
             </div>
-            <div
-              className="showcase-dialog-actions"
-              style={{ marginTop: '1.25rem' }}
-            >
+
+            <div className="schedule-notice-pill">
+              <Icon name="alert-circle" />
+              <span>Los estudiantes verán este contenido como Programado y el material se habilitará de forma automática en la fecha indicada.</span>
+            </div>
+
+            <div className="showcase-dialog-actions schedule-dialog-actions">
               <Button
                 disabled={saving}
                 onClick={() => setScheduleDraft(null)}
@@ -1071,7 +1255,8 @@ export function CourseBuilder({
               >
                 Cancelar
               </Button>
-              <Button loading={saving} type="submit">
+              <Button loading={saving} type="submit" variant="primary">
+                <Icon name="calendar" />
                 Guardar programación
               </Button>
             </div>
@@ -1089,22 +1274,140 @@ export function CourseBuilder({
           open
           title="Confirmar cambio sensible"
         >
-          <p>{confirmation.body}</p>
-          <div className="showcase-dialog-actions">
-            <Button
-              onClick={() => setConfirmation(null)}
-              type="button"
-              variant="secondary"
-            >
-              Cancelar
-            </Button>
-            <Button
-              loading={confirming}
-              onClick={() => void handleConfirmSensitive()}
-              type="button"
-            >
-              Confirmar cambio
-            </Button>
+          <div className="teacher-confirm-dialog-body">
+            <p>{confirmation.body}</p>
+            <div className="showcase-dialog-actions">
+              <Button
+                onClick={() => setConfirmation(null)}
+                type="button"
+                variant="secondary"
+              >
+                Cancelar
+              </Button>
+              <Button
+                loading={confirming}
+                onClick={() => void handleConfirmSensitive()}
+                type="button"
+                variant="primary"
+              >
+                Confirmar cambio
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {/* ARCHIVE ITEM CONFIRMATION */}
+      {archiveItemCandidate ? (
+        <Dialog
+          description="Al archivar el contenido, se oculta de la ruta de aprendizaje de los estudiantes sin perder ninguna calificación ni entrega histórica."
+          onOpenChange={(open) => {
+            if (!open && !saving) setArchiveItemCandidate(null);
+          }}
+          open
+          title="¿Archivar contenido?"
+        >
+          <div className="teacher-confirm-dialog-body">
+            <div className="dialog-action-card dialog-action-card--archive">
+              <div className="dialog-action-card__icon dialog-action-card__icon--archive">
+                <Icon name="archive" />
+              </div>
+              <div className="dialog-action-card__text">
+                <span className="dialog-action-card__tag">Archivado seguro</span>
+                <strong>«{archiveItemCandidate.title}»</strong>
+                <p>Dejará de estar visible para los estudiantes en este curso.</p>
+              </div>
+            </div>
+
+            <div className="archive-reassurance-box">
+              <div className="archive-reassurance-item">
+                <Icon name="check-circle" />
+                <span>Las entregas, calificaciones y notas de los estudiantes permanecen 100% protegidas.</span>
+              </div>
+              <div className="archive-reassurance-item">
+                <Icon name="history" />
+                <span>Podrás consultarlo y restaurarlo como borrador en cualquier momento desde el filtro de <strong>Archivados</strong>.</span>
+              </div>
+            </div>
+
+            <div className="showcase-dialog-actions">
+              <Button
+                disabled={saving}
+                onClick={() => setArchiveItemCandidate(null)}
+                type="button"
+                variant="secondary"
+              >
+                Cancelar
+              </Button>
+              <Button
+                loading={saving}
+                onClick={() => void executeArchiveItem(archiveItemCandidate)}
+                type="button"
+                variant="primary"
+              >
+                <Icon name="archive" />
+                Archivar contenido
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {/* DELETE ITEM CONFIRMATION */}
+      {deleteItemCandidate ? (
+        <Dialog
+          description="Eliminación permanente de contenido docente."
+          onOpenChange={(open) => {
+            if (!open && !saving) setDeleteItemCandidate(null);
+          }}
+          open
+          title="¿Eliminar contenido definitivamente?"
+        >
+          <div className="teacher-confirm-dialog-body">
+            <div className="dialog-action-card dialog-action-card--danger">
+              <div className="dialog-action-card__icon dialog-action-card__icon--danger">
+                <Icon name="trash" />
+              </div>
+              <div className="dialog-action-card__text">
+                <span className="dialog-action-card__tag dialog-action-card__tag--danger">Acción irreversible</span>
+                <strong>«{deleteItemCandidate.title}»</strong>
+                <p>¿Estás seguro de que deseas eliminar permanentemente este contenido?</p>
+              </div>
+            </div>
+
+            {deleteItemCandidate.type === 'ASSIGNMENT' ||
+            deleteItemCandidate.type === 'ASSESSMENT' ? (
+              <div className="delete-safety-warning-box">
+                <Icon name="alert-triangle" />
+                <div>
+                  <strong>Regla de seguridad:</strong> Si este contenido ya tiene entregas de estudiantes registradas, el sistema impedirá su eliminación para proteger las evidencias de evaluación. Si deseas retirarlo del curso, debes <strong>Archivarlo</strong> en su lugar.
+                </div>
+              </div>
+            ) : null}
+
+            <p className="delete-permanent-note">
+              Esta acción no se puede deshacer. Los borradores y enlaces de archivos asociados a este elemento también se eliminarán.
+            </p>
+
+            <div className="showcase-dialog-actions">
+              <Button
+                disabled={saving}
+                onClick={() => setDeleteItemCandidate(null)}
+                type="button"
+                variant="secondary"
+              >
+                Cancelar
+              </Button>
+              <Button
+                loading={saving}
+                onClick={() => void executeDeleteItem(deleteItemCandidate)}
+                type="button"
+                variant="danger"
+              >
+                <Icon name="trash" />
+                Eliminar definitivamente
+              </Button>
+            </div>
           </div>
         </Dialog>
       ) : null}

@@ -220,6 +220,26 @@ export function courseBuilderReducer(
       };
     }
 
+    case 'OPTIMISTIC_DELETE_ITEM': {
+      const previousUnits = state.units;
+      const nextUnits = state.units.map((unit) => ({
+        ...unit,
+        items: unit.items.filter((item) => item.id !== action.itemId),
+      }));
+
+      const pending: PendingCommand = {
+        actionType: 'DELETE_ITEM',
+        id: action.commandId,
+        previousUnits,
+      };
+
+      return {
+        ...state,
+        pendingCommands: [...state.pendingCommands, pending],
+        units: nextUnits,
+      };
+    }
+
     case 'OPTIMISTIC_ACTIVATE_UNIT': {
       const previousUnits = state.units;
       const nextUnits = state.units.map((unit) =>

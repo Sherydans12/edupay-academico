@@ -1,8 +1,8 @@
 'use client';
 
-import { Button, Input, Textarea } from '@edupay/ui';
+import { Button, Dialog, Input, Textarea } from '@edupay/ui';
 import type { LearningUnitWithItems } from '@edupay/contracts';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { Icon } from '@/components/icons';
@@ -56,13 +56,13 @@ export function UnitEditor({
     };
   }, [isDirty]);
 
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+
   // Cancel with confirmation
   const handleCancelClick = useCallback(() => {
     if (isDirty) {
-      const confirmDiscard = window.confirm(
-        'Tienes cambios sin guardar en la unidad. ¿Estás seguro de que deseas salir sin guardar?',
-      );
-      if (!confirmDiscard) return;
+      setShowDiscardDialog(true);
+      return;
     }
     onCancel();
   }, [isDirty, onCancel]);
@@ -107,11 +107,16 @@ export function UnitEditor({
           onSubmit={handleSubmit(onSubmit)}
         >
           <div className="course-editor-drawer__header">
-            <div>
-              <h3>{initialUnit ? 'Editar unidad' : 'Nueva unidad'}</h3>
-              <p>
-                Las unidades nuevas quedan en borrador hasta que las actives.
-              </p>
+            <div className="course-editor-drawer__header-title">
+              <div className="course-editor-drawer__header-icon">
+                <Icon name={initialUnit ? 'edit' : 'layers'} />
+              </div>
+              <div>
+                <h3>{initialUnit ? 'Editar unidad' : 'Nueva unidad'}</h3>
+                <p>
+                  Las unidades nuevas quedan en borrador hasta que las actives.
+                </p>
+              </div>
             </div>
             <Button
               aria-label="Cerrar panel de edición"
@@ -152,19 +157,21 @@ export function UnitEditor({
                 {...register('description')}
               />
 
-              <Input
-                id="unit-start"
-                label="Disponible desde (opcional)"
-                type="datetime-local"
-                {...register('startAt')}
-              />
+              <div className="unit-editor-dates-grid">
+                <Input
+                  id="unit-start"
+                  label="Disponible desde (opcional)"
+                  type="datetime-local"
+                  {...register('startAt')}
+                />
 
-              <Input
-                id="unit-end"
-                label="Disponible hasta (opcional)"
-                type="datetime-local"
-                {...register('endAt')}
-              />
+                <Input
+                  id="unit-end"
+                  label="Disponible hasta (opcional)"
+                  type="datetime-local"
+                  {...register('endAt')}
+                />
+              </div>
             </div>
           </div>
 
@@ -183,6 +190,46 @@ export function UnitEditor({
           </div>
         </form>
       </aside>
+
+      {/* Discard changes dialog */}
+      {showDiscardDialog ? (
+        <Dialog
+          description="Tienes cambios sin guardar en la unidad. Si sales ahora, se perderán todas las modificaciones recientes."
+          onOpenChange={(open) => {
+            if (!open) setShowDiscardDialog(false);
+          }}
+          open
+          title="¿Descartar cambios de la unidad?"
+        >
+          <div
+            className="showcase-dialog-actions"
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end',
+              marginTop: '1.25rem',
+            }}
+          >
+            <Button
+              onClick={() => setShowDiscardDialog(false)}
+              type="button"
+              variant="secondary"
+            >
+              Continuar editando
+            </Button>
+            <Button
+              onClick={() => {
+                setShowDiscardDialog(false);
+                onCancel();
+              }}
+              type="button"
+              variant="danger"
+            >
+              Descartar cambios
+            </Button>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

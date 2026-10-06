@@ -23,9 +23,11 @@ import {
   type TrustedCurrentSession,
 } from '@/auth/current-session';
 import { AppShell } from '@/components/app-shell';
+import { EmptyTeacherSubjectsIllustration } from '@/components/educational-illustrations';
 import { Icon } from '@/components/icons';
 import { PageHeading } from '@/components/page-primitives';
 import { demoSessions } from '@/demo/demo-data';
+import { subjectCard } from '@/features/learning-screen-support';
 
 function contextError(error: unknown) {
   if (error instanceof AcademicApiError && error.status === 401)
@@ -140,89 +142,256 @@ export function TeacherAcademicSubjectsScreen({
   const currentSession = useTrustedCurrentSession(session).session;
   const { error, items, load, loading } = useContextSubjects(client, 'teacher');
   const [query, setQuery] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('ALL');
   const [page, setPage] = useState(0);
-  const filtered = items.filter((item) =>
-    `${subjectName(item)} ${courseName(item)}`
+
+  // Cursos únicos representados para filtros rápidos en 1 clic
+  const courses = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of items) {
+      set.add(courseName(item));
+    }
+    return Array.from(set).sort();
+  }, [items]);
+
+  const filtered = items.filter((item) => {
+    const matchesQuery = `${subjectName(item)} ${courseName(item)}`
       .toLocaleLowerCase('es-CL')
-      .includes(query.trim().toLocaleLowerCase('es-CL')),
-  );
-  const pageSize = 12;
+      .includes(query.trim().toLocaleLowerCase('es-CL'));
+    const matchesCourse =
+      selectedCourse === 'ALL' || courseName(item) === selectedCourse;
+    return matchesQuery && matchesCourse;
+  });
+
+  const pageSize = 9;
   const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   return (
     <AppShell dataMode="real" session={currentSession}>
-      <PageHeading
-        description="Aquí aparecen las asignaturas en las que tienes una asignación docente activa."
-        title="Mis espacios de enseñanza"
-      />
+      {/* 1. Header Hero Educativo */}
+      <section
+        aria-labelledby="teacher-catalog-title"
+        className="teacher-catalog-hero"
+      >
+        <div className="teacher-catalog-hero__main">
+          <div className="teacher-catalog-hero__icon">
+            <Icon name="book-open" />
+          </div>
+          <div className="teacher-catalog-hero__content">
+            <div className="teacher-catalog-hero__tag">
+              <Icon name="sparkles" />
+              <span>Gestión Pedagógica</span>
+            </div>
+            <h1
+              className="teacher-catalog-hero__title"
+              id="teacher-catalog-title"
+            >
+              Mis asignaturas
+            </h1>
+            <p className="teacher-catalog-hero__desc">
+              Aquí aparecen las asignaturas en las que tienes una asignación docente activa. Organiza unidades, programa contenidos y acompaña a tus estudiantes.
+            </p>
+          </div>
+        </div>
+
+        <div className="teacher-catalog-hero__stats">
+          <div className="teacher-catalog-kpi">
+            <span className="teacher-catalog-kpi__number">{items.length}</span>
+            <span className="teacher-catalog-kpi__label">
+              {items.length === 1 ? 'Espacio activo' : 'Espacios activos'}
+            </span>
+          </div>
+        </div>
+      </section>
+
       <ContextState error={error} loading={loading} onRetry={() => void load()}>
         {items.length ? (
           <>
-            <div className="teacher-list-controls">
-              <Input
-                id="teacher-subject-search"
-                label="Buscar por asignatura o curso"
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setPage(0);
-                }}
-                type="search"
-                value={query}
-              />
-              <span aria-live="polite">
-                {filtered.length} asignatura{filtered.length === 1 ? '' : 's'}
-              </span>
+            {/* 2. Barra de Búsqueda y Filtros */}
+            <div className="teacher-catalog-controls teacher-list-controls">
+              <div className="teacher-catalog-search-box">
+                <Input
+                  id="teacher-subject-search"
+                  label="Buscar por asignatura o curso"
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setPage(0);
+                  }}
+                  placeholder="Escribe el nombre de una materia o nivel..."
+                  type="search"
+                  value={query}
+                />
+              </div>
+
+              <div className="teacher-catalog-count-pill" aria-live="polite">
+                <Icon name="book-open" />
+                <span>
+                  {filtered.length} asignatura{filtered.length === 1 ? '' : 's'}
+                </span>
+              </div>
             </div>
-            {filtered.length ? (
-              <div className="academic-context-grid teacher-context-grid">
-                {visible.map((item) => (
-                  <Card className="academic-context-card" key={item.id}>
-                    <div className="academic-context-card__mark">
-                      {subjectName(item).slice(0, 3).toUpperCase()}
-                    </div>
-                    <div>
-                      <h2>{subjectName(item)}</h2>
-                      <p>{courseName(item)}</p>
-                      <Badge tone="success">Asignación activa</Badge>
-                    </div>
-                    <div className="context-card__actions">
-                      <Link
-                        className="button-link button-link--secondary"
-                        href={`/docente/asignaturas/${item.id}/estudiantes`}
-                      >
-                        <Icon name="people" />
-                        Ver estudiantes
-                      </Link>
-                      <Link
-                        className="button-link button-link--primary"
-                        href={`/docente/asignaturas/${item.id}`}
-                      >
-                        Abrir espacio <Icon name="chevron-right" />
-                      </Link>
-                    </div>
-                  </Card>
+
+            {/* Quick Course Filter Chips (si hay más de 1 curso) */}
+            {courses.length > 1 ? (
+              <div
+                aria-label="Filtro rápido por curso"
+                className="teacher-course-filters"
+              >
+                <button
+                  className={`teacher-course-filter-btn ${
+                    selectedCourse === 'ALL'
+                      ? 'teacher-course-filter-btn--active'
+                      : ''
+                  }`}
+                  onClick={() => {
+                    setSelectedCourse('ALL');
+                    setPage(0);
+                  }}
+                  type="button"
+                >
+                  Todos los cursos ({items.length})
+                </button>
+                {courses.map((course) => (
+                  <button
+                    className={`teacher-course-filter-btn ${
+                      selectedCourse === course
+                        ? 'teacher-course-filter-btn--active'
+                        : ''
+                    }`}
+                    key={course}
+                    onClick={() => {
+                      setSelectedCourse(course);
+                      setPage(0);
+                    }}
+                    type="button"
+                  >
+                    {course}
+                  </button>
                 ))}
+              </div>
+            ) : null}
+
+            {/* 3. Rejilla de Asignaturas */}
+            {filtered.length ? (
+              <div className="academic-context-grid teacher-context-grid teacher-catalog-grid">
+                {visible.map((item, index) => {
+                  const cardMeta = subjectCard(
+                    item,
+                    page * pageSize + index,
+                    'teacher',
+                  );
+                  const sName = subjectName(item);
+                  const cName = courseName(item);
+
+                  return (
+                    <Card
+                      className="academic-context-card teacher-catalog-card"
+                      key={item.id}
+                    >
+                      <div
+                        className={`teacher-subject-card__strip teacher-subject-card__strip--${cardMeta.accent}`}
+                      />
+                      <div className="teacher-catalog-card__body">
+                        <div className="teacher-catalog-card__top">
+                          <div className="teacher-catalog-card__tags">
+                            <span
+                              className={`teacher-subject-card__code teacher-subject-card__code--${cardMeta.accent}`}
+                            >
+                              {cardMeta.code}
+                            </span>
+                            <span className="teacher-subject-card__course">
+                              {cName}
+                            </span>
+                          </div>
+                          <Badge tone="success">Asignación activa</Badge>
+                        </div>
+
+                        <div className="teacher-catalog-card__heading-group">
+                          <h2 className="teacher-catalog-card__title">
+                            <Link
+                              className="teacher-catalog-card__title-link"
+                              href={`/docente/asignaturas/${item.id}`}
+                            >
+                              {sName}
+                            </Link>
+                          </h2>
+                          <p className="teacher-catalog-card__desc">
+                            {cName} · Ciclo lectivo regular
+                          </p>
+                        </div>
+
+                        <div className="teacher-catalog-card__pills">
+                          <span className="teacher-pill">
+                            <Icon name="layers" />
+                            Espacio curricular
+                          </span>
+                          <span className="teacher-pill">
+                            <Icon name="check-circle" />
+                            Activa
+                          </span>
+                        </div>
+
+                        <div className="teacher-catalog-card__actions">
+                          <Link
+                            className="teacher-card-btn teacher-card-btn--secondary"
+                            href={`/docente/asignaturas/${item.id}/estudiantes`}
+                          >
+                            <Icon name="people" />
+                            <span>Ver estudiantes</span>
+                          </Link>
+                          <Link
+                            className="teacher-card-btn teacher-card-btn--primary"
+                            href={`/docente/asignaturas/${item.id}`}
+                          >
+                            <span>Gestionar asignatura</span>
+                            <Icon name="arrow-right" />
+                          </Link>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             ) : (
               <EmptyState
-                icon={<Icon name="book" />}
-                title="Sin coincidencias"
+                action={
+                  query || selectedCourse !== 'ALL' ? (
+                    <Button
+                      onClick={() => {
+                        setQuery('');
+                        setSelectedCourse('ALL');
+                        setPage(0);
+                      }}
+                      variant="secondary"
+                    >
+                      Limpiar filtros
+                    </Button>
+                  ) : undefined
+                }
+                className="teacher-catalog-empty"
                 description="Prueba con otra asignatura o curso."
+                icon={
+                  <EmptyTeacherSubjectsIllustration className="teacher-catalog-empty__illustration" />
+                }
+                title="Sin coincidencias"
               />
             )}
+
+            {/* 4. Paginación y Resumen */}
             {filtered.length > pageSize ? (
               <nav
                 aria-label="Páginas de asignaturas"
-                className="teacher-list-pages"
+                className="teacher-list-pages teacher-catalog-pagination"
               >
                 <Button
                   disabled={page === 0}
                   onClick={() => setPage(page - 1)}
                   variant="secondary"
                 >
+                  <Icon name="arrow-left" />
                   Anterior
                 </Button>
-                <span>
+                <span className="teacher-catalog-pagination__label">
                   Página {page + 1} de {Math.ceil(filtered.length / pageSize)}
                 </span>
                 <Button
@@ -231,15 +400,29 @@ export function TeacherAcademicSubjectsScreen({
                   variant="secondary"
                 >
                   Siguiente
+                  <Icon name="arrow-right" />
                 </Button>
               </nav>
             ) : null}
+
+            <div className="teacher-catalog-footer-summary">
+              <span>
+                Mostrando {visible.length} de {filtered.length}{' '}
+                {filtered.length === 1 ? 'asignatura' : 'asignaturas'}
+                {selectedCourse !== 'ALL'
+                  ? ` · Filtrado por ${selectedCourse}`
+                  : ''}
+              </span>
+            </div>
           </>
         ) : (
           <EmptyState
-            icon={<Icon name="book" />}
-            title="No tienes asignaturas asignadas"
+            className="teacher-catalog-empty"
             description="Cuando tengas una asignación docente activa, aparecerá aquí."
+            icon={
+              <EmptyTeacherSubjectsIllustration className="teacher-catalog-empty__illustration" />
+            }
+            title="No tienes asignaturas asignadas"
           />
         )}
       </ContextState>

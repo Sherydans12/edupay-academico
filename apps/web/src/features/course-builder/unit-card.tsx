@@ -44,6 +44,7 @@ export interface UnitCardProps {
   onChangeScheduleDraftValue: (value: string) => void;
   onArchiveItem: (item: LearningItem) => void;
   onRestoreItem: (item: LearningItem) => void;
+  onDeleteItem?: ((item: LearningItem) => void) | undefined;
   onDuplicateItem: (item: LearningItem) => void;
   onMoveItemToUnit: (unit: LearningUnitWithItems, item: LearningItem) => void;
   onOpenAdvancedEditor: (
@@ -60,6 +61,7 @@ export const UnitCard = memo(function UnitCard({
   onArchiveUnit,
   onCancelSchedule,
   onChangeScheduleDraftValue,
+  onDeleteItem,
   onDuplicateItem,
   onDuplicateUnit,
   onEditItem,
@@ -98,7 +100,7 @@ export const UnitCard = memo(function UnitCard({
   return (
     <section
       aria-label={`Unidad ${unitIndex + 1}: ${unit.title}`}
-      className="teacher-unit-panel"
+      className={`teacher-unit-panel teacher-unit-panel--${unit.status.toLowerCase()}`}
       data-unit-id={unit.id}
       data-version={unit.version}
     >
@@ -165,6 +167,7 @@ export const UnitCard = memo(function UnitCard({
             size="sm"
             variant="secondary"
           >
+            <Icon name="edit" />
             Editar unidad
           </Button>
 
@@ -181,6 +184,7 @@ export const UnitCard = memo(function UnitCard({
 
           {unit.status === 'DRAFT' ? (
             <Button onClick={() => onActivateUnit(unit)} size="sm">
+              <Icon name="check-circle" />
               Activar
             </Button>
           ) : null}
@@ -224,6 +228,7 @@ export const UnitCard = memo(function UnitCard({
               itemIndex={itemIndex}
               key={item.id}
               onArchive={onArchiveItem}
+              onDelete={onDeleteItem}
               onDuplicate={onDuplicateItem}
               onEdit={(it) => onEditItem(unit, it)}
               onManageAttachments={onManageAttachments}
@@ -243,7 +248,13 @@ export const UnitCard = memo(function UnitCard({
         </div>
       ) : (
         <div className="teacher-unit-empty">
-          <p>No hay contenido en esta unidad.</p>
+          <div className="teacher-unit-empty__icon">
+            <Icon name="layers" />
+          </div>
+          <div className="teacher-unit-empty__body">
+            <strong>Unidad sin contenidos todavía</strong>
+            <p>No hay contenido en esta unidad.</p>
+          </div>
         </div>
       )}
 
@@ -251,6 +262,7 @@ export const UnitCard = memo(function UnitCard({
       <div className="learning-unit-secondary-actions">
         <Button
           aria-label={`Agregar contenido a ${unit.title}`}
+          className="teacher-unit-add-content-btn"
           disabled={unit.status === 'ARCHIVED'}
           onClick={() => onAddItem(unit)}
           size="sm"

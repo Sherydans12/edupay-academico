@@ -117,6 +117,11 @@ export type CourseBuilderAction =
       itemId: string;
     }
   | {
+      type: 'OPTIMISTIC_DELETE_ITEM';
+      commandId: string;
+      itemId: string;
+    }
+  | {
       type: 'OPTIMISTIC_ACTIVATE_UNIT';
       commandId: string;
       unitId: string;

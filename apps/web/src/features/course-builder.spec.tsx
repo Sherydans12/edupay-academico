@@ -15,6 +15,7 @@ import {
 } from '@/api/academic-client';
 import { CourseBuilder } from './course-builder/course-builder';
 import { ItemEditor } from './course-builder/item-editor';
+import { UnitEditor } from './course-builder/unit-editor';
 import { TeacherSubjectScreen } from './teacher-screens';
 
 vi.mock('next/navigation', () => ({
@@ -187,13 +188,10 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
       });
     });
 
-    it('intercepts cancel action and asks confirmation if form is dirty', async () => {
-      const confirmSpy = vi.spyOn(window, 'confirm');
+    it('intercepts cancel action and asks confirmation with Dialog if form is dirty', async () => {
       const onCancel = vi.fn();
 
-      // Case 1: user rejects confirmation
-      confirmSpy.mockReturnValueOnce(false);
-
+      // Case 1: user rejects confirmation (clicks "Continuar editando")
       const { unmount } = render(
         <ItemEditor
           initialItem={null}
@@ -207,13 +205,19 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
       fireEvent.change(titleInput, { target: { value: 'Borrador en curso' } });
 
       fireEvent.click(screen.getByRole('button', { name: /cancelar/i }));
-      expect(confirmSpy).toHaveBeenCalled();
+      expect(
+        screen.getByRole('heading', { name: /¿descartar cambios no guardados\?/i }),
+      ).toBeTruthy();
+      expect(onCancel).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /continuar editando/i }),
+      );
       expect(onCancel).not.toHaveBeenCalled();
 
       unmount();
 
-      // Case 2: user accepts confirmation
-      confirmSpy.mockReturnValueOnce(true);
+      // Case 2: user accepts confirmation (clicks "Descartar cambios")
       render(
         <ItemEditor
           initialItem={null}
@@ -227,7 +231,13 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
       fireEvent.change(titleInput2, { target: { value: 'Otro borrador' } });
 
       fireEvent.click(screen.getByRole('button', { name: /cancelar/i }));
-      expect(confirmSpy).toHaveBeenCalled();
+      expect(
+        screen.getByRole('heading', { name: /¿descartar cambios no guardados\?/i }),
+      ).toBeTruthy();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /descartar cambios/i }),
+      );
       expect(onCancel).toHaveBeenCalled();
     });
   });
@@ -367,7 +377,7 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
 
       // Open "Más opciones" dropdown on Item A (the first one)
       const moreOptionsTriggers = screen.getAllByRole('button', {
-        name: 'Más opciones',
+        name: /más opciones/i,
       });
       fireEvent.click(moreOptionsTriggers[0]!);
 
@@ -478,6 +488,251 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
       expect(
         await screen.findByRole('heading', { name: 'Lenguaje y Comunicación' }),
       ).toBeTruthy();
+    });
+  });
+
+  describe('7. Discard Dialogs for Unsaved Changes', () => {
+    it('intercepts cancel action in UnitEditor and prompts with accessible Dialog', async () => {
+      const onCancel = vi.fn();
+      const { unmount } = render(
+        <UnitEditor
+          onCancel={onCancel}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const titleInput = screen.getByLabelText(/título/i);
+      fireEvent.change(titleInput, { target: { value: 'Nueva unidad de prueba' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /cancelar/i }));
+      expect(
+        screen.getByRole('heading', { name: /¿descartar cambios de la unidad\?/i }),
+      ).toBeTruthy();
+      expect(onCancel).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /continuar editando/i }),
+      );
+      expect(onCancel).not.toHaveBeenCalled();
+
+      unmount();
+
+      render(
+        <UnitEditor
+          onCancel={onCancel}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const titleInput2 = screen.getByLabelText(/título/i);
+      fireEvent.change(titleInput2, { target: { value: 'Otra unidad' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /cancelar/i }));
+      expect(
+        screen.getByRole('heading', { name: /¿descartar cambios de la unidad\?/i }),
+      ).toBeTruthy();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /descartar cambios/i }),
+      );
+      expect(onCancel).toHaveBeenCalled();
+    });
+  });
+
+  describe('8. Content Lifecycle, Archival & Safe Deletion', () => {
+    it('filters items by lifecycle status (All, Published, Drafts, Archived)', async () => {
+      const publishedItem: LearningItem = {
+        ...itemA,
+        id: 'item-pub',
+        publicationStatus: 'PUBLISHED',
+        title: 'Contenido Publicado',
+      };
+      const draftItem: LearningItem = {
+        ...itemB,
+        id: 'item-draft',
+        publicationStatus: 'DRAFT',
+        title: 'Contenido en Borrador',
+      };
+      const archivedItem: LearningItem = {
+        ...itemA,
+        id: 'item-arch',
+        publicationStatus: 'ARCHIVED',
+        title: 'Contenido Archivado',
+      };
+
+      const unitWithAllStatuses = {
+        ...unit1,
+        items: [publishedItem, draftItem, archivedItem],
+      };
+
+      render(
+        <CourseBuilder
+          api={{} as unknown as AcademicApiClient}
+          initialUnits={[unitWithAllStatuses]}
+          subject={subject}
+        />,
+      );
+
+      // Verify all items visible initially
+      expect(screen.getByText('Contenido Publicado')).toBeTruthy();
+      expect(screen.getByText('Contenido en Borrador')).toBeTruthy();
+      expect(screen.getByText('Contenido Archivado')).toBeTruthy();
+
+      // Click "Publicados" filter
+      fireEvent.click(screen.getByRole('tab', { name: /publicados/i }));
+      expect(screen.getByText('Contenido Publicado')).toBeTruthy();
+      expect(screen.queryByText('Contenido en Borrador')).toBeNull();
+      expect(screen.queryByText('Contenido Archivado')).toBeNull();
+
+      // Click "Borradores" filter
+      fireEvent.click(screen.getByRole('tab', { name: /borradores/i }));
+      expect(screen.queryByText('Contenido Publicado')).toBeNull();
+      expect(screen.getByText('Contenido en Borrador')).toBeTruthy();
+      expect(screen.queryByText('Contenido Archivado')).toBeNull();
+
+      // Click "Archivados" filter
+      fireEvent.click(screen.getByRole('tab', { name: /archivados/i }));
+      expect(screen.queryByText('Contenido Publicado')).toBeNull();
+      expect(screen.queryByText('Contenido en Borrador')).toBeNull();
+      expect(screen.getByText('Contenido Archivado')).toBeTruthy();
+    });
+
+    it('archives content with modal confirmation and updates status', async () => {
+      const archiveLearningItem = vi.fn().mockResolvedValue({});
+      const api = {
+        archiveLearningItem,
+      } as unknown as AcademicApiClient;
+
+      render(
+        <CourseBuilder
+          api={api}
+          initialUnits={[unit1]}
+          subject={subject}
+        />,
+      );
+
+      // Open dropdown for itemA
+      const moreBtn = screen.getByRole('button', {
+        name: `Más opciones para ${itemA.title}`,
+      });
+      fireEvent.click(moreBtn);
+
+      // Click "Archivar contenido"
+      const archiveOption = screen.getByText('Archivar contenido');
+      fireEvent.click(archiveOption);
+
+      // Verify confirmation modal opens
+      expect(
+        screen.getByRole('heading', { name: /¿archivar contenido\?/i }),
+      ).toBeTruthy();
+
+      // Confirm in modal
+      const confirmArchiveBtn = screen.getByRole('button', {
+        name: /archivar contenido/i,
+      });
+      fireEvent.click(confirmArchiveBtn);
+
+      expect(archiveLearningItem).toHaveBeenCalledWith(
+        itemA.id,
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      );
+    });
+
+    it('permanently deletes content with confirmation when safe, calling deleteLearningItem', async () => {
+      const deleteLearningItem = vi.fn().mockResolvedValue(undefined);
+      const api = {
+        deleteLearningItem,
+      } as unknown as AcademicApiClient;
+
+      render(
+        <CourseBuilder
+          api={api}
+          initialUnits={[unit1]}
+          subject={subject}
+        />,
+      );
+
+      // Open dropdown for itemA
+      const moreBtn = screen.getByRole('button', {
+        name: `Más opciones para ${itemA.title}`,
+      });
+      fireEvent.click(moreBtn);
+
+      // Click "Eliminar contenido"
+      const deleteOption = screen.getByText('Eliminar contenido');
+      fireEvent.click(deleteOption);
+
+      // Verify delete confirmation modal opens
+      expect(
+        screen.getByRole('heading', { name: /¿eliminar contenido definitivamente\?/i }),
+      ).toBeTruthy();
+
+      // Confirm deletion in modal
+      const confirmDeleteBtn = screen.getByRole('button', {
+        name: /eliminar definitivamente/i,
+      });
+      fireEvent.click(confirmDeleteBtn);
+
+      expect(deleteLearningItem).toHaveBeenCalledWith(
+        itemA.id,
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      );
+
+      // Item should be optimistically removed
+      await waitFor(() => {
+        expect(screen.queryByText(itemA.title)).toBeNull();
+      });
+    });
+
+    it('enforces safety guard: displays error notice when trying to delete item with existing student submissions', async () => {
+      const deleteLearningItem = vi.fn().mockRejectedValue(
+        new AcademicApiError({
+          code: 'CONFLICT',
+          details: [],
+          message:
+            'No es posible eliminar este contenido porque tiene 3 entrega(s) de estudiantes registrada(s). Puedes archivarlo para ocultarlo de forma segura sin perder las evidencias.',
+          requestId: 'req-delete-guard-1',
+          status: 409,
+        }),
+      );
+      const api = {
+        deleteLearningItem,
+      } as unknown as AcademicApiClient;
+
+      render(
+        <CourseBuilder
+          api={api}
+          initialUnits={[unit1]}
+          subject={subject}
+        />,
+      );
+
+      // Trigger delete on itemA
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: `Más opciones para ${itemA.title}`,
+        }),
+      );
+      fireEvent.click(screen.getByText('Eliminar contenido'));
+
+      // Confirm deletion
+      fireEvent.click(
+        screen.getByRole('button', { name: /eliminar definitivamente/i }),
+      );
+
+      await waitFor(() => {
+        expect(deleteLearningItem).toHaveBeenCalled();
+      });
+
+      // Server rejects with conflict: item must be restored and alert displayed
+      expect(
+        await screen.findByText(
+          /No es posible eliminar este contenido porque tiene 3 entrega\(s\)/i,
+        ),
+      ).toBeTruthy();
+
+      // Item remains intact in list
+      expect(screen.getAllByText(itemA.title).length).toBeGreaterThan(0);
     });
   });
 });

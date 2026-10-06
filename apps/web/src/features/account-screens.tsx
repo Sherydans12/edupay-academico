@@ -78,15 +78,19 @@ export function LoginScreen() {
   async function submit(
     event: { preventDefault(): void },
     selectedHandle = tenantHandle,
+    customUser?: string,
+    customPass?: string,
   ) {
     event.preventDefault();
     if (!auth) return;
     setLoading(true);
     setError('');
+    const activeIdentifier = customUser ?? identifier;
+    const activePassword = customPass ?? password;
     try {
       const session = await auth.login({
-        identifier,
-        password,
+        identifier: activeIdentifier,
+        password: activePassword,
         ...(selectedHandle ? { tenantHandle: selectedHandle } : {}),
         deviceLabel: deviceLabel(),
       });
@@ -111,12 +115,112 @@ export function LoginScreen() {
     }
   }
 
+  function handleQuickAccess(user: string, pass: string) {
+    setIdentifier(user);
+    setPassword(pass);
+    void submit({ preventDefault() {} }, tenantHandle, user, pass);
+  }
+
   return (
     <AccountShell
       title="Entra a tu espacio académico"
       description="Usa tu usuario institucional o correo verificado. Identity confirmará tu institución, membresía y rol."
       showBackLink={false}
     >
+      <div
+        style={{
+          marginBottom: '1.25rem',
+          padding: '1rem',
+          backgroundColor: '#f8fafc',
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+        }}
+      >
+        <div
+          style={{
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            color: '#475569',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            marginBottom: '0.6rem',
+          }}
+        >
+          Accesos rápidos de desarrollo (Local)
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '0.5rem',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => handleQuickAccess('admin', 'admin123456')}
+            style={{
+              padding: '0.6rem 0.4rem',
+              fontSize: '0.78rem',
+              backgroundColor: '#eff6ff',
+              color: '#1d4ed8',
+              border: '1px solid #bfdbfe',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>👑 Admin</span>
+            <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>Martín Silva</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickAccess('profesor', 'profesor123456')}
+            style={{
+              padding: '0.6rem 0.4rem',
+              fontSize: '0.78rem',
+              backgroundColor: '#f0fdf4',
+              color: '#15803d',
+              border: '1px solid #bbf7d0',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>👨‍🏫 Profesor</span>
+            <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>Camila Rojas</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickAccess('alumno', 'alumno123456')}
+            style={{
+              padding: '0.6rem 0.4rem',
+              fontSize: '0.78rem',
+              backgroundColor: '#fffbeb',
+              color: '#b45309',
+              border: '1px solid #fde68a',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>🎓 Alumno</span>
+            <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>Sofía Herrera</span>
+          </button>
+        </div>
+      </div>
+
       <form className="account-form" onSubmit={submit}>
         {error ? (
           <Alert

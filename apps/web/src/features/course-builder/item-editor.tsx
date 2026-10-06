@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Input, Select, Textarea } from '@edupay/ui';
+import { Button, Dialog, Input, Select, Textarea } from '@edupay/ui';
 import type { LearningItem } from '@edupay/contracts';
 import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -95,13 +95,14 @@ export function ItemEditor({
     };
   }, [isDirty]);
 
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [showAdvancedConfirm, setShowAdvancedConfirm] = useState(false);
+
   // Handle cancel with dirty check confirmation
   const handleCancelClick = useCallback(() => {
     if (isDirty) {
-      const confirmDiscard = window.confirm(
-        'Tienes cambios sin guardar en el editor de contenido. ¿Estás seguro de que deseas salir sin guardar?',
-      );
-      if (!confirmDiscard) return;
+      setShowDiscardDialog(true);
+      return;
     }
     onCancel();
   }, [isDirty, onCancel]);
@@ -172,9 +173,14 @@ export function ItemEditor({
           onSubmit={handleSubmit(onSubmit)}
         >
           <div className="course-editor-drawer__header">
-            <div>
-              <h3>{initialItem ? 'Editar contenido' : 'Nuevo contenido'}</h3>
-              <p>Elige el tipo y completa sólo la información necesaria.</p>
+            <div className="course-editor-drawer__header-title">
+              <div className="course-editor-drawer__header-icon">
+                <Icon name={initialItem ? 'edit' : 'sparkles'} />
+              </div>
+              <div>
+                <h3>{initialItem ? 'Editar contenido' : 'Nuevo contenido'}</h3>
+                <p>Elige el tipo y completa sólo la información necesaria.</p>
+              </div>
             </div>
             <div className="course-editor-drawer__header-actions">
               <Button
@@ -190,17 +196,71 @@ export function ItemEditor({
           </div>
 
           <div className="course-editor-drawer__body">
+            {/* Visual Type Selector Cards */}
+            <div className="item-type-selector-group">
+              <span className="item-type-selector-label">
+                Tipo de contenido
+              </span>
+              <div className="item-type-cards-grid">
+                {[
+                  {
+                    description: 'Lecturas, guías y recursos de consulta',
+                    icon: 'book-open' as const,
+                    label: 'Material',
+                    type: 'MATERIAL' as const,
+                  },
+                  {
+                    description: 'Tareas y actividades con entrega del alumno',
+                    icon: 'clipboard' as const,
+                    label: 'Actividad',
+                    type: 'ASSIGNMENT' as const,
+                  },
+                  {
+                    description: 'Evaluaciones y rúbricas formales',
+                    icon: 'document' as const,
+                    label: 'Evaluación',
+                    type: 'ASSESSMENT' as const,
+                  },
+                  {
+                    description: 'Avisos, recordatorios y comunicados',
+                    icon: 'message' as const,
+                    label: 'Anuncio',
+                    type: 'ANNOUNCEMENT' as const,
+                  },
+                ].map((t) => (
+                  <button
+                    className={`item-type-card ${selectedType === t.type ? 'item-type-card--active' : ''} item-type-card--${t.type.toLowerCase()}`}
+                    key={t.type}
+                    onClick={() =>
+                      setValue('type', t.type, { shouldDirty: true })
+                    }
+                    type="button"
+                  >
+                    <div className="item-type-card__icon">
+                      <Icon name={t.icon} />
+                    </div>
+                    <div className="item-type-card__text">
+                      <strong>{t.label}</strong>
+                      <small>{t.description}</small>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="learning-editor-grid">
-              <Select
-                id="item-type"
-                label="Tipo"
-                {...register('type', { required: 'El tipo es obligatorio' })}
-              >
-                <option value="MATERIAL">Material</option>
-                <option value="ASSIGNMENT">Actividad</option>
-                <option value="ASSESSMENT">Evaluación en documento</option>
-                <option value="ANNOUNCEMENT">Anuncio</option>
-              </Select>
+              <div className="sr-only">
+                <Select
+                  id="item-type"
+                  label="Tipo"
+                  {...register('type', { required: 'El tipo es obligatorio' })}
+                >
+                  <option value="MATERIAL">Material</option>
+                  <option value="ASSIGNMENT">Actividad</option>
+                  <option value="ASSESSMENT">Evaluación en documento</option>
+                  <option value="ANNOUNCEMENT">Anuncio</option>
+                </Select>
+              </div>
 
               <div>
                 <Input
@@ -301,12 +361,10 @@ export function ItemEditor({
                   <Button
                     onClick={() => {
                       if (isDirty) {
-                        const confirmProceed = window.confirm(
-                          '¿Deseas abrir el editor avanzado? Los cambios locales no guardados se cargarán en el editor avanzado.',
-                        );
-                        if (!confirmProceed) return;
+                        setShowAdvancedConfirm(true);
+                        return;
                       }
-                      onOpenAdvancedEditor();
+                      onOpenAdvancedEditor?.();
                     }}
                     size="sm"
                     type="button"
@@ -335,6 +393,86 @@ export function ItemEditor({
           </div>
         </form>
       </aside>
+
+      {/* Discard changes dialog */}
+      {showDiscardDialog ? (
+        <Dialog
+          description="Tienes cambios sin guardar en el editor de contenido. Si sales ahora, se perderán todas las modificaciones recientes."
+          onOpenChange={(open) => {
+            if (!open) setShowDiscardDialog(false);
+          }}
+          open
+          title="¿Descartar cambios no guardados?"
+        >
+          <div
+            className="showcase-dialog-actions"
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end',
+              marginTop: '1.25rem',
+            }}
+          >
+            <Button
+              onClick={() => setShowDiscardDialog(false)}
+              type="button"
+              variant="secondary"
+            >
+              Continuar editando
+            </Button>
+            <Button
+              onClick={() => {
+                setShowDiscardDialog(false);
+                onCancel();
+              }}
+              type="button"
+              variant="danger"
+            >
+              Descartar cambios
+            </Button>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {/* Advanced editor dirty transition dialog */}
+      {showAdvancedConfirm ? (
+        <Dialog
+          description="¿Deseas abrir el editor avanzado? Los cambios locales no guardados se transferirán al editor avanzado."
+          onOpenChange={(open) => {
+            if (!open) setShowAdvancedConfirm(false);
+          }}
+          open
+          title="¿Abrir editor avanzado?"
+        >
+          <div
+            className="showcase-dialog-actions"
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end',
+              marginTop: '1.25rem',
+            }}
+          >
+            <Button
+              onClick={() => setShowAdvancedConfirm(false)}
+              type="button"
+              variant="secondary"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowAdvancedConfirm(false);
+                onOpenAdvancedEditor?.();
+              }}
+              type="button"
+              variant="primary"
+            >
+              Abrir editor avanzado
+            </Button>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

@@ -574,7 +574,7 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
         await screen.findByRole('heading', { name: 'Calendario' }),
       ).toBeTruthy();
       expect(
-        await screen.findByText('Guía de Lectura Comprensiva'),
+        (await screen.findAllByText('Guía de Lectura Comprensiva'))[0],
       ).toBeTruthy();
       expect(
         screen.getByText(/plazo límite para entrega de estudiantes/i),

@@ -358,6 +358,7 @@ export function BlockBodyEditor({
               ) : null}
             </Select>
             <Button
+              className="block-body-editor__add-btn"
               onClick={() => {
                 const select = document.getElementById(
                   `${id}-add-type`,

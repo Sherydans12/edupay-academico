@@ -1,19 +1,26 @@
 import type { SVGProps } from 'react';
 
 export type IconName =
+  | 'alert-circle'
   | 'alert-triangle'
   | 'archive'
   | 'arrow-down'
   | 'arrow-left'
+  | 'arrow-right'
   | 'arrow-up'
+  | 'arrow-up-right'
+  | 'award'
   | 'bell'
   | 'bold'
   | 'book'
+  | 'book-open'
   | 'calendar'
   | 'check'
+  | 'check-circle'
   | 'chevron-down'
   | 'chevron-left'
   | 'chevron-right'
+  | 'chevron-up'
   | 'clipboard'
   | 'clock'
   | 'close'
@@ -23,6 +30,9 @@ export type IconName =
   | 'download'
   | 'edit'
   | 'eye'
+  | 'file-text'
+  | 'filter'
+  | 'graduation-cap'
   | 'history'
   | 'home'
   | 'image'
@@ -43,11 +53,20 @@ export type IconName =
   | 'search'
   | 'settings'
   | 'spark'
+  | 'sparkles'
   | 'table'
   | 'trash'
-  | 'upload';
+  | 'upload'
+  | 'users';
 
 const paths: Record<IconName, React.ReactNode> = {
+  'alert-circle': (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </>
+  ),
   'alert-triangle': (
     <>
       <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
@@ -62,7 +81,15 @@ const paths: Record<IconName, React.ReactNode> = {
   ),
   'arrow-down': <path d="M12 5v14M19 12l-7 7-7-7" />,
   'arrow-left': <path d="M19 12H5M12 19l-7-7 7-7" />,
+  'arrow-right': <path d="M5 12h14M12 5l7 7-7 7" />,
   'arrow-up': <path d="M12 19V5M5 12l7-7 7 7" />,
+  'arrow-up-right': <path d="M7 17L17 7M7 7h10v10" />,
+  award: (
+    <>
+      <circle cx="12" cy="8" r="6" />
+      <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11" />
+    </>
+  ),
   bell: (
     <>
       <path d="M18 9a6 6 0 00-12 0c0 7-3 7-3 8h18c0-1-3-1-3-8" />
@@ -81,6 +108,12 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M20 5.5A2.5 2.5 0 0017.5 3H13v16h4.5a2.5 2.5 0 012.5 2.5z" />
     </>
   ),
+  'book-open': (
+    <>
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </>
+  ),
   calendar: (
     <>
       <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -88,9 +121,16 @@ const paths: Record<IconName, React.ReactNode> = {
     </>
   ),
   check: <path d="M5 12.5l4 4L19 6.5" />,
+  'check-circle': (
+    <>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <path d="M22 4L12 14.01l-3-3" />
+    </>
+  ),
   'chevron-down': <path d="M6 9l6 6 6-6" />,
   'chevron-left': <path d="M15 18l-6-6 6-6" />,
   'chevron-right': <path d="M9 6l6 6-6 6" />,
+  'chevron-up': <path d="M18 15l-6-6-6 6" />,
   clipboard: (
     <>
       <rect x="5" y="4" width="14" height="17" rx="2" />
@@ -130,6 +170,22 @@ const paths: Record<IconName, React.ReactNode> = {
     <>
       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
       <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  'file-text': (
+    <>
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+      <polyline points="10 9 9 9 8 9" />
+    </>
+  ),
+  filter: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
+  'graduation-cap': (
+    <>
+      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+      <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
     </>
   ),
   history: (
@@ -241,6 +297,11 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M19 15l.7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7z" />
     </>
   ),
+  sparkles: (
+    <>
+      <path d="M12 3v3m0 12v3M3 12h3m12 0h3m-2.5-6.5l-2 2m-9 9l-2 2m0-13l2 2m9 9l2 2" />
+    </>
+  ),
   table: (
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -259,10 +320,20 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M5 20h14" />
     </>
   ),
+  users: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
 };
 
 export function Icon({
   name,
+  className,
+  width,
+  height,
   ...props
 }: { name: IconName } & SVGProps<SVGSVGElement>) {
   return (
@@ -274,6 +345,9 @@ export function Icon({
       strokeLinejoin="round"
       strokeWidth="1.8"
       viewBox="0 0 24 24"
+      width={width ?? '1.25rem'}
+      height={height ?? '1.25rem'}
+      className={className ? `ui-icon ${className}` : 'ui-icon'}
       {...props}
     >
       {paths[name]}
