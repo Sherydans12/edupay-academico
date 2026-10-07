@@ -589,7 +589,7 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
 
       render(<TeacherProfileScreen api={api} />);
       expect(await screen.findByRole('heading', { name: 'Mi perfil' })).toBeTruthy();
-      expect(screen.getByText('Lenguaje y Comunicación')).toBeTruthy();
+      expect(await screen.findByText('Lenguaje y Comunicación')).toBeTruthy();
       expect(screen.queryByText('docente@colegiodemo.cl')).toBeNull();
       expect(screen.queryByText(/86 matriculados/i)).toBeNull();
       expect(screen.queryByText(/32 hrs pedagógicas/i)).toBeNull();
