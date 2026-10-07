@@ -25,7 +25,7 @@ import type {
 } from '@edupay/contracts';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   AcademicApiError,
@@ -36,12 +36,10 @@ import { AppShell } from '@/components/app-shell';
 import { ContentHistoryDrawer } from '@/components/content-history-drawer';
 import {
   EmptyTeacherSubjectsIllustration,
-  PriorityReviewIllustration,
   TeacherHeroIllustration,
 } from '@/components/educational-illustrations';
 import { Icon } from '@/components/icons';
 import {
-  CompactStat,
   PageHeading,
   SubjectCard,
 } from '@/components/page-primitives';
@@ -167,6 +165,7 @@ interface TeacherWorkspaceSummary {
   subjects: CourseSubject[];
   routes: Array<{ subject: CourseSubject; route: LearningRouteData }>;
   pendingSubmissionsCount: number;
+  pendingSubmissionsComplete: boolean;
   draftsCount: number;
   scheduledCount: number;
   upcomingDeadlines: Array<{
@@ -181,33 +180,28 @@ function useTeacherDashboardData(api: AcademicApiClient) {
   const [data, setData] = useState<TeacherWorkspaceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const activeRequest = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
       const subjects = await api.getTeacherContextSubjects();
-      const routes =
-        typeof api.getLearningRoute === 'function'
-          ? await Promise.all(
-              subjects.map(async (subject) => {
-                try {
-                  const route = await api.getLearningRoute(subject.id);
-                  return { route, subject };
-                } catch {
-                  return {
-                    route: { courseSubjectId: subject.id, units: [] },
-                    subject,
-                  };
-                }
-              }),
-            )
-          : [];
+      const routes = await Promise.all(
+        subjects.map(async (subject) => ({
+          route: await api.getLearningRoute(subject.id),
+          subject,
+        })),
+      );
 
       let pendingCount = 0;
+      let pendingSubmissionsComplete =
+        typeof api.listSubmissions === 'function';
       let drafts = 0;
       let scheduled = 0;
       const deadlines: TeacherWorkspaceSummary['upcomingDeadlines'] = [];
+      const deliverables: LearningItem[] = [];
 
       for (const { route, subject } of routes) {
         for (const unit of route.units) {
@@ -227,6 +221,7 @@ function useTeacherDashboardData(api: AcademicApiClient) {
             }
 
             if (item.type === 'ASSIGNMENT' || item.type === 'ASSESSMENT') {
+              deliverables.push(item);
               if (item.dueAt) {
                 deadlines.push({
                   date: item.dueAt,
@@ -235,28 +230,43 @@ function useTeacherDashboardData(api: AcademicApiClient) {
                   subject,
                 });
               }
-
-              if (typeof api.listSubmissions === 'function') {
-                try {
-                  const subs = await api.listSubmissions(item.id);
-                  pendingCount += subs.filter(
-                    (s) => s.status === 'SUBMITTED',
-                  ).length;
-                } catch {
-                  // Ignore per-item submission error
-                }
-              }
             }
           }
         }
+      }
+
+      if (typeof api.listSubmissions !== 'function') {
+        pendingSubmissionsComplete = deliverables.length === 0;
+      } else {
+        let nextDeliverableIndex = 0;
+        const workers = Array.from(
+          { length: Math.min(4, deliverables.length) },
+          async () => {
+            while (nextDeliverableIndex < deliverables.length) {
+              const item = deliverables[nextDeliverableIndex++];
+              if (!item) continue;
+              try {
+                const submissions = await api.listSubmissions(item.id);
+                pendingCount += submissions.filter(
+                  (submission) => submission.status === 'SUBMITTED',
+                ).length;
+              } catch {
+                pendingSubmissionsComplete = false;
+              }
+            }
+          },
+        );
+        await Promise.all(workers);
       }
 
       deadlines.sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
       );
 
+      if (requestId.current !== activeRequest) return;
       setData({
         draftsCount: drafts,
+        pendingSubmissionsComplete,
         pendingSubmissionsCount: pendingCount,
         routes,
         scheduledCount: scheduled,
@@ -264,18 +274,52 @@ function useTeacherDashboardData(api: AcademicApiClient) {
         upcomingDeadlines: deadlines.slice(0, 5),
       });
     } catch (nextError) {
-      setError(nextError);
+      if (requestId.current === activeRequest) setError(nextError);
     } finally {
-      setLoading(false);
+      if (requestId.current === activeRequest) setLoading(false);
     }
   }, [api]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      requestId.current += 1;
+    };
   }, [load]);
 
   return { data, error, load, loading };
+}
+
+function useTeacherAssignedSubjects(api: AcademicApiClient) {
+  const [subjects, setSubjects] = useState<CourseSubject[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const requestId = useRef(0);
+
+  const load = useCallback(async () => {
+    const activeRequest = ++requestId.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const nextSubjects = await api.getTeacherContextSubjects();
+      if (requestId.current === activeRequest) setSubjects(nextSubjects);
+    } catch (nextError) {
+      if (requestId.current === activeRequest) setError(nextError);
+    } finally {
+      if (requestId.current === activeRequest) setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      requestId.current += 1;
+    };
+  }, [load]);
+
+  return { error, load, loading, subjects };
 }
 
 export function TeacherDashboardScreen({
@@ -298,10 +342,10 @@ export function TeacherDashboardScreen({
         <div className="teacher-hero__content">
           <span className="teacher-hero__badge">
             <Icon name="sparkles" />
-            Año Académico 2026 · Período Activo
+            Espacio de trabajo docente
           </span>
           <h1 className="teacher-hero__title">
-            Buenos días, {teacherFirstName}
+            Hola, {teacherFirstName}
           </h1>
           <p className="teacher-hero__text">
             Tus asignaturas asignadas y sus rutas de aprendizaje reales.
@@ -310,11 +354,13 @@ export function TeacherDashboardScreen({
                   data.subjects.length === 1
                     ? 'asignatura asignada'
                     : 'asignaturas asignadas'
-                } y ${data.pendingSubmissionsCount} ${
-                  data.pendingSubmissionsCount === 1
-                    ? 'entrega pendiente'
-                    : 'entregas pendientes'
-                } de revisión hoy.`
+                }. ${data.pendingSubmissionsComplete
+                  ? `Hay ${data.pendingSubmissionsCount} ${
+                      data.pendingSubmissionsCount === 1
+                        ? 'entrega pendiente'
+                        : 'entregas pendientes'
+                    } de revisión.`
+                  : 'No pudimos consultar el estado de todas las entregas.'}`
               : ' Conectando con tus espacios de aprendizaje...'}
           </p>
           <div className="teacher-hero__actions">
@@ -330,7 +376,7 @@ export function TeacherDashboardScreen({
               href="/docente/revisiones"
             >
               <Icon name="file-text" />
-              {data && data.pendingSubmissionsCount > 0
+              {data?.pendingSubmissionsComplete && data.pendingSubmissionsCount > 0
                 ? `${data.pendingSubmissionsCount} por revisar`
                 : 'Bandeja de revisiones'}
             </Link>
@@ -377,7 +423,11 @@ export function TeacherDashboardScreen({
                   <div className="teacher-stat__icon teacher-stat__icon--amber">
                     <Icon name="file-text" />
                   </div>
-                  {data.pendingSubmissionsCount > 0 ? (
+                  {!data.pendingSubmissionsComplete ? (
+                    <span className="teacher-stat__badge teacher-stat__badge--warning">
+                      Estado incompleto
+                    </span>
+                  ) : data.pendingSubmissionsCount > 0 ? (
                     <span className="teacher-stat__badge teacher-stat__badge--warning">
                       Requiere acción
                     </span>
@@ -388,15 +438,21 @@ export function TeacherDashboardScreen({
                   )}
                 </div>
                 <div className="teacher-stat__value">
-                  {data.pendingSubmissionsCount}
+                  {data.pendingSubmissionsComplete
+                    ? data.pendingSubmissionsCount
+                    : '—'}
                 </div>
                 <div className="teacher-stat__label">
-                  {data.pendingSubmissionsCount === 1
-                    ? 'Entrega por calificar'
-                    : 'Entregas por calificar'}
+                  {data.pendingSubmissionsComplete
+                    ? data.pendingSubmissionsCount === 1
+                      ? 'Entrega por revisar'
+                      : 'Entregas por revisar'
+                    : 'Estado de revisiones'}
                 </div>
                 <div className="teacher-stat__meta">
-                  Trabajos esperando tu retroalimentación
+                  {data.pendingSubmissionsComplete
+                    ? 'Trabajos esperando tu retroalimentación'
+                    : 'No fue posible consultar todas las actividades'}
                 </div>
                 <div className="teacher-stat__footer">
                   <span>Abrir correcciones</span>
@@ -570,7 +626,7 @@ export function TeacherDashboardScreen({
                 {/* Bloque A: Estado de Revisiones / Atención Prioritaria */}
                 <div
                   className={`teacher-priority-card ${
-                    data.pendingSubmissionsCount > 0
+                    !data.pendingSubmissionsComplete || data.pendingSubmissionsCount > 0
                       ? 'teacher-priority-card--warning'
                       : 'teacher-priority-card--success'
                   }`}
@@ -578,26 +634,32 @@ export function TeacherDashboardScreen({
                   <span className="teacher-priority-card__badge">
                     <Icon
                       name={
-                        data.pendingSubmissionsCount > 0
+                        !data.pendingSubmissionsComplete || data.pendingSubmissionsCount > 0
                           ? 'alert-circle'
                           : 'check-circle'
                       }
                     />
-                    {data.pendingSubmissionsCount > 0
+                    {!data.pendingSubmissionsComplete
+                      ? 'Estado no disponible'
+                      : data.pendingSubmissionsCount > 0
                       ? 'Atención prioritaria'
                       : 'Entregas al día'}
                   </span>
                   <h3 className="teacher-priority-card__title">
-                    {data.pendingSubmissionsCount > 0
+                    {!data.pendingSubmissionsComplete
+                      ? 'No pudimos consultar las entregas'
+                      : data.pendingSubmissionsCount > 0
                       ? `${data.pendingSubmissionsCount} ${
                           data.pendingSubmissionsCount === 1
-                            ? 'entrega por calificar'
-                            : 'entregas por calificar'
+                            ? 'entrega por revisar'
+                            : 'entregas por revisar'
                         }`
-                      : '¡Todo corregido!'}
+                      : 'Bandeja al día'}
                   </h3>
                   <p className="teacher-priority-card__desc">
-                    {data.pendingSubmissionsCount > 0
+                    {!data.pendingSubmissionsComplete
+                      ? 'Abre la bandeja para comprobar el estado actual de tus revisiones.'
+                      : data.pendingSubmissionsCount > 0
                       ? 'Hay estudiantes que han enviado sus actividades y esperan tu retroalimentación pedagógica.'
                       : 'No tienes entregas pendientes de revisión en tus asignaturas en este momento.'}
                   </p>
@@ -606,7 +668,7 @@ export function TeacherDashboardScreen({
                     href="/docente/revisiones"
                   >
                     <Icon name="file-text" />
-                    {data.pendingSubmissionsCount > 0
+                    {!data.pendingSubmissionsComplete || data.pendingSubmissionsCount > 0
                       ? 'Revisar entregas ahora'
                       : 'Ver historial de revisiones'}
                   </Link>
@@ -2390,8 +2452,10 @@ function useTeacherReviewWorkspace(api: AcademicApiClient) {
   const [contexts, setContexts] = useState<EnrichedReviewContext[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const activeRequest = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -2410,7 +2474,7 @@ function useTeacherReviewWorkspace(api: AcademicApiClient) {
           );
           const submissionsEntries = await Promise.all(
             items.map(async (item) => {
-              const subs = await api.listSubmissions(item.id).catch(() => []);
+              const subs = await api.listSubmissions(item.id);
               return [item.id, subs] as const;
             }),
           );
@@ -2430,17 +2494,20 @@ function useTeacherReviewWorkspace(api: AcademicApiClient) {
           };
         }),
       );
-      setContexts(nextContexts);
+      if (requestId.current === activeRequest) setContexts(nextContexts);
     } catch (nextError) {
-      setError(nextError);
+      if (requestId.current === activeRequest) setError(nextError);
     } finally {
-      setLoading(false);
+      if (requestId.current === activeRequest) setLoading(false);
     }
   }, [api]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      requestId.current += 1;
+    };
   }, [load]);
 
   return { contexts, error, load, loading };
@@ -2546,7 +2613,7 @@ export function TeacherReviewsScreen({
       late,
       pending,
       reviewed,
-      reviewedPercentage: total > 0 ? Math.round((reviewed / total) * 100) : 100,
+      reviewedPercentage: total > 0 ? Math.round((reviewed / total) * 100) : 0,
       total,
     };
   }, [scopedSubmissions]);
@@ -2652,7 +2719,7 @@ export function TeacherReviewsScreen({
               </Badge>
             </div>
             <p>
-              Supervisa, califica y retroalimenta las entregas de todas tus asignaturas asignadas en tiempo real. Organiza el flujo de trabajo por prioridad o por asignatura curricular.
+              Revisa y retroalimenta las entregas de tus asignaturas. Organiza el flujo de trabajo por prioridad o por asignatura.
             </p>
             <div className="calendar-hero-card__stats">
               <span className="calendar-stat-pill">
@@ -2706,21 +2773,15 @@ export function TeacherReviewsScreen({
             {/* 2. Executive KPI Cards */}
             <div className="teacher-activity-kpis teacher-reviews-kpis">
               {/* 1. Total */}
-              <div
+              <button
                 aria-label="Filtrar por todas las entregas"
+                aria-pressed={statusFilter === 'ALL'}
                 className={`teacher-activity-kpi-card teacher-reviews-kpi-btn ${statusFilter === 'ALL' ? 'teacher-reviews-kpi-btn--active' : ''}`}
                 onClick={() => {
                   setStatusFilter('ALL');
                   setPage(1);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setStatusFilter('ALL');
-                    setPage(1);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
+                type="button"
               >
                 <div className="teacher-activity-kpi-card__icon" aria-hidden="true">
                   <Icon name="file-text" />
@@ -2733,24 +2794,18 @@ export function TeacherReviewsScreen({
                     Total entregas
                   </span>
                 </div>
-              </div>
+              </button>
 
               {/* 2. Por revisar */}
-              <div
+              <button
                 aria-label="Filtrar por entregas por revisar"
+                aria-pressed={statusFilter === 'SUBMITTED'}
                 className={`teacher-activity-kpi-card teacher-activity-kpi-card--pending teacher-reviews-kpi-btn ${statusFilter === 'SUBMITTED' ? 'teacher-reviews-kpi-btn--active' : ''}`}
                 onClick={() => {
                   setStatusFilter('SUBMITTED');
                   setPage(1);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setStatusFilter('SUBMITTED');
-                    setPage(1);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
+                type="button"
               >
                 <div className="teacher-activity-kpi-card__icon" aria-hidden="true">
                   <Icon name="clock" />
@@ -2768,24 +2823,18 @@ export function TeacherReviewsScreen({
                     Por revisar
                   </span>
                 </div>
-              </div>
+              </button>
 
               {/* 3. Revisadas */}
-              <div
+              <button
                 aria-label="Filtrar por entregas revisadas"
+                aria-pressed={statusFilter === 'REVIEWED'}
                 className={`teacher-activity-kpi-card teacher-activity-kpi-card--reviewed teacher-reviews-kpi-btn ${statusFilter === 'REVIEWED' ? 'teacher-reviews-kpi-btn--active' : ''}`}
                 onClick={() => {
                   setStatusFilter('REVIEWED');
                   setPage(1);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setStatusFilter('REVIEWED');
-                    setPage(1);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
+                type="button"
               >
                 <div className="teacher-activity-kpi-card__icon" aria-hidden="true">
                   <Icon name="check-circle" />
@@ -2798,24 +2847,18 @@ export function TeacherReviewsScreen({
                     Revisadas ({metrics.reviewedPercentage}%)
                   </span>
                 </div>
-              </div>
+              </button>
 
               {/* 4. Con cambios */}
-              <div
+              <button
                 aria-label="Filtrar por entregas con cambios solicitados"
+                aria-pressed={statusFilter === 'CHANGES_REQUESTED'}
                 className={`teacher-activity-kpi-card teacher-activity-kpi-card--changes teacher-reviews-kpi-btn ${statusFilter === 'CHANGES_REQUESTED' ? 'teacher-reviews-kpi-btn--active' : ''}`}
                 onClick={() => {
                   setStatusFilter('CHANGES_REQUESTED');
                   setPage(1);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setStatusFilter('CHANGES_REQUESTED');
-                    setPage(1);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
+                type="button"
               >
                 <div className="teacher-activity-kpi-card__icon" aria-hidden="true">
                   <Icon name="edit" />
@@ -2828,24 +2871,18 @@ export function TeacherReviewsScreen({
                     Con cambios
                   </span>
                 </div>
-              </div>
+              </button>
 
               {/* 5. Atrasadas */}
-              <div
+              <button
                 aria-label="Filtrar por entregas atrasadas"
+                aria-pressed={statusFilter === 'LATE'}
                 className={`teacher-activity-kpi-card teacher-activity-kpi-card--late teacher-reviews-kpi-btn ${statusFilter === 'LATE' ? 'teacher-reviews-kpi-btn--active' : ''}`}
                 onClick={() => {
                   setStatusFilter('LATE');
                   setPage(1);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setStatusFilter('LATE');
-                    setPage(1);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
+                type="button"
               >
                 <div className="teacher-activity-kpi-card__icon" aria-hidden="true">
                   <Icon name="alert-triangle" />
@@ -2858,7 +2895,7 @@ export function TeacherReviewsScreen({
                     Fuera de plazo
                   </span>
                 </div>
-              </div>
+              </button>
             </div>
 
             {/* 3. Controls Toolbar */}
@@ -2946,24 +2983,22 @@ export function TeacherReviewsScreen({
                 <div
                   aria-label="Modo de visualización de revisiones"
                   className="calendar-view-toggle teacher-reviews-view-toggle"
-                  role="tablist"
+                  role="group"
                 >
                   <button
-                    aria-selected={viewMode === 'by-subject'}
+                    aria-pressed={viewMode === 'by-subject'}
                     className={`calendar-view-btn ${viewMode === 'by-subject' ? 'calendar-view-btn--active' : ''}`}
                     onClick={() => setViewMode('by-subject')}
-                    role="tab"
-                    type="button"
+                        type="button"
                   >
                     <Icon name="layers" />
                     <span>Por Asignatura</span>
                   </button>
                   <button
-                    aria-selected={viewMode === 'queue'}
+                    aria-pressed={viewMode === 'queue'}
                     className={`calendar-view-btn ${viewMode === 'queue' ? 'calendar-view-btn--active' : ''}`}
                     onClick={() => setViewMode('queue')}
-                    role="tab"
-                    type="button"
+                        type="button"
                   >
                     <Icon name="list" />
                     <span>Cola Unificada</span>
@@ -2990,7 +3025,15 @@ export function TeacherReviewsScreen({
                     <Select
                       id="teacher-review-sort"
                       label="Ordenar por"
-                      onChange={(e) => setSortBy(e.target.value as any)}
+                      onChange={(e) =>
+                        setSortBy(
+                          e.target.value as
+                            | 'priority'
+                            | 'newest'
+                            | 'oldest'
+                            | 'student',
+                        )
+                      }
                       value={sortBy}
                     >
                       <option value="priority">Prioridad (Pendientes primero)</option>
@@ -3004,68 +3047,63 @@ export function TeacherReviewsScreen({
 
               {/* Status Filter Chips with ScrollableTabsBar */}
               <ScrollableTabsBar ariaLabel="Filtros rápidos por estado de corrección">
-                <div className="teacher-submissions-controls__chips" role="tablist">
+                <div className="teacher-submissions-controls__chips">
                   <button
-                    aria-selected={statusFilter === 'ALL'}
+                    aria-pressed={statusFilter === 'ALL'}
                     className={`teacher-route-filter-chip ${statusFilter === 'ALL' ? 'teacher-route-filter-chip--active' : ''}`}
                     onClick={() => {
                       setStatusFilter('ALL');
                       setPage(1);
                     }}
-                    role="tab"
-                    type="button"
+                        type="button"
                   >
                     <span>Todas</span>
                     <span className="chip-badge">{metrics.total}</span>
                   </button>
                   <button
-                    aria-selected={statusFilter === 'SUBMITTED'}
+                    aria-pressed={statusFilter === 'SUBMITTED'}
                     className={`teacher-route-filter-chip ${statusFilter === 'SUBMITTED' ? 'teacher-route-filter-chip--active' : ''}`}
                     onClick={() => {
                       setStatusFilter('SUBMITTED');
                       setPage(1);
                     }}
-                    role="tab"
-                    type="button"
+                        type="button"
                   >
                     <span>Por revisar</span>
                     <span className="chip-badge">{metrics.pending}</span>
                   </button>
                   <button
-                    aria-selected={statusFilter === 'REVIEWED'}
+                    aria-pressed={statusFilter === 'REVIEWED'}
                     className={`teacher-route-filter-chip ${statusFilter === 'REVIEWED' ? 'teacher-route-filter-chip--active' : ''}`}
                     onClick={() => {
                       setStatusFilter('REVIEWED');
                       setPage(1);
                     }}
-                    role="tab"
-                    type="button"
+                        type="button"
                   >
                     <span>Revisadas</span>
                     <span className="chip-badge">{metrics.reviewed}</span>
                   </button>
                   <button
-                    aria-selected={statusFilter === 'CHANGES_REQUESTED'}
+                    aria-pressed={statusFilter === 'CHANGES_REQUESTED'}
                     className={`teacher-route-filter-chip ${statusFilter === 'CHANGES_REQUESTED' ? 'teacher-route-filter-chip--active' : ''}`}
                     onClick={() => {
                       setStatusFilter('CHANGES_REQUESTED');
                       setPage(1);
                     }}
-                    role="tab"
-                    type="button"
+                        type="button"
                   >
                     <span>Con cambios</span>
                     <span className="chip-badge">{metrics.changesRequested}</span>
                   </button>
                   <button
-                    aria-selected={statusFilter === 'LATE'}
+                    aria-pressed={statusFilter === 'LATE'}
                     className={`teacher-route-filter-chip ${statusFilter === 'LATE' ? 'teacher-route-filter-chip--active' : ''}`}
                     onClick={() => {
                       setStatusFilter('LATE');
                       setPage(1);
                     }}
-                    role="tab"
-                    type="button"
+                        type="button"
                   >
                     <span>Atrasadas</span>
                     <span className="chip-badge">{metrics.late}</span>
@@ -3296,11 +3334,11 @@ export function TeacherReviewsScreen({
                         <div className="review-subject-progress-box">
                           <div className="review-subject-progress-labels">
                             <span>
-                              Progreso de calificación del curso:{' '}
+                              Avance de revisión del curso:{' '}
                               <strong>
                                 {reviewedSubCount} de {totalSubCount}
                               </strong>{' '}
-                              calificados
+                              revisados
                             </span>
                             <span className="review-subject-pct">{pct}%</span>
                           </div>
@@ -3362,8 +3400,8 @@ export function TeacherReviewsScreen({
                                   <h3>{item.title}</h3>
                                   <p>
                                     {item.type === 'ASSESSMENT'
-                                      ? 'Evaluación Sumativa'
-                                      : 'Actividad Formativa'}
+                                      ? 'Evaluación'
+                                      : 'Actividad'}
                                     {item.dueAt
                                       ? ` · Plazo: ${formatDate(item.dueAt)}`
                                       : ''}
@@ -3530,18 +3568,8 @@ function formatTimeOfDay(value: string) {
   return `${hours}:${minutes} hrs`;
 }
 
-function formatFullDateSpanish(date: Date) {
-  const formatted = new Intl.DateTimeFormat('es-CL', {
-    day: 'numeric',
-    month: 'long',
-    weekday: 'long',
-    year: 'numeric',
-  }).format(date);
-  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-}
-
 function getCalendarItemUrl(entry: CalendarAgendaEntry): string {
-  if (entry.type === 'DUE' || entry.itemId) {
+  if (entry.type === 'DUE') {
     return `/docente/asignaturas/${entry.subject.id}?tab=submissions&activityId=${entry.itemId ?? ''}`;
   }
   if (entry.type === 'UNIT_START' || entry.type === 'UNIT_END') {
@@ -3566,7 +3594,7 @@ function entryTypeMeta(entry: CalendarAgendaEntry): {
         badgeClass: 'assessment',
         colorClass: 'due-assessment',
         icon: 'award',
-        label: 'Evaluación Sumativa',
+        label: 'Evaluación',
         tone: 'creative',
       };
     }
@@ -3574,7 +3602,7 @@ function entryTypeMeta(entry: CalendarAgendaEntry): {
       badgeClass: 'assignment',
       colorClass: 'due-assignment',
       icon: 'file-text',
-      label: 'Actividad Formativa',
+      label: 'Actividad',
       tone: 'info',
     };
   }
@@ -3632,8 +3660,10 @@ function useTeacherCalendarData(api: AcademicApiClient) {
   const [entries, setEntries] = useState<CalendarAgendaEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const activeRequest = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -3711,17 +3741,20 @@ function useTeacherCalendarData(api: AcademicApiClient) {
       agenda.sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
       );
-      setEntries(agenda);
+      if (requestId.current === activeRequest) setEntries(agenda);
     } catch (err) {
-      setError(err);
+      if (requestId.current === activeRequest) setError(err);
     } finally {
-      setLoading(false);
+      if (requestId.current === activeRequest) setLoading(false);
     }
   }, [api]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      requestId.current += 1;
+    };
   }, [load]);
 
   return { entries, error, load, loading };
@@ -3758,13 +3791,11 @@ export function TeacherCalendarScreen({
   const [typeFilter, setTypeFilter] = useState<
     'ALL' | 'DELIVERABLES' | 'ASSESSMENT' | 'ASSIGNMENT' | 'PUBLISH' | 'UNIT'
   >('ALL');
-  const [timeframeFilter, setTimeframeFilter] = useState<
-    'ALL' | 'UPCOMING_7' | 'THIS_MONTH' | 'PAST'
-  >('ALL');
 
   // Auto-focus calendar on relevant month/day if current month has no events
   useEffect(() => {
-    if (entries.length > 0) {
+    if (entries.length === 0) return;
+    const timer = window.setTimeout(() => {
       const now = new Date();
       const currentMonthHasEntries = entries.some((e) => {
         const d = new Date(e.date);
@@ -3796,7 +3827,8 @@ export function TeacherCalendarScreen({
           }
         }
       }
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [entries]);
 
   // Unique subjects for filter dropdown
@@ -3852,11 +3884,6 @@ export function TeacherCalendarScreen({
   // Filtered entries
   const filteredEntries = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const nowTs = startOfLocalDay(new Date().toISOString());
-    const weekTs = nowTs + 7 * 86_400_000;
-    const currentMonthYear = currentMonth.getFullYear();
-    const currentMonthMonth = currentMonth.getMonth();
-
     return entries.filter((entry) => {
       // Search match
       if (q) {
@@ -3888,20 +3915,6 @@ export function TeacherCalendarScreen({
         return false;
       }
 
-      // Timeframe filter
-      if (timeframeFilter === 'UPCOMING_7') {
-        const eDay = startOfLocalDay(entry.date);
-        if (eDay < nowTs || eDay > weekTs) return false;
-      } else if (timeframeFilter === 'THIS_MONTH') {
-        const d = new Date(entry.date);
-        if (d.getFullYear() !== currentMonthYear || d.getMonth() !== currentMonthMonth) {
-          return false;
-        }
-      } else if (timeframeFilter === 'PAST') {
-        const eDay = startOfLocalDay(entry.date);
-        if (eDay >= nowTs) return false;
-      }
-
       return true;
     });
   }, [
@@ -3909,8 +3922,6 @@ export function TeacherCalendarScreen({
     searchQuery,
     subjectFilter,
     typeFilter,
-    timeframeFilter,
-    currentMonth,
   ]);
 
   // Agenda groups
@@ -4096,7 +4107,7 @@ export function TeacherCalendarScreen({
               <div className="calendar-stat-pill">
                 <Icon name="award" />
                 <span>
-                  <strong>{metrics.assessments}</strong> evaluaciones sumativas
+                  <strong>{metrics.assessments}</strong> evaluaciones
                 </span>
               </div>
             </div>
@@ -4109,24 +4120,22 @@ export function TeacherCalendarScreen({
               <div
                 aria-label="Modo de visualización del calendario"
                 className="calendar-view-toggle"
-                role="tablist"
+                role="group"
               >
                 <button
-                  aria-selected={viewMode === 'month'}
+                  aria-pressed={viewMode === 'month'}
                   className={`calendar-view-btn ${viewMode === 'month' ? 'calendar-view-btn--active' : ''}`}
                   onClick={() => setViewMode('month')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <Icon name="calendar" />
                   <span>Mes / Cuadrícula</span>
                 </button>
                 <button
-                  aria-selected={viewMode === 'agenda'}
+                  aria-pressed={viewMode === 'agenda'}
                   className={`calendar-view-btn ${viewMode === 'agenda' ? 'calendar-view-btn--active' : ''}`}
                   onClick={() => setViewMode('agenda')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <Icon name="list" />
                   <span>Agenda / Cronograma</span>
@@ -4169,67 +4178,61 @@ export function TeacherCalendarScreen({
 
             {/* Event Type Filter Chips */}
             <ScrollableTabsBar ariaLabel="Filtros por tipo de actividad y entrega">
-              <div className="calendar-filter-chips" role="tablist">
+              <div className="calendar-filter-chips">
                 <button
-                  aria-selected={typeFilter === 'ALL'}
+                  aria-pressed={typeFilter === 'ALL'}
                   className={`teacher-route-filter-chip ${typeFilter === 'ALL' ? 'teacher-route-filter-chip--active' : ''}`}
                   onClick={() => setTypeFilter('ALL')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <span>Todas</span>
                   <span className="chip-badge">{metrics.all}</span>
                 </button>
                 <button
-                  aria-selected={typeFilter === 'DELIVERABLES'}
+                  aria-pressed={typeFilter === 'DELIVERABLES'}
                   className={`teacher-route-filter-chip ${typeFilter === 'DELIVERABLES' ? 'teacher-route-filter-chip--active' : ''}`}
                   onClick={() => setTypeFilter('DELIVERABLES')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <Icon name="file-text" />
                   <span>Entregas</span>
                   <span className="chip-badge">{metrics.deliverables}</span>
                 </button>
                 <button
-                  aria-selected={typeFilter === 'ASSESSMENT'}
+                  aria-pressed={typeFilter === 'ASSESSMENT'}
                   className={`teacher-route-filter-chip ${typeFilter === 'ASSESSMENT' ? 'teacher-route-filter-chip--active' : ''}`}
                   onClick={() => setTypeFilter('ASSESSMENT')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <Icon name="award" />
                   <span>Evaluaciones</span>
                   <span className="chip-badge">{metrics.assessments}</span>
                 </button>
                 <button
-                  aria-selected={typeFilter === 'ASSIGNMENT'}
+                  aria-pressed={typeFilter === 'ASSIGNMENT'}
                   className={`teacher-route-filter-chip ${typeFilter === 'ASSIGNMENT' ? 'teacher-route-filter-chip--active' : ''}`}
                   onClick={() => setTypeFilter('ASSIGNMENT')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <Icon name="file-text" />
                   <span>Actividades</span>
                   <span className="chip-badge">{metrics.assignments}</span>
                 </button>
                 <button
-                  aria-selected={typeFilter === 'PUBLISH'}
+                  aria-pressed={typeFilter === 'PUBLISH'}
                   className={`teacher-route-filter-chip ${typeFilter === 'PUBLISH' ? 'teacher-route-filter-chip--active' : ''}`}
                   onClick={() => setTypeFilter('PUBLISH')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <Icon name="calendar" />
                   <span>Publicaciones</span>
                   <span className="chip-badge">{metrics.publishes}</span>
                 </button>
                 <button
-                  aria-selected={typeFilter === 'UNIT'}
+                  aria-pressed={typeFilter === 'UNIT'}
                   className={`teacher-route-filter-chip ${typeFilter === 'UNIT' ? 'teacher-route-filter-chip--active' : ''}`}
                   onClick={() => setTypeFilter('UNIT')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <Icon name="layers" />
                   <span>Unidades</span>
@@ -4312,25 +4315,26 @@ export function TeacherCalendarScreen({
                     const isSelected = cell.dateKey === selectedDateKey;
                     return (
                       <div
-                        aria-current={cell.isToday ? 'date' : undefined}
                         aria-label={`${cell.dayNumber} de ${monthData.monthTitle}${cell.entries.length > 0 ? `, ${cell.entries.length} ${cell.entries.length === 1 ? 'actividad' : 'actividades'}` : ', sin actividades'}`}
-                        aria-pressed={isSelected}
                         className={`calendar-cell ${!cell.isCurrentMonth ? 'calendar-cell--outside' : ''} ${cell.isToday ? 'calendar-cell--today' : ''} ${isSelected ? 'calendar-cell--selected' : ''}`}
                         key={cell.dateKey}
                         onClick={() => setSelectedDateKey(cell.dateKey)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setSelectedDateKey(cell.dateKey);
-                          }
-                        }}
-                        role="button"
-                        tabIndex={0}
+                        role="group"
                       >
                         <div className="calendar-cell__header">
-                          <span className="calendar-cell__day-num">
+                          <button
+                            aria-current={cell.isToday ? 'date' : undefined}
+                            aria-label={`Seleccionar ${cell.dayNumber} de ${monthData.monthTitle}`}
+                            aria-pressed={isSelected}
+                            className="calendar-cell__day-num"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedDateKey(cell.dateKey);
+                            }}
+                            type="button"
+                          >
                             {cell.dayNumber}
-                          </span>
+                          </button>
                           {cell.entries.length > 0 ? (
                             <span className="calendar-cell__count-badge">
                               {cell.entries.length}
@@ -4753,128 +4757,87 @@ export function TeacherProfileScreen({
 }) {
   const currentSession = useTrustedCurrentSession(session).session;
   const client = useMemo(() => api ?? createAcademicApiClient(), [api]);
-  const { data } = useTeacherDashboardData(client);
+  const { error, load, loading, subjects } = useTeacherAssignedSubjects(client);
 
   return (
     <AppShell dataMode="real" session={currentSession}>
       <div className="teacher-account-page">
-        {/* Profile Hero */}
-        <section className="teacher-profile-card">
+        <PageHeading
+          action={
+            <Link
+              className="button-link button-link--secondary"
+              href="/docente/configuracion"
+            >
+              <Icon name="settings" /> Configuración
+            </Link>
+          }
+          description="Identidad y asignaturas asociadas a tu sesión institucional."
+          title="Mi perfil"
+        />
+
+        <Card className="teacher-profile-card">
           <div className="teacher-profile-card__header">
             <div className="teacher-profile-card__avatar-area">
               <Avatar name={currentSession.displayName} size="lg" />
-              <span
-                aria-label="Sesión activa"
-                className="teacher-profile-card__status-dot"
-                role="status"
-              />
             </div>
             <div className="teacher-profile-card__details">
               <div className="teacher-profile-card__title-row">
-                <h1 className="teacher-profile-card__name">
+                <h2 className="teacher-profile-card__name">
                   {currentSession.displayName}
-                </h1>
+                </h2>
                 <Badge tone="info">{currentSession.roleLabel}</Badge>
               </div>
               <p className="teacher-profile-card__tenant">
                 <Icon name="graduation-cap" />
                 <span>{currentSession.tenantDisplayName}</span>
               </p>
-              <div className="teacher-profile-card__meta-tags">
-                <span className="teacher-profile-card__meta-item">
-                  <Icon name="message" />
-                  <span>docente@colegiodemo.cl</span>
-                </span>
-                <span className="teacher-profile-card__meta-item">
-                  <Icon name="layers" />
-                  <span>Departamento de Humanidades y Lenguaje</span>
-                </span>
-                <span className="teacher-profile-card__meta-item">
-                  <Icon name="check-circle" />
-                  <span>RUT 15.849.201-4</span>
-                </span>
-                <span className="teacher-profile-card__meta-item">
-                  <Icon name="award" />
-                  <span>Profesor de Estado en Educación Media</span>
-                </span>
-              </div>
-            </div>
-            <div className="teacher-profile-card__actions">
-              <Link
-                className="button-link button-link--primary"
-                href="/docente/configuracion"
-              >
-                <Icon name="settings" />
-                <span>Configuración docente</span>
-              </Link>
+              <dl className="teacher-profile-info-rows">
+                <div className="teacher-profile-info-row">
+                  <dt className="teacher-profile-info-row__label">Membresía</dt>
+                  <dd className="teacher-profile-info-row__value font-mono">
+                    {currentSession.membershipId}
+                  </dd>
+                </div>
+                <div className="teacher-profile-info-row">
+                  <dt className="teacher-profile-info-row__label">Roles de sesión</dt>
+                  <dd className="teacher-profile-info-row__value">
+                    {currentSession.roles.join(', ')}
+                  </dd>
+                </div>
+              </dl>
             </div>
           </div>
-        </section>
+        </Card>
 
-        {/* Quick Stats Grid */}
-        <div className="teacher-profile-stats-grid">
-          <CompactStat
-            icon="book-open"
-            label="Asignaturas a cargo"
-            value={data ? `${data.subjects.length} asignaturas` : '3 asignaturas'}
-          />
-          <CompactStat
-            icon="file-text"
-            label="Revisiones pendientes"
-            value={data ? `${data.pendingSubmissionsCount} entregas` : '4 entregas'}
-          />
-          <CompactStat
-            icon="people"
-            label="Estudiantes a cargo"
-            value="86 matriculados"
-          />
-          <CompactStat
-            icon="clock"
-            label="Carga lectiva"
-            value="32 hrs pedagógicas"
-          />
-          <CompactStat
-            icon="calendar"
-            label="Período académico"
-            value="Primer Semestre 2026"
-          />
-          <CompactStat
-            icon="check-circle"
-            label="Estado institucional"
-            value="Habilitado / Al día"
-          />
-        </div>
-
-        {/* Content sections */}
-        <div className="teacher-profile-grid">
-          {/* Card: Active subjects */}
-          <Card className="teacher-profile-section-card">
-            <div className="teacher-profile-section-card__header">
-              <div className="teacher-profile-section-card__title">
-                <Icon name="book-open" />
-                <h2>Asignaturas y Cursos Asignados</h2>
-              </div>
-              <Link
-                className="button-link button-link--secondary button-link--sm"
-                href="/docente/asignaturas"
-              >
-                Ver todas
-              </Link>
+        <Card className="teacher-profile-section-card">
+          <div className="teacher-profile-section-card__header">
+            <div className="teacher-profile-section-card__title">
+              <Icon name="book-open" />
+              <h2>Asignaturas asignadas</h2>
             </div>
-            <p className="teacher-profile-section-card__desc">
-              Espacios de aprendizaje activos bajo tu gestión docente para el presente período escolar.
-            </p>
-            {data && data.subjects.length > 0 ? (
+            <Link
+              className="button-link button-link--secondary button-link--sm"
+              href="/docente/asignaturas"
+            >
+              Ver asignaturas
+            </Link>
+          </div>
+          <TeacherDataState
+            error={error}
+            loading={loading}
+            onRetry={() => void load()}
+          >
+            {subjects?.length ? (
               <div className="teacher-profile-subject-list">
-                {data.subjects.map((s) => (
+                {subjects.map((subject) => (
                   <Link
                     className="teacher-profile-subject-item"
-                    href={`/docente/asignaturas/${s.id}`}
-                    key={s.id}
+                    href={`/docente/asignaturas/${subject.id}`}
+                    key={subject.id}
                   >
                     <div className="teacher-profile-subject-item__info">
-                      <strong>{subjectName(s)}</strong>
-                      <span>{courseName(s)}</span>
+                      <strong>{subjectName(subject)}</strong>
+                      <span>{courseName(subject)}</span>
                     </div>
                     <span className="teacher-profile-subject-item__action">
                       Abrir <Icon name="chevron-right" />
@@ -4883,143 +4846,14 @@ export function TeacherProfileScreen({
                 ))}
               </div>
             ) : (
-              <div className="teacher-profile-empty-hint">
-                <p>Cargando información de asignaturas asignadas...</p>
-              </div>
+              <EmptyState
+                description="Cuando se te asigne una asignatura, aparecerá aquí."
+                icon={<Icon name="book-open" />}
+                title="No hay asignaturas asignadas"
+              />
             )}
-          </Card>
-
-          {/* Card: Pedagogical attention schedule */}
-          <Card className="teacher-profile-section-card">
-            <div className="teacher-profile-section-card__header">
-              <div className="teacher-profile-section-card__title">
-                <Icon name="calendar" />
-                <h2>Horarios de Atención Pedagógica</h2>
-              </div>
-            </div>
-            <p className="teacher-profile-section-card__desc">
-              Franjas horarias registradas en la dirección escolar para acompañamiento a la comunidad educativa.
-            </p>
-            <div className="teacher-profile-info-rows">
-              <div className="teacher-profile-info-row">
-                <span className="teacher-profile-info-row__label">
-                  Consultas y Tutorías a Estudiantes
-                </span>
-                <span className="teacher-profile-info-row__value">
-                  Lunes y Miércoles 15:30 - 17:00 hrs (Sala 12)
-                </span>
-              </div>
-              <div className="teacher-profile-info-row">
-                <span className="teacher-profile-info-row__label">
-                  Entrevistas a Apoderados
-                </span>
-                <span className="teacher-profile-info-row__value">
-                  Jueves 08:30 - 10:00 hrs (Previa reserva)
-                </span>
-              </div>
-              <div className="teacher-profile-info-row">
-                <span className="teacher-profile-info-row__label">
-                  Reunión de Departamento
-                </span>
-                <span className="teacher-profile-info-row__value">
-                  Martes 16:30 - 18:00 hrs
-                </span>
-              </div>
-              <div className="teacher-profile-info-row">
-                <span className="teacher-profile-info-row__label">
-                  Teléfono / Anexo interno
-                </span>
-                <span className="teacher-profile-info-row__value">
-                  Anexo 402 (Sala de Profesores)
-                </span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Card: Security and membership details */}
-          <Card className="teacher-profile-section-card">
-            <div className="teacher-profile-section-card__header">
-              <div className="teacher-profile-section-card__title">
-                <Icon name="review" />
-                <h2>Seguridad y Datos Institucionales</h2>
-              </div>
-            </div>
-            <p className="teacher-profile-section-card__desc">
-              Parámetros de acceso y autenticación gestionados por Identity.
-            </p>
-            <div className="teacher-profile-info-rows">
-              <div className="teacher-profile-info-row">
-                <span className="teacher-profile-info-row__label">ID Membresía</span>
-                <span className="teacher-profile-info-row__value font-mono">
-                  {currentSession.membershipId}
-                </span>
-              </div>
-              <div className="teacher-profile-info-row">
-                <span className="teacher-profile-info-row__label">Roles activos</span>
-                <span className="teacher-profile-info-row__value">
-                  {currentSession.roles.join(', ')}
-                </span>
-              </div>
-              <div className="teacher-profile-info-row">
-                <span className="teacher-profile-info-row__label">Autenticación multifactor</span>
-                <span className="teacher-profile-info-row__value teacher-badge-pill teacher-badge-pill--success">
-                  Activa (2FA Institucional)
-                </span>
-              </div>
-              <div className="teacher-profile-info-row">
-                <span className="teacher-profile-info-row__label">Sesión actual</span>
-                <span className="teacher-profile-info-row__value">
-                  Navegador seguro · Encriptación TLS 1.3
-                </span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Card: Fast shortcuts */}
-          <Card className="teacher-profile-section-card">
-            <div className="teacher-profile-section-card__header">
-              <div className="teacher-profile-section-card__title">
-                <Icon name="sparkles" />
-                <h2>Herramientas y Accesos Frecuentes</h2>
-              </div>
-            </div>
-            <p className="teacher-profile-section-card__desc">
-              Accesos directos para agilizar tu labor formativa diaria.
-            </p>
-            <div className="teacher-profile-shortcuts">
-              <Link
-                className="teacher-profile-shortcut-btn"
-                href="/docente/revisiones"
-              >
-                <Icon name="file-text" />
-                <div>
-                  <strong>Bandeja de Revisiones</strong>
-                  <span>Revisar entregas y calificar con rúbricas</span>
-                </div>
-              </Link>
-              <Link
-                className="teacher-profile-shortcut-btn"
-                href="/docente/calendario"
-              >
-                <Icon name="calendar" />
-                <div>
-                  <strong>Calendario Docente</strong>
-                  <span>Planificación de fechas límite y evaluaciones</span>
-                </div>
-              </Link>
-              <Link
-                className="teacher-profile-shortcut-btn"
-                href="/docente/configuracion"
-              >
-                <Icon name="settings" />
-                <div>
-                  <strong>Preferencias del Portal</strong>
-                  <span>Personalizar notificaciones y flujo de trabajo</span>
-                </div>
-              </Link>
-            </div>
-          </Card>
-        </div>
+          </TeacherDataState>
+        </Card>
       </div>
     </AppShell>
   );
@@ -5032,401 +4866,30 @@ export function TeacherSettingsScreen({
   session?: TrustedCurrentSession;
 }) {
   const currentSession = useTrustedCurrentSession(session).session;
-  // Workflow preferences
-  const [reviewMode, setReviewMode] = useState<'queue' | 'subject'>('queue');
-  const [itemsPerPage, setItemsPerPage] = useState('10');
-  const [sortOrder, setSortOrder] = useState<'oldest' | 'newest'>('oldest');
-  const [confirmBeforeReturn, setConfirmBeforeReturn] = useState(true);
-  const [enableQuickPhrases, setEnableQuickPhrases] = useState(true);
-  const [prioritizeDieStudents, setPrioritizeDieStudents] = useState(true);
-
-  // Notification preferences
-  const [notifySubmissions, setNotifySubmissions] = useState(true);
-  const [notifyResubmissions, setNotifyResubmissions] = useState(true);
-  const [notifyAnnouncements, setNotifyAnnouncements] = useState(true);
-  const [browserNotifications, setBrowserNotifications] = useState(false);
-  const [digitalDisconnection, setDigitalDisconnection] = useState(true);
-  const [dailyDigestEmail, setDailyDigestEmail] = useState(false);
-
-  // UI & Accessibility preferences
-  const [uiDensity, setUiDensity] = useState<'standard' | 'compact'>('standard');
-  const [highContrastText, setHighContrastText] = useState(false);
-  const [reducedAnimations, setReducedAnimations] = useState(false);
-  const [keyboardShortcuts, setKeyboardShortcuts] = useState(true);
-
-  const [savedSuccess, setSavedSuccess] = useState(false);
-
-  const handleSave = () => {
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3500);
-  };
-
-  const handleResetDefaults = () => {
-    setReviewMode('queue');
-    setItemsPerPage('10');
-    setSortOrder('oldest');
-    setConfirmBeforeReturn(true);
-    setEnableQuickPhrases(true);
-    setPrioritizeDieStudents(true);
-    setNotifySubmissions(true);
-    setNotifyResubmissions(true);
-    setNotifyAnnouncements(true);
-    setBrowserNotifications(false);
-    setDigitalDisconnection(true);
-    setDailyDigestEmail(false);
-    setUiDensity('standard');
-    setHighContrastText(false);
-    setReducedAnimations(false);
-    setKeyboardShortcuts(true);
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
-  };
 
   return (
     <AppShell dataMode="real" session={currentSession}>
       <div className="teacher-account-page">
-        {/* Settings Hero */}
-        <section className="teacher-settings-hero">
-          <div className="teacher-settings-hero__badge">
-            <Icon name="settings" />
-            <span>Preferencias y Configuración del Docente</span>
-          </div>
-          <h1 className="teacher-settings-hero__title">
-            Configuración del Portal Académico
-          </h1>
-          <p className="teacher-settings-hero__desc">
-            Personaliza cómo recibes las alertas pedagógicas, el flujo de revisión de entregas escolares y la experiencia visual de tu espacio de trabajo.
-          </p>
-        </section>
-
-        {savedSuccess ? (
-          <Alert title="Preferencias guardadas exitosamente" tone="success">
-            Los cambios en tus preferencias docentes han sido aplicados a tu sesión.
+        <PageHeading
+          description="Las preferencias personales todavía no se pueden guardar en este portal."
+          title="Configuración docente"
+        />
+        <Card className="teacher-settings-card">
+          <Alert title="No hay preferencias disponibles" tone="info">
+            Las opciones de notificaciones, accesibilidad y flujo de revisión se
+            mostrarán aquí cuando tengan persistencia y efecto real. La campana
+            de la barra superior permite consultar y gestionar las notificaciones
+            disponibles para tu sesión.
           </Alert>
-        ) : null}
-
-        <div className="teacher-settings-grid">
-          {/* Section 1: Workflow Preferences */}
-          <Card className="teacher-settings-card">
-            <div className="teacher-settings-card__header">
-              <div className="teacher-settings-card__title">
-                <Icon name="file-text" />
-                <h2>Flujo de Revisiones y Evaluación</h2>
-              </div>
-              <Badge tone="info">Revisiones</Badge>
-            </div>
-            <p className="teacher-settings-card__desc">
-              Optimiza el ritmo y la organización para calificar tareas, exámenes y proyectos escolares.
-            </p>
-            <div className="teacher-settings-fields">
-              <div className="teacher-settings-field">
-                <label
-                  className="teacher-settings-field__label"
-                  htmlFor="review-default-view"
-                >
-                  Modo predeterminado de la bandeja de Revisiones
-                </label>
-                <select
-                  className="teacher-settings-select"
-                  id="review-default-view"
-                  onChange={(e) =>
-                    setReviewMode(e.target.value as 'queue' | 'subject')
-                  }
-                  value={reviewMode}
-                >
-                  <option value="queue">
-                    Cola unificada (Recomendado para revisar entregas con agilidad)
-                  </option>
-                  <option value="subject">Agrupado por asignatura y curso</option>
-                </select>
-                <span className="teacher-settings-field__hint">
-                  {reviewMode === 'queue'
-                    ? 'Muestra todas las entregas pendientes en una cola única para calificar rápidamente.'
-                    : 'Organiza las tareas divididas por cada asignatura y curso a cargo.'}
-                </span>
-              </div>
-
-              <div className="teacher-settings-field">
-                <label
-                  className="teacher-settings-field__label"
-                  htmlFor="items-per-page"
-                >
-                  Cantidad de entregas mostradas por página
-                </label>
-                <select
-                  className="teacher-settings-select"
-                  id="items-per-page"
-                  onChange={(e) => setItemsPerPage(e.target.value)}
-                  value={itemsPerPage}
-                >
-                  <option value="10">10 entregas por página (Carga más liviana)</option>
-                  <option value="20">20 entregas por página (Equilibrado)</option>
-                  <option value="50">50 entregas por página (Vista ampliada)</option>
-                </select>
-              </div>
-
-              <div className="teacher-settings-field">
-                <label
-                  className="teacher-settings-field__label"
-                  htmlFor="sort-order"
-                >
-                  Orden cronológico de entregas
-                </label>
-                <select
-                  className="teacher-settings-select"
-                  id="sort-order"
-                  onChange={(e) =>
-                    setSortOrder(e.target.value as 'oldest' | 'newest')
-                  }
-                  value={sortOrder}
-                >
-                  <option value="oldest">
-                    Más antiguas primero (Recomendado para cumplir plazos)
-                  </option>
-                  <option value="newest">Más recientes primero</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="teacher-settings-toggles">
-              <label className="teacher-toggle-item">
-                <input
-                  checked={confirmBeforeReturn}
-                  onChange={(e) => setConfirmBeforeReturn(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Confirmación antes de devolver retroalimentación</strong>
-                  <span>
-                    Muestra un aviso de seguridad antes de publicar notas y comentarios al estudiante.
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={enableQuickPhrases}
-                  onChange={(e) => setEnableQuickPhrases(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Banco de frases pedagógicas formativas</strong>
-                  <span>
-                    Habilitar sugerencias rápidas de comentarios pedagógicos de felicitación y refuerzo.
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={prioritizeDieStudents}
-                  onChange={(e) => setPrioritizeDieStudents(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Destacar estudiantes con apoyos de inclusión (DIE)</strong>
-                  <span>
-                    Identificar visualmente con una insignia a estudiantes con adecuaciones curriculares.
-                  </span>
-                </div>
-              </label>
-            </div>
-          </Card>
-
-          {/* Section 2: Notifications */}
-          <Card className="teacher-settings-card">
-            <div className="teacher-settings-card__header">
-              <div className="teacher-settings-card__title">
-                <Icon name="bell" />
-                <h2>Notificaciones y Desconexión Digital</h2>
-              </div>
-              <Badge tone="warning">Avisos</Badge>
-            </div>
-            <p className="teacher-settings-card__desc">
-              Controla qué avisos llegan a tu campana y respeta tus horarios de descanso laboral.
-            </p>
-            <div className="teacher-settings-toggles">
-              <label className="teacher-toggle-item">
-                <input
-                  checked={notifySubmissions}
-                  onChange={(e) => setNotifySubmissions(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Nuevas entregas de estudiantes</strong>
-                  <span>
-                    Avisar de inmediato cuando un alumno suba una tarea o evaluación al portal.
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={notifyResubmissions}
-                  onChange={(e) => setNotifyResubmissions(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Reentregas con correcciones solicitadas</strong>
-                  <span>
-                    Alerta destacada cuando un estudiante vuelva a cargar un trabajo corregido.
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={notifyAnnouncements}
-                  onChange={(e) => setNotifyAnnouncements(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Comunicados institucionales de dirección</strong>
-                  <span>
-                    Avisos importantes de secretaría académica, UTP e inspectoría general.
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={browserNotifications}
-                  onChange={(e) => setBrowserNotifications(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Notificaciones web del navegador (Push)</strong>
-                  <span>
-                    Recibir avisos flotantes de escritorio mientras utilizas otras aplicaciones.
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={digitalDisconnection}
-                  onChange={(e) => setDigitalDisconnection(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Modo 'Derecho a Desconexión Docente'</strong>
-                  <span>
-                    Silenciar alertas automáticas fuera del horario escolar (después de las 18:00 hrs y fines de semana).
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={dailyDigestEmail}
-                  onChange={(e) => setDailyDigestEmail(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Resumen diario por correo electrónico</strong>
-                  <span>
-                    Enviar cada mañana a las 08:00 AM un informe consolidado con las tareas pendientes.
-                  </span>
-                </div>
-              </label>
-            </div>
-          </Card>
-
-          {/* Section 3: Visual experience & accessibility */}
-          <Card className="teacher-settings-card">
-            <div className="teacher-settings-card__header">
-              <div className="teacher-settings-card__title">
-                <Icon name="eye" />
-                <h2>Visualización y Accesibilidad</h2>
-              </div>
-              <Badge tone="neutral">Interfaz</Badge>
-            </div>
-            <p className="teacher-settings-card__desc">
-              Ajusta la densidad visual, el contraste y la ergonomía de lectura para jornadas docentes prolongadas.
-            </p>
-            <div className="teacher-settings-fields">
-              <div className="teacher-settings-field">
-                <label
-                  className="teacher-settings-field__label"
-                  htmlFor="ui-density"
-                >
-                  Densidad de listas y tablas
-                </label>
-                <select
-                  className="teacher-settings-select"
-                  id="ui-density"
-                  onChange={(e) =>
-                    setUiDensity(e.target.value as 'standard' | 'compact')
-                  }
-                  value={uiDensity}
-                >
-                  <option value="standard">Estándar espaciosa (Recomendada)</option>
-                  <option value="compact">Compacta (Permite ver más alumnos por pantalla)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="teacher-settings-toggles">
-              <label className="teacher-toggle-item">
-                <input
-                  checked={highContrastText}
-                  onChange={(e) => setHighContrastText(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Tipografía de alto contraste pedagógico</strong>
-                  <span>
-                    Aumenta la fuerza de trazo en enunciados y rúbricas para reducir fatiga visual.
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={reducedAnimations}
-                  onChange={(e) => setReducedAnimations(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Reducir animaciones de interfaz</strong>
-                  <span>
-                    Optimiza la velocidad de respuesta en computadores de sala de clases con recursos limitados.
-                  </span>
-                </div>
-              </label>
-
-              <label className="teacher-toggle-item">
-                <input
-                  checked={keyboardShortcuts}
-                  onChange={(e) => setKeyboardShortcuts(e.target.checked)}
-                  type="checkbox"
-                />
-                <div className="teacher-toggle-item__content">
-                  <strong>Atajos de teclado docentes activos</strong>
-                  <span>
-                    Permite navegar entre entregas con las teclas J/K y calificar con Enter de manera fluida.
-                  </span>
-                </div>
-              </label>
-            </div>
-          </Card>
-        </div>
-
-        {/* Footer actions */}
-        <div className="teacher-settings-footer">
-          <Button onClick={handleSave} variant="primary" type="button">
-            Guardar preferencias docentes
-          </Button>
-          <Button onClick={handleResetDefaults} variant="secondary" type="button">
-            Restablecer valores predeterminados
-          </Button>
-          <Link
-            className="button-link button-link--secondary"
-            href="/docente/perfil"
-          >
-            Volver a mi perfil
-          </Link>
-        </div>
+          <div className="teacher-settings-footer">
+            <Link
+              className="button-link button-link--secondary"
+              href="/docente/perfil"
+            >
+              Volver a mi perfil
+            </Link>
+          </div>
+        </Card>
       </div>
     </AppShell>
   );

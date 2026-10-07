@@ -149,6 +149,20 @@ describe('NotificationCenter', () => {
     expect(router.push).toHaveBeenCalledWith('/estudiante/entregas');
   });
 
+  it('keeps the panel open and does not navigate when marking a notification as read fails', async () => {
+    const api = makeApi();
+    api.markNotificationRead = vi.fn().mockRejectedValue(new Error('offline'));
+
+    await openNotifications(api);
+    fireEvent.click(screen.getByRole('button', { name: /Nueva actividad/ }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'El estado se conservará',
+    );
+    expect(screen.getByRole('dialog', { name: 'Notificaciones' })).toBeTruthy();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
   it('supports teacher notification types and marks all as read', async () => {
     const api = makeApi({
       count: 2,

@@ -171,6 +171,11 @@ function fileIcon(mime: string): 'file-text' | 'image' | 'paperclip' {
 
   if (!category) return null;
   const uploadsBlocked = usage?.state === 'FULL';
+  const usagePercentage = usage
+    ? usage.quotaBytes > 0
+      ? Math.min(100, Math.round((usage.usedBytes / usage.quotaBytes) * 100))
+      : 0
+    : 0;
 
   return (
     <Card
@@ -204,15 +209,17 @@ function fileIcon(mime: string): 'file-text' | 'image' | 'paperclip' {
               </span>
             </span>
           </div>
-          <div className="storage-meter-progress">
+          <div
+            aria-label={`Almacenamiento utilizado: ${usagePercentage}%`}
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={usagePercentage}
+            className="storage-meter-progress"
+            role="progressbar"
+          >
             <div
               className={`storage-meter-progress__bar storage-meter-progress__bar--${usage.state.toLowerCase()}`}
-              style={{
-                width: `${Math.min(
-                  100,
-                  Math.round((usage.usedBytes / usage.quotaBytes) * 100),
-                )}%`,
-              }}
+              style={{ width: `${usagePercentage}%` }}
             />
           </div>
           {usage.state !== 'NORMAL' ? (

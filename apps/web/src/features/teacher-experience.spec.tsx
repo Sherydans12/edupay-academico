@@ -21,7 +21,9 @@ import {
 import { TeacherContentEditor } from '@/components/teacher-content-editor';
 import {
   TeacherCalendarScreen,
+  TeacherProfileScreen,
   TeacherReviewsScreen,
+  TeacherSettingsScreen,
   TeacherSubjectScreen,
 } from '@/features/teacher-screens';
 
@@ -181,14 +183,12 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       expect(screen.getByTitle('Insertar enlace')).toBeTruthy();
 
       // Click Preview tab
-      fireEvent.click(screen.getByRole('tab', { name: /vista previa/i }));
+      fireEvent.click(screen.getByRole('button', { name: /vista previa/i }));
       expect(screen.getByText('Texto de prueba')).toBeTruthy();
 
       // Click Editor tab
-      fireEvent.click(screen.getByRole('tab', { name: /editor/i }));
-      const textarea = screen.getByLabelText(
-        /contenido/i,
-      ) as HTMLTextAreaElement;
+      fireEvent.click(screen.getByRole('button', { name: /editor/i }));
+      const textarea = screen.getByLabelText(/^Contenido$/) as HTMLTextAreaElement;
       expect(textarea.value).toBe('Texto de prueba');
 
       // Format bold via toolbar
@@ -198,6 +198,38 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
   });
 
   describe('TeacherContentEditor & Working Draft Lifecycle', () => {
+    it('blocks editing and retries when the published item draft cannot be loaded', async () => {
+      const getLearningItemDraft = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce({ draft: null });
+      const api = {
+        getLearningItemDraft,
+      } as unknown as AcademicApiClient;
+
+      render(
+        <TeacherContentEditor
+          api={api}
+          item={item}
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+          subject={subject}
+          unit={unit}
+        />,
+      );
+
+      expect(
+        await screen.findByText(/no pudimos cargar los cambios guardados/i),
+      ).toBeTruthy();
+      expect(screen.queryByLabelText(/título del contenido/i)).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reintentar carga' }));
+      expect(
+        await screen.findByText(/estás editando un borrador de trabajo/i),
+      ).toBeTruthy();
+      expect(getLearningItemDraft).toHaveBeenCalledTimes(2);
+    });
+
     it('edits working draft for published item, saves draft, and publishes draft', async () => {
       const getLearningItemDraft = vi.fn().mockResolvedValue({
         draft: {
@@ -326,6 +358,47 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       expect(
         screen.getByRole('button', { name: /actualizar contenido/i }),
       ).toBeTruthy();
+    });
+
+    it('retries publication of a created draft without creating a duplicate item', async () => {
+      const createdItem = { ...item, id: 'item-created', publicationStatus: 'DRAFT' as const };
+      const createLearningItem = vi.fn().mockResolvedValue(createdItem);
+      const publishLearningItem = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce({ ...createdItem, publicationStatus: 'PUBLISHED' });
+      const api = {
+        createLearningItem,
+        publishLearningItem,
+      } as unknown as AcademicApiClient;
+      const onClose = vi.fn();
+
+      render(
+        <TeacherContentEditor
+          api={api}
+          item={null}
+          onClose={onClose}
+          onSaved={vi.fn()}
+          subject={subject}
+          unit={unit}
+        />,
+      );
+
+      fireEvent.change(screen.getByLabelText(/título del contenido/i), {
+        target: { value: 'Nueva actividad docente' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Publicar ahora' }));
+      expect(await screen.findByText(/no pudimos publicar el contenido/i)).toBeTruthy();
+      expect(createLearningItem).toHaveBeenCalledOnce();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Publicar ahora' }));
+      await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+
+      expect(createLearningItem).toHaveBeenCalledOnce();
+      const firstPublishOptions = publishLearningItem.mock.calls[0]?.[1];
+      const retryPublishOptions = publishLearningItem.mock.calls[1]?.[1];
+      expect(firstPublishOptions).toEqual({ idempotencyKey: expect.any(String) });
+      expect(retryPublishOptions).toEqual(firstPublishOptions);
     });
   });
 
@@ -502,6 +575,34 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
   });
 
   describe('Teacher workspace continuity', () => {
+    it('shows only session-backed teacher profile details and no pretend settings', async () => {
+      const getTeacherContextSubjects = vi.fn().mockResolvedValue([subject]);
+      const getLearningRoute = vi.fn().mockResolvedValue({
+        courseSubjectId: subject.id,
+        units: [],
+      });
+      const api = {
+        getLearningRoute,
+        getTeacherContextSubjects,
+        listSubmissions: vi.fn().mockResolvedValue([]),
+      } as unknown as AcademicApiClient;
+
+      render(<TeacherProfileScreen api={api} />);
+      expect(await screen.findByRole('heading', { name: 'Mi perfil' })).toBeTruthy();
+      expect(screen.getByText('Lenguaje y Comunicación')).toBeTruthy();
+      expect(screen.queryByText('docente@colegiodemo.cl')).toBeNull();
+      expect(screen.queryByText(/86 matriculados/i)).toBeNull();
+      expect(screen.queryByText(/32 hrs pedagógicas/i)).toBeNull();
+
+      cleanup();
+      render(<TeacherSettingsScreen />);
+      expect(screen.getByText('No hay preferencias disponibles')).toBeTruthy();
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+      expect(
+        screen.queryByRole('button', { name: /guardar preferencias docentes/i }),
+      ).toBeNull();
+    });
+
     it('uses distinct accessible order controls and keeps content actions inside each unit', async () => {
       const emptyUnit = {
         ...unit,
@@ -581,6 +682,38 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       ).toBeTruthy();
     });
 
+    it('opens scheduled publication events in course content, not the submissions queue', async () => {
+      const publishAt = new Date(Date.now() + 86_400_000).toISOString();
+      const scheduledUnit = {
+        ...unit,
+        items: [
+          {
+            ...item,
+            dueAt: null,
+            id: 'scheduled-item',
+            publicationStatus: 'SCHEDULED' as const,
+            publishAt,
+            title: 'Publicación futura',
+          },
+        ],
+      };
+      const api = {
+        getLearningRoute: vi.fn().mockResolvedValue({
+          courseSubjectId: subject.id,
+          units: [scheduledUnit],
+        }),
+        getTeacherContextSubjects: vi.fn().mockResolvedValue([subject]),
+      } as unknown as AcademicApiClient;
+
+      render(<TeacherCalendarScreen api={api} />);
+      const link = await screen.findByRole('link', {
+        name: /Publicación futura/,
+      });
+      expect(link.getAttribute('href')).toBe(
+        `/docente/asignaturas/${subject.id}?tab=content`,
+      );
+    });
+
     it('renders teacher reviews screen with submission queue per subject', async () => {
       const otherSubject = {
         ...subject,
@@ -607,6 +740,16 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
       expect(
         await screen.findByRole('heading', { name: 'Revisiones' }),
       ).toBeTruthy();
+      const pendingKpi = await screen.findByRole('button', {
+        name: 'Filtrar por entregas por revisar',
+      });
+      expect(pendingKpi.getAttribute('aria-pressed')).toBe('false');
+      fireEvent.click(pendingKpi);
+      expect(pendingKpi.getAttribute('aria-pressed')).toBe('true');
+      expect(await screen.findByText(/no hay entregas que coincidan/i)).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Filtrar por todas las entregas' }),
+      );
       expect(
         await screen.findByRole('heading', {
           name: 'Lenguaje y Comunicación · 7º Básico A',
@@ -624,6 +767,24 @@ Este es un párrafo con **texto en negrita** y *texto en cursiva* y \`código en
           name: 'Lenguaje y Comunicación · 7º Básico A',
         }),
       ).toBeNull();
+    });
+
+    it('shows a retryable error instead of an empty queue when submissions fail', async () => {
+      const api = {
+        getLearningRoute: vi.fn().mockResolvedValue({
+          courseSubjectId: subject.id,
+          units: [unit],
+        }),
+        getTeacherContextSubjects: vi.fn().mockResolvedValue([subject]),
+        listSubmissions: vi.fn().mockRejectedValue(new Error('offline')),
+      } as unknown as AcademicApiClient;
+
+      render(<TeacherReviewsScreen api={api} />);
+      expect(
+        await screen.findByText('No pudimos cargar la información'),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+      expect(screen.queryByText('Sin entregas para revisar')).toBeNull();
     });
   });
 });

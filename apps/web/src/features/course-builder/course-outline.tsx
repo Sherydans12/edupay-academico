@@ -136,7 +136,7 @@ export const CourseOutline = memo(function CourseOutline({
             Aún no hay contenido visible en esta ruta.
           </p>
           <small>
-            Haz clic en "+ Nueva unidad" arriba para comenzar a estructurar los
+            Haz clic en &quot;+ Nueva unidad&quot; arriba para comenzar a estructurar los
             temas y contenidos de la asignatura.
           </small>
         </div>
@@ -157,22 +157,22 @@ export const CourseOutline = memo(function CourseOutline({
           Filtrar:
         </span>
         <ScrollableTabsBar ariaLabel="Filtros por estado de contenido y unidades">
-          <div className="teacher-route-filter-chips" role="tablist">
+          <div className="teacher-route-filter-chips">
             <button
-              aria-selected={statusFilter === 'ALL'}
+              aria-pressed={statusFilter === 'ALL'}
               className={`teacher-route-filter-chip ${statusFilter === 'ALL' ? 'teacher-route-filter-chip--active' : ''}`}
               onClick={() => setStatusFilter('ALL')}
-              role="tab"
+
               type="button"
             >
               <span>Todos</span>
               <span className="chip-badge">{counts.all}</span>
             </button>
             <button
-              aria-selected={statusFilter === 'PUBLISHED'}
+              aria-pressed={statusFilter === 'PUBLISHED'}
               className={`teacher-route-filter-chip ${statusFilter === 'PUBLISHED' ? 'teacher-route-filter-chip--active' : ''}`}
               onClick={() => setStatusFilter('PUBLISHED')}
-              role="tab"
+
               type="button"
             >
               <Icon name="check-circle" />
@@ -180,10 +180,10 @@ export const CourseOutline = memo(function CourseOutline({
               <span className="chip-badge">{counts.published}</span>
             </button>
             <button
-              aria-selected={statusFilter === 'DRAFT'}
+              aria-pressed={statusFilter === 'DRAFT'}
               className={`teacher-route-filter-chip ${statusFilter === 'DRAFT' ? 'teacher-route-filter-chip--active' : ''}`}
               onClick={() => setStatusFilter('DRAFT')}
-              role="tab"
+
               type="button"
             >
               <Icon name="edit" />
@@ -191,10 +191,10 @@ export const CourseOutline = memo(function CourseOutline({
               <span className="chip-badge">{counts.drafts}</span>
             </button>
             <button
-              aria-selected={statusFilter === 'ARCHIVED'}
+              aria-pressed={statusFilter === 'ARCHIVED'}
               className={`teacher-route-filter-chip ${statusFilter === 'ARCHIVED' ? 'teacher-route-filter-chip--active' : ''}`}
               onClick={() => setStatusFilter('ARCHIVED')}
-              role="tab"
+
               type="button"
             >
               <Icon name="archive" />

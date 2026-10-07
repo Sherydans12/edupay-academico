@@ -3,7 +3,7 @@
 import { Button, Dialog, Input, Select, Textarea } from '@edupay/ui';
 import type { LearningItem } from '@edupay/contracts';
 import { useCallback, useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 
 import type { AcademicApiClient } from '@/api/academic-client';
 import {
@@ -63,13 +63,13 @@ export function ItemEditor({
   const [bodyDocument, setBodyDocument] = useState(defaultValues.bodyDocument);
 
   const {
+    control,
     formState: { errors, isDirty },
     handleSubmit,
     register,
     reset,
     setError,
     setValue,
-    watch,
   } = useForm<ItemEditorFormValues>({
     defaultValues,
   });
@@ -78,7 +78,7 @@ export function ItemEditor({
     register('bodyDocument');
   }, [register]);
 
-  const selectedType = watch('type');
+  const selectedType = useWatch({ control, name: 'type' });
 
   // Handle browser tab/page close prevention when form is dirty
   useEffect(() => {
@@ -216,7 +216,7 @@ export function ItemEditor({
                     type: 'ASSIGNMENT' as const,
                   },
                   {
-                    description: 'Evaluaciones y rúbricas formales',
+                    description: 'Evaluaciones que se entregan como documento',
                     icon: 'document' as const,
                     label: 'Evaluación',
                     type: 'ASSESSMENT' as const,

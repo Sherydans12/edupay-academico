@@ -57,11 +57,28 @@ describe('AppShell', () => {
     const open = screen.getByRole('button', { name: 'Abrir navegación' });
     fireEvent.click(open);
     const sidebar = within(
-      screen.getByRole('complementary', { name: 'Navegación principal' }),
+      screen.getByRole('dialog', { name: 'Navegación principal' }),
     );
     expect(document.activeElement).toBe(
       sidebar.getByRole('link', { name: 'Inicio' }),
     );
+    const focusable = Array.from(
+      screen
+        .getByRole('dialog', { name: 'Navegación principal' })
+        .querySelectorAll<HTMLElement>('a[href], button:not([disabled])'),
+    ).filter((element) => {
+      const style = window.getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    expect(first).toBeTruthy();
+    expect(last).toBeTruthy();
+    first?.focus();
+    fireEvent.keyDown(first!, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+    fireEvent.keyDown(last!, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
     fireEvent.keyDown(
       screen.getByRole('navigation', {
         name: 'Navegación por rol y módulo',

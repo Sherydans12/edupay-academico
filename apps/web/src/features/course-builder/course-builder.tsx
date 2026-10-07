@@ -1,6 +1,6 @@
 'use client';
 
-import { Alert, Badge, Button, Card, Dialog, Input, Tabs } from '@edupay/ui';
+import { Alert, Button, Card, Dialog, Input, Tabs } from '@edupay/ui';
 import type {
   CourseSubject,
   LearningItem,
@@ -13,6 +13,7 @@ import React, {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
 } from 'react';
 
@@ -44,11 +45,8 @@ import { ItemEditor } from './item-editor';
 import { MoveItemDialog } from './move-item-dialog';
 import { UnitEditor } from './unit-editor';
 import type {
-  CreateLearningItemRequest,
   ItemEditorFormValues,
-  MoveItemRequest,
   UnitEditorFormValues,
-  UpdateLearningItemRequest,
 } from './types';
 
 function newClientUUID(): string {
@@ -143,6 +141,7 @@ export function CourseBuilder({
   // Status and Confirmation
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const commandInFlight = useRef(false);
   const [actionStatus, setActionStatus] = useState('');
   const [confirmation, setConfirmation] = useState<{
     body: string;
@@ -201,6 +200,12 @@ export function CourseBuilder({
       successMsg = 'Cambios guardados.',
       confirmedAction = action,
     ) => {
+      if (commandInFlight.current) {
+        // Revert a second optimistic command to its own pre-command snapshot.
+        dispatch({ commandId, type: 'ROLLBACK_COMMAND' });
+        return false;
+      }
+      commandInFlight.current = true;
       setSaving(true);
       setFormError('');
       setActionStatus('');
@@ -230,6 +235,7 @@ export function CourseBuilder({
           }
         }
       } finally {
+        commandInFlight.current = false;
         setSaving(false);
       }
       return false;
@@ -1077,14 +1083,16 @@ export function CourseBuilder({
                     <div className="teacher-collab-card__content">
                       <h3>Equipo docente</h3>
                       <p>
-                        Los docentes asignados comparten la autoría pedagógica,
-                        la publicación de contenidos y el seguimiento de las
-                        entregas de los estudiantes.
+                        La nómina de docentes colaboradores no está disponible
+                        en esta vista. Las asignaciones de equipo se gestionan
+                        institucionalmente.
                       </p>
-                      <div className="teacher-collab-card__badge">
-                        <Icon name="check-circle" />
-                        <span>Co-docencia activa para este curso</span>
-                      </div>
+                      <Link
+                        className="button-link button-link--secondary"
+                        href={`/docente/asignaturas/${subject.id}/estudiantes`}
+                      >
+                        <Icon name="people" /> Consultar estudiantes asignados
+                      </Link>
                     </div>
                   </Card>
                 </div>
@@ -1300,7 +1308,7 @@ export function CourseBuilder({
       {/* ARCHIVE ITEM CONFIRMATION */}
       {archiveItemCandidate ? (
         <Dialog
-          description="Al archivar el contenido, se oculta de la ruta de aprendizaje de los estudiantes sin perder ninguna calificación ni entrega histórica."
+          description="Archivar oculta el contenido en la ruta de aprendizaje. Puedes restaurarlo desde el filtro Archivados."
           onOpenChange={(open) => {
             if (!open && !saving) setArchiveItemCandidate(null);
           }}
@@ -1322,7 +1330,7 @@ export function CourseBuilder({
             <div className="archive-reassurance-box">
               <div className="archive-reassurance-item">
                 <Icon name="check-circle" />
-                <span>Las entregas, calificaciones y notas de los estudiantes permanecen 100% protegidas.</span>
+                <span>El historial de cambios del contenido se conserva.</span>
               </div>
               <div className="archive-reassurance-item">
                 <Icon name="history" />

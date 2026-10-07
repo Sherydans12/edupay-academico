@@ -197,7 +197,6 @@ export function NotificationCenter({
       )
         return;
       setOpen(false);
-      triggerRef.current?.focus();
     };
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('pointerdown', handlePointerDown);
@@ -240,6 +239,7 @@ export function NotificationCenter({
         setActionError(
           'No pudimos marcar esta notificación como leída. El estado se conservará para que puedas reintentarlo.',
         );
+        return;
       } finally {
         pendingReadIds.current.delete(notification.id);
       }
@@ -329,6 +329,14 @@ export function NotificationCenter({
           id={panelId}
           ref={panelRef}
           role="dialog"
+          onBlur={(event) => {
+            const nextTarget = event.relatedTarget;
+            if (
+              nextTarget instanceof Node &&
+              panelRef.current?.contains(nextTarget)
+            ) return;
+            setOpen(false);
+          }}
           tabIndex={-1}
         >
           <header className="notification-panel__header">
@@ -376,22 +384,20 @@ export function NotificationCenter({
 
           {/* Filter tabs: Todas vs Sin leer */}
           {notifications.length > 0 ? (
-            <div className="notification-panel__tabs" role="tablist">
+            <div aria-label="Filtrar notificaciones" className="notification-panel__tabs" role="group">
               <button
-                aria-selected={filterTab === 'ALL'}
+                aria-pressed={filterTab === 'ALL'}
                 className={`notification-tab ${filterTab === 'ALL' ? 'notification-tab--active' : ''}`}
                 onClick={() => setFilterTab('ALL')}
-                role="tab"
                 type="button"
               >
                 <span>Todas</span>
                 <span className="notification-tab__pill">{notifications.length}</span>
               </button>
               <button
-                aria-selected={filterTab === 'UNREAD'}
+                aria-pressed={filterTab === 'UNREAD'}
                 className={`notification-tab ${filterTab === 'UNREAD' ? 'notification-tab--active' : ''}`}
                 onClick={() => setFilterTab('UNREAD')}
-                role="tab"
                 type="button"
               >
                 <span>Sin leer</span>

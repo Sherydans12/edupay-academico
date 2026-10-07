@@ -280,12 +280,15 @@ export function ContentHistoryDrawer({
               ariaLabel="Pestañas de vista del historial de versiones"
               className="history-mobile-tabs-scroll-bar"
             >
-              <div className="history-mobile-tabs" role="tablist">
+              <div
+                aria-label="Vista del historial"
+                className="history-mobile-tabs"
+                role="group"
+              >
                 <button
-                  aria-selected={mobileTab === 'timeline'}
+                  aria-pressed={mobileTab === 'timeline'}
                   className={`history-mobile-tab ${mobileTab === 'timeline' ? 'history-mobile-tab--active' : ''}`}
                   onClick={() => setMobileTab('timeline')}
-                  role="tab"
                   type="button"
                 >
                   <Icon name="history" />
@@ -293,10 +296,9 @@ export function ContentHistoryDrawer({
                   <span className="history-mobile-tab__badge">{history.length}</span>
                 </button>
                 <button
-                  aria-selected={mobileTab === 'preview'}
+                  aria-pressed={mobileTab === 'preview'}
                   className={`history-mobile-tab ${mobileTab === 'preview' ? 'history-mobile-tab--active' : ''}`}
                   onClick={() => setMobileTab('preview')}
-                  role="tab"
                   type="button"
                 >
                   <Icon name="eye" />
@@ -336,8 +338,13 @@ export function ContentHistoryDrawer({
                     ariaLabel="Filtros de versiones por tipo de operación"
                     className="history-filter-chips-scroll-bar"
                   >
-                    <div className="history-filter-chips" role="tablist">
+                    <div
+                      aria-label="Filtrar versiones por operación"
+                      className="history-filter-chips"
+                      role="group"
+                    >
                       <button
+                        aria-pressed={operationFilter === 'ALL'}
                         className={`history-filter-chip ${operationFilter === 'ALL' ? 'history-filter-chip--active' : ''}`}
                         onClick={() => setOperationFilter('ALL')}
                         type="button"
@@ -346,6 +353,7 @@ export function ContentHistoryDrawer({
                       </button>
                       {counts.published > 0 ? (
                         <button
+                          aria-pressed={operationFilter === 'PUBLISHED'}
                           className={`history-filter-chip ${operationFilter === 'PUBLISHED' ? 'history-filter-chip--active' : ''}`}
                           onClick={() => setOperationFilter('PUBLISHED')}
                           type="button"
@@ -355,6 +363,7 @@ export function ContentHistoryDrawer({
                       ) : null}
                       {counts.drafts > 0 ? (
                         <button
+                          aria-pressed={operationFilter === 'DRAFT'}
                           className={`history-filter-chip ${operationFilter === 'DRAFT' ? 'history-filter-chip--active' : ''}`}
                           onClick={() => setOperationFilter('DRAFT')}
                           type="button"
@@ -364,6 +373,7 @@ export function ContentHistoryDrawer({
                       ) : null}
                       {counts.restored > 0 ? (
                         <button
+                          aria-pressed={operationFilter === 'RESTORED'}
                           className={`history-filter-chip ${operationFilter === 'RESTORED' ? 'history-filter-chip--active' : ''}`}
                           onClick={() => setOperationFilter('RESTORED')}
                           type="button"

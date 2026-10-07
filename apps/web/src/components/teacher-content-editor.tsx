@@ -8,6 +8,7 @@ import {
   Dialog,
   Input,
   Select,
+  Skeleton,
   Textarea,
 } from '@edupay/ui';
 import type {
@@ -17,7 +18,7 @@ import type {
   LearningItemDraft,
   LearningUnitWithItems,
 } from '@edupay/contracts';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   AcademicApiError,
@@ -132,6 +133,12 @@ function initialFormState(
   };
 }
 
+function newIdempotencyKey(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `teacher-editor-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export function TeacherContentEditor({
   api,
   item,
@@ -140,9 +147,13 @@ export function TeacherContentEditor({
   subject,
   unit,
 }: TeacherContentEditorProps) {
-  const isEditing = Boolean(item);
-  const isPublished = item?.publicationStatus === 'PUBLISHED';
-  const isScheduled = item?.publicationStatus === 'SCHEDULED';
+  const [createdItem, setCreatedItem] = useState<LearningItem | null>(null);
+  const activeItem = item ?? createdItem;
+  const [createIdempotencyKey] = useState(newIdempotencyKey);
+  const [publishIdempotencyKey] = useState(newIdempotencyKey);
+  const isEditing = Boolean(activeItem);
+  const isPublished = activeItem?.publicationStatus === 'PUBLISHED';
+  const isScheduled = activeItem?.publicationStatus === 'SCHEDULED';
 
   const [activeTab, setActiveTab] = useState<
     'content' | 'files' | 'settings' | 'preview'
@@ -151,11 +162,16 @@ export function TeacherContentEditor({
     null,
   );
   const [form, setForm] = useState<ContentEditorFormState>(() =>
-    initialFormState(item),
+    initialFormState(activeItem),
   );
   const [savedFormSnapshot, setSavedFormSnapshot] =
-    useState<ContentEditorFormState>(() => initialFormState(item));
+    useState<ContentEditorFormState>(() => initialFormState(activeItem));
   const [saving, setSaving] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(
+    () => activeItem?.publicationStatus === 'PUBLISHED',
+  );
+  const [draftLoadError, setDraftLoadError] = useState(false);
+  const draftRequestId = useRef(0);
   const [publishing, setPublishing] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [error, setError] = useState('');
@@ -191,24 +207,36 @@ export function TeacherContentEditor({
 
   // Load server draft if editing published item
   const loadDraft = useCallback(async () => {
-    if (!item || !isPublished) return;
+    if (!activeItem || !isPublished) {
+      setDraftLoading(false);
+      return;
+    }
+    const requestId = ++draftRequestId.current;
+    setDraftLoading(true);
+    setDraftLoadError(false);
     try {
-      const response = await api.getLearningItemDraft(item.id);
-      if (response.draft) {
+      const response = await api.getLearningItemDraft(activeItem.id);
+      if (response.draft && draftRequestId.current === requestId) {
         setServerDraft(response.draft);
-        const nextState = initialFormState(item, response.draft);
+        const nextState = initialFormState(activeItem, response.draft);
         setForm(nextState);
         setSavedFormSnapshot(nextState);
       }
     } catch {
-      // Draft not found or clean state
+      if (draftRequestId.current === requestId) setDraftLoadError(true);
+    } finally {
+      if (draftRequestId.current === requestId) setDraftLoading(false);
     }
-  }, [api, isPublished, item]);
+  }, [activeItem, api, isPublished]);
 
   useEffect(() => {
+    if (!activeItem || !isPublished) return;
     const timer = window.setTimeout(() => void loadDraft(), 0);
-    return () => window.clearTimeout(timer);
-  }, [loadDraft]);
+    return () => {
+      window.clearTimeout(timer);
+      draftRequestId.current += 1;
+    };
+  }, [activeItem, isPublished, loadDraft]);
 
   const deliverable = form.type === 'ASSIGNMENT' || form.type === 'ASSESSMENT';
 
@@ -240,7 +268,7 @@ export function TeacherContentEditor({
     setStaleRevisionConflict(false);
 
     try {
-      if (!item) {
+      if (!activeItem) {
         // Create as new item in unit
         const input = prepareInput(false);
         const { confirmSensitiveChange: _, ...createInput } = input;
@@ -249,7 +277,7 @@ export function TeacherContentEditor({
           ...createInput,
           sortOrder: 0,
           dueAt: createInput.dueAt ?? undefined,
-        });
+        }, { idempotencyKey: createIdempotencyKey });
         setSavedFormSnapshot(form);
         setLastSavedAt(new Date());
         onSaved();
@@ -271,7 +299,7 @@ export function TeacherContentEditor({
             ? (learningDateTimeLocalToInstant(form.dueAt) ?? null)
             : null,
         };
-        const savedDraft = await api.saveLearningItemDraft(item.id, draftInput);
+        const savedDraft = await api.saveLearningItemDraft(activeItem.id, draftInput);
         setServerDraft(savedDraft);
         setSavedFormSnapshot(form);
         setLastSavedAt(new Date());
@@ -279,7 +307,7 @@ export function TeacherContentEditor({
       } else {
         // Normal draft item update
         const input = prepareInput(false);
-        await api.updateLearningItem(item.id, input);
+        await api.updateLearningItem(activeItem.id, input);
         setSavedFormSnapshot(form);
         setLastSavedAt(new Date());
         onSaved();
@@ -295,7 +323,7 @@ export function TeacherContentEditor({
               : 'Este cambio requiere confirmación explícita.',
           run: async () => {
             const input = prepareInput(true);
-            await api.updateLearningItem(item!.id, input);
+            await api.updateLearningItem(activeItem!.id, input);
             setSavedFormSnapshot(form);
             setLastSavedAt(new Date());
             onSaved();
@@ -326,7 +354,7 @@ export function TeacherContentEditor({
     try {
       if (isPublished && serverDraft) {
         // Publish existing working draft
-        await api.publishLearningItemDraft(item!.id, {
+        await api.publishLearningItemDraft(activeItem!.id, {
           confirmSensitiveChange,
         });
         setServerDraft(null);
@@ -335,7 +363,7 @@ export function TeacherContentEditor({
         return;
       }
 
-      if (!item) {
+      if (!activeItem) {
         // Create and publish
         const input = prepareInput(false);
         const { confirmSensitiveChange: _, ...createInput } = input;
@@ -344,8 +372,13 @@ export function TeacherContentEditor({
           ...createInput,
           sortOrder: 0,
           dueAt: createInput.dueAt ?? undefined,
+        }, { idempotencyKey: createIdempotencyKey });
+        setCreatedItem(created);
+        setSavedFormSnapshot(form);
+        setLastSavedAt(new Date());
+        await api.publishLearningItem(created.id, {
+          idempotencyKey: publishIdempotencyKey,
         });
-        await api.publishLearningItem(created.id);
         onSaved();
         onClose();
         return;
@@ -354,11 +387,13 @@ export function TeacherContentEditor({
       // If draft has unsaved edits, save them first
       if (isDirty) {
         const input = prepareInput(confirmSensitiveChange);
-        await api.updateLearningItem(item.id, input);
+        await api.updateLearningItem(activeItem.id, input);
       }
 
       // Publish item
-      await api.publishLearningItem(item.id);
+      await api.publishLearningItem(activeItem.id, {
+        idempotencyKey: publishIdempotencyKey,
+      });
       onSaved();
       onClose();
     } catch (err) {
@@ -386,13 +421,13 @@ export function TeacherContentEditor({
 
   // Discard working draft
   async function handleDiscardDraft() {
-    if (!item) return;
+    if (!activeItem) return;
     setDiscarding(true);
     setError('');
     try {
-      await api.discardLearningItemDraft(item.id);
+      await api.discardLearningItemDraft(activeItem.id);
       setServerDraft(null);
-      const cleanState = initialFormState(item, null);
+      const cleanState = initialFormState(activeItem, null);
       setForm(cleanState);
       setSavedFormSnapshot(cleanState);
       onSaved();
@@ -409,11 +444,11 @@ export function TeacherContentEditor({
 
   // Unpublish published item
   async function handleUnpublish() {
-    if (!item) return;
+    if (!activeItem) return;
     setUnpublishing(true);
     setError('');
     try {
-      await api.unpublishLearningItem(item.id);
+      await api.unpublishLearningItem(activeItem.id);
       setUnpublishDialogOpen(false);
       onSaved();
       onClose();
@@ -432,8 +467,8 @@ export function TeacherContentEditor({
   async function handleRefreshAfterConflict() {
     setStaleRevisionConflict(false);
     setError('');
-    if (item) {
-      const refreshedItem = await api.getLearningItem(item.id);
+    if (activeItem) {
+      const refreshedItem = await api.getLearningItem(activeItem.id);
       if (isPublished) {
         await loadDraft();
       } else {
@@ -441,6 +476,42 @@ export function TeacherContentEditor({
         setSavedFormSnapshot(nextState);
       }
     }
+  }
+
+  if (draftLoadError) {
+    return (
+      <div className="academic-loading">
+        <Alert title="No pudimos cargar los cambios guardados" tone="error">
+          El editor queda bloqueado para evitar sobrescribir una versión de
+          trabajo que no pudimos consultar.
+          <div className="teacher-editor-load-actions">
+            <Button
+              onClick={() => void loadDraft()}
+              type="button"
+              variant="secondary"
+            >
+              Reintentar carga
+            </Button>
+            <Button onClick={onClose} type="button" variant="ghost">
+              Volver a la asignatura
+            </Button>
+          </div>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (draftLoading) {
+    return (
+      <div aria-busy="true" className="academic-loading" role="status">
+        <p>Cargando los cambios guardados de este contenido…</p>
+        <Skeleton />
+        <Skeleton />
+        <Button onClick={onClose} type="button" variant="secondary">
+          Volver a la asignatura
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -561,8 +632,8 @@ export function TeacherContentEditor({
                 >
                   <Icon name="history" />
                   <span>Historial</span>
-                  {item?.version ? (
-                    <span className="editor-version-tag">v{item.version}</span>
+                  {activeItem?.version ? (
+                    <span className="editor-version-tag">v{activeItem.version}</span>
                   ) : null}
                 </Button>
               ) : null}
@@ -628,25 +699,23 @@ export function TeacherContentEditor({
 
           {/* Navigation Tabs Bar */}
           <ScrollableTabsBar ariaLabel="Pestañas del editor de contenido">
-            <div className="editor-tabs-bar" role="tablist">
+            <div className="editor-tabs-bar">
               <button
-                aria-selected={activeTab === 'content'}
+                aria-pressed={activeTab === 'content'}
                 className={`editor-nav-tab ${activeTab === 'content' ? 'editor-nav-tab--active' : ''}`}
                 onClick={() => setActiveTab('content')}
-                role="tab"
                 type="button"
               >
                 <Icon name="document" />
                 <span>Contenido</span>
               </button>
 
-              {item && item.type !== 'ANNOUNCEMENT' ? (
+              {activeItem && activeItem.type !== 'ANNOUNCEMENT' ? (
                 <button
-                  aria-selected={activeTab === 'files'}
+                  aria-pressed={activeTab === 'files'}
                   className={`editor-nav-tab ${activeTab === 'files' ? 'editor-nav-tab--active' : ''}`}
                   onClick={() => setActiveTab('files')}
-                  role="tab"
-                  type="button"
+                    type="button"
                 >
                   <Icon name="paperclip" />
                   <span>Archivos</span>
@@ -654,10 +723,9 @@ export function TeacherContentEditor({
               ) : null}
 
               <button
-                aria-selected={activeTab === 'settings'}
+                aria-pressed={activeTab === 'settings'}
                 className={`editor-nav-tab ${activeTab === 'settings' ? 'editor-nav-tab--active' : ''}`}
                 onClick={() => setActiveTab('settings')}
-                role="tab"
                 type="button"
               >
                 <Icon name="settings" />
@@ -665,10 +733,9 @@ export function TeacherContentEditor({
               </button>
 
               <button
-                aria-selected={activeTab === 'preview'}
+                aria-pressed={activeTab === 'preview'}
                 className={`editor-nav-tab ${activeTab === 'preview' ? 'editor-nav-tab--active' : ''}`}
                 onClick={() => setActiveTab('preview')}
-                role="tab"
                 type="button"
               >
                 <Icon name="eye" />
@@ -791,7 +858,7 @@ export function TeacherContentEditor({
                         id="editor-content-field"
                         label="Contenido del material"
                         legacyText={form.content}
-                        learningItemId={item?.id}
+                        learningItemId={activeItem?.id}
                         onChange={(bodyDocument) =>
                           setForm({ ...form, bodyDocument })
                         }
@@ -806,7 +873,7 @@ export function TeacherContentEditor({
                           id="editor-instructions-field"
                           label="Instrucciones para el estudiante"
                           legacyText={form.instructions}
-                          learningItemId={item?.id}
+                          learningItemId={activeItem?.id}
                           onChange={(bodyDocument) =>
                             setForm({ ...form, bodyDocument })
                           }
@@ -833,7 +900,7 @@ export function TeacherContentEditor({
                         id="editor-body-field"
                         label="Mensaje del anuncio"
                         legacyText={form.body}
-                        learningItemId={item?.id}
+                        learningItemId={activeItem?.id}
                         onChange={(bodyDocument) =>
                           setForm({ ...form, bodyDocument })
                         }
@@ -870,8 +937,8 @@ export function TeacherContentEditor({
                     {/* Integrated Attachments Manager */}
                     {form.type !== 'ANNOUNCEMENT' ? (
                       <div className="editor-attached-files-section">
-                        {item ? (
-                          <TeacherAttachmentManager api={api} item={item} />
+                        {activeItem ? (
+                          <TeacherAttachmentManager api={api} item={activeItem} />
                         ) : (
                           <Card className="editor-attachments-pending-notice">
                             <div className="pending-notice-row">
@@ -930,9 +997,9 @@ export function TeacherContentEditor({
               ) : null}
 
               {/* 2. FILES TAB */}
-              {activeTab === 'files' && item && item.type !== 'ANNOUNCEMENT' ? (
+              {activeTab === 'files' && activeItem && activeItem.type !== 'ANNOUNCEMENT' ? (
                 <div className="editor-files-panel">
-                  <TeacherAttachmentManager api={api} item={item} />
+                  <TeacherAttachmentManager api={api} item={activeItem} />
                 </div>
               ) : null}
 
@@ -1267,12 +1334,12 @@ export function TeacherContentEditor({
       </div>
 
       {/* History Drawer Modal */}
-      {item && historyOpen ? (
+      {activeItem && historyOpen ? (
         <ContentHistoryDrawer
           api={api}
-          currentVersion={item.version}
-          entityId={item.id}
-          entityTitle={item.title}
+          currentVersion={activeItem.version}
+          entityId={activeItem.id}
+          entityTitle={activeItem.title}
           entityType="LEARNING_ITEM"
           onClose={() => setHistoryOpen(false)}
           onRestored={async () => {

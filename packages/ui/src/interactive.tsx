@@ -216,16 +216,12 @@ export function Tabs({
   const listRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [hasScrolledOnce, setHasScrolledOnce] = useState(false);
 
   const checkScroll = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 6);
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 6);
-    if (el.scrollLeft > 15) {
-      setHasScrolledOnce(true);
-    }
   }, []);
 
   useEffect(() => {
@@ -238,6 +234,7 @@ export function Tabs({
     if (typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(checkScroll);
       observer.observe(el);
+      Array.from(el.children).forEach((child) => observer?.observe(child));
     }
     const timer = setTimeout(checkScroll, 60);
     return () => {
@@ -246,7 +243,7 @@ export function Tabs({
       observer?.disconnect();
       clearTimeout(timer);
     };
-  }, [checkScroll]);
+  }, [checkScroll, items.length]);
 
   const activateByKeyboard = (currentIndex: number, key: string) => {
     if (!items.length) return;
@@ -266,8 +263,10 @@ export function Tabs({
   const scrollBy = (amount: number) => {
     const el = listRef.current;
     if (!el) return;
-    el.scrollBy({ left: amount, behavior: 'smooth' });
-    setHasScrolledOnce(true);
+    const reduceMotion = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+    el.scrollBy({ left: amount, behavior: reduceMotion ? 'auto' : 'smooth' });
   };
 
   return (
@@ -280,7 +279,6 @@ export function Tabs({
             aria-label="Desplazar pestañas hacia la izquierda"
             className="scroll-affordance-btn scroll-affordance-btn--left ui-tabs__scroll-btn"
             onClick={() => scrollBy(-180)}
-            tabIndex={-1}
             type="button"
           >
             <svg
@@ -332,34 +330,10 @@ export function Tabs({
 
         {canScrollRight ? (
           <>
-            {!hasScrolledOnce ? (
-              <div
-                aria-hidden="true"
-                className="scroll-affordance-cue ui-tabs__scroll-cue"
-                onClick={() => scrollBy(180)}
-              >
-                <span>Desliza</span>
-                <svg
-                  aria-hidden="true"
-                  fill="none"
-                  height="12"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2.5"
-                  viewBox="0 0 24 24"
-                  width="12"
-                >
-                  <line x1="5" x2="19" y1="12" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
-                </svg>
-              </div>
-            ) : null}
             <button
               aria-label="Desplazar pestañas hacia la derecha"
               className="scroll-affordance-btn scroll-affordance-btn--right ui-tabs__scroll-btn"
               onClick={() => scrollBy(180)}
-              tabIndex={-1}
               type="button"
             >
               <svg

@@ -231,6 +231,11 @@ export function AppShell({
   useEffect(() => {
     if (!mobileOpen) return;
     mobileMenuRef.current?.querySelector<HTMLElement>('.sidebar-link')?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
   }, [mobileOpen]);
 
   function closeMobileNavigation() {
@@ -249,10 +254,39 @@ export function AppShell({
         data-workspace={session.workspace}
         id="app-sidebar-navigation"
         onKeyDown={(event) => {
-          if (event.key !== 'Escape' || !mobileOpen) return;
-          event.preventDefault();
-          closeMobileNavigation();
+          if (!mobileOpen) return;
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            closeMobileNavigation();
+            return;
+          }
+          if (event.key !== 'Tab') return;
+          const focusable = Array.from(
+            mobileMenuRef.current?.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ) ?? [],
+          ).filter((element) => {
+            const styles = window.getComputedStyle(element);
+            return (
+              !element.closest('[hidden], [aria-hidden="true"]') &&
+              styles.display !== 'none' &&
+              styles.visibility !== 'hidden'
+            );
+          });
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (!first || !last) {
+            event.preventDefault();
+          } else if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
         }}
+        aria-modal={mobileOpen ? true : undefined}
+        role={mobileOpen ? 'dialog' : undefined}
         ref={mobileMenuRef}
       >
         <div className="brand-lockup">

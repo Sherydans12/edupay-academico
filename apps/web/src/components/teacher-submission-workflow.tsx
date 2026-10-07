@@ -16,7 +16,14 @@ import type {
   SubmissionRevision,
 } from '@edupay/contracts';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   AcademicApiError,
@@ -106,6 +113,22 @@ function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+function useCurrentTimestamp(): number | null {
+  const [timestamp, setTimestamp] = useState<number | null>(null);
+
+  useEffect(() => {
+    const update = () => setTimestamp(Date.now());
+    const initialTimer = window.setTimeout(update, 0);
+    const interval = window.setInterval(update, 60_000);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  return timestamp;
+}
+
 export function TeacherDeliverablesCatalog({
   items,
   units,
@@ -119,6 +142,7 @@ export function TeacherDeliverablesCatalog({
 }) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'ASSIGNMENT' | 'ASSESSMENT'>('ALL');
+  const currentTimestamp = useCurrentTimestamp();
 
   const unitMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -162,7 +186,7 @@ export function TeacherDeliverablesCatalog({
   if (!items.length) {
     return (
       <EmptyState
-        description="Publica o crea actividades formativas o evaluaciones sumativas en el plan de estudios para comenzar a recibir entregas."
+        description="Publica o crea actividades y evaluaciones en el plan de estudios para comenzar a recibir entregas."
         icon={<Icon name="review" />}
         title="No hay actividades con entrega para revisar"
       />
@@ -215,22 +239,22 @@ export function TeacherDeliverablesCatalog({
           />
         </div>
         <ScrollableTabsBar ariaLabel="Filtros por tipo de actividad entregable">
-          <div className="teacher-deliverables-chips" role="tablist">
+          <div className="teacher-deliverables-chips">
             <button
-              aria-selected={typeFilter === 'ALL'}
+              aria-pressed={typeFilter === 'ALL'}
               className={`teacher-route-filter-chip ${typeFilter === 'ALL' ? 'teacher-route-filter-chip--active' : ''}`}
               onClick={() => setTypeFilter('ALL')}
-              role="tab"
+
               type="button"
             >
               <span>Todas</span>
               <span className="chip-badge">{counts.all}</span>
             </button>
             <button
-              aria-selected={typeFilter === 'ASSIGNMENT'}
+              aria-pressed={typeFilter === 'ASSIGNMENT'}
               className={`teacher-route-filter-chip ${typeFilter === 'ASSIGNMENT' ? 'teacher-route-filter-chip--active' : ''}`}
               onClick={() => setTypeFilter('ASSIGNMENT')}
-              role="tab"
+
               type="button"
             >
               <Icon name="file-text" />
@@ -238,10 +262,10 @@ export function TeacherDeliverablesCatalog({
               <span className="chip-badge">{counts.assignments}</span>
             </button>
             <button
-              aria-selected={typeFilter === 'ASSESSMENT'}
+              aria-pressed={typeFilter === 'ASSESSMENT'}
               className={`teacher-route-filter-chip ${typeFilter === 'ASSESSMENT' ? 'teacher-route-filter-chip--active' : ''}`}
               onClick={() => setTypeFilter('ASSESSMENT')}
-              role="tab"
+
               type="button"
             >
               <Icon name="award" />
@@ -257,7 +281,10 @@ export function TeacherDeliverablesCatalog({
         <div className="teacher-deliverables-grid">
           {filteredItems.map((item) => {
             const unitTitle = unitMap.get(item.id) || unitMap.get(item.learningUnitId);
-            const isPastDue = item.dueAt ? new Date(item.dueAt).getTime() < Date.now() : false;
+            const isPastDue =
+              item.dueAt && currentTimestamp !== null
+                ? new Date(item.dueAt).getTime() < currentTimestamp
+                : false;
             return (
               <article className="teacher-deliverable-card" key={item.id}>
                 <div
@@ -375,6 +402,7 @@ export function TeacherActivitySubmissionsView({
   roster: Roster;
   onBack: () => void;
 }) {
+  const currentTimestamp = useCurrentTimestamp();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -406,11 +434,6 @@ export function TeacherActivitySubmissionsView({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-
-  // Reset page when filters change
-  useEffect(() => {
-    setPage(1);
-  }, [studentSearch, statusFilter]);
 
   // Metrics
   const metrics = useMemo(() => {
@@ -488,7 +511,10 @@ export function TeacherActivitySubmissionsView({
     return filteredUnsubmitted.slice(start, start + pageSize);
   }, [filteredUnsubmitted, page, pageSize]);
 
-  const isPastDue = item.dueAt ? new Date(item.dueAt).getTime() < Date.now() : false;
+  const isPastDue =
+    item.dueAt && currentTimestamp !== null
+      ? new Date(item.dueAt).getTime() < currentTimestamp
+      : false;
 
   return (
     <div className="teacher-activity-submissions-view">
@@ -531,7 +557,7 @@ export function TeacherActivitySubmissionsView({
               <div className="teacher-activity-submissions-banner__pills">
                 <Badge tone={item.type === 'ASSESSMENT' ? 'creative' : 'info'}>
                   <Icon name={item.type === 'ASSESSMENT' ? 'award' : 'file-text'} />
-                  {item.type === 'ASSESSMENT' ? 'Evaluación Sumativa' : 'Actividad Formativa'}
+                  {item.type === 'ASSESSMENT' ? 'Evaluación' : 'Actividad'}
                 </Badge>
                 {unitTitle ? (
                   <span className="teacher-deliverable-card__unit-chip">
@@ -623,29 +649,38 @@ export function TeacherActivitySubmissionsView({
           <Input
             id="student-submission-search"
             label="Buscar estudiante"
-            onChange={(e) => setStudentSearch(e.target.value)}
+            onChange={(e) => {
+              setStudentSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="Buscar estudiante por nombre…"
             type="search"
             value={studentSearch}
           />
         </div>
         <ScrollableTabsBar ariaLabel="Filtros por estado de revisión de entregas">
-          <div className="teacher-submissions-controls__chips" role="tablist">
+          <div className="teacher-submissions-controls__chips">
             <button
-              aria-selected={statusFilter === 'ALL'}
+              aria-pressed={statusFilter === 'ALL'}
               className={`teacher-route-filter-chip ${statusFilter === 'ALL' ? 'teacher-route-filter-chip--active' : ''}`}
-              onClick={() => setStatusFilter('ALL')}
-              role="tab"
+              onClick={() => {
+                setStatusFilter('ALL');
+                setPage(1);
+              }}
+
               type="button"
             >
               <span>Todas</span>
               <span className="chip-badge">{metrics.total}</span>
             </button>
             <button
-              aria-selected={statusFilter === 'SUBMITTED'}
+              aria-pressed={statusFilter === 'SUBMITTED'}
               className={`teacher-route-filter-chip ${statusFilter === 'SUBMITTED' ? 'teacher-route-filter-chip--active' : ''}`}
-              onClick={() => setStatusFilter('SUBMITTED')}
-              role="tab"
+              onClick={() => {
+                setStatusFilter('SUBMITTED');
+                setPage(1);
+              }}
+
               type="button"
             >
               <Icon name="clock" />
@@ -653,10 +688,13 @@ export function TeacherActivitySubmissionsView({
               <span className="chip-badge">{metrics.pending}</span>
             </button>
             <button
-              aria-selected={statusFilter === 'REVIEWED'}
+              aria-pressed={statusFilter === 'REVIEWED'}
               className={`teacher-route-filter-chip ${statusFilter === 'REVIEWED' ? 'teacher-route-filter-chip--active' : ''}`}
-              onClick={() => setStatusFilter('REVIEWED')}
-              role="tab"
+              onClick={() => {
+                setStatusFilter('REVIEWED');
+                setPage(1);
+              }}
+
               type="button"
             >
               <Icon name="check-circle" />
@@ -664,10 +702,13 @@ export function TeacherActivitySubmissionsView({
               <span className="chip-badge">{metrics.reviewed}</span>
             </button>
             <button
-              aria-selected={statusFilter === 'CHANGES_REQUESTED'}
+              aria-pressed={statusFilter === 'CHANGES_REQUESTED'}
               className={`teacher-route-filter-chip ${statusFilter === 'CHANGES_REQUESTED' ? 'teacher-route-filter-chip--active' : ''}`}
-              onClick={() => setStatusFilter('CHANGES_REQUESTED')}
-              role="tab"
+              onClick={() => {
+                setStatusFilter('CHANGES_REQUESTED');
+                setPage(1);
+              }}
+
               type="button"
             >
               <Icon name="alert-circle" />
@@ -675,10 +716,13 @@ export function TeacherActivitySubmissionsView({
               <span className="chip-badge">{metrics.changes}</span>
             </button>
             <button
-              aria-selected={statusFilter === 'LATE'}
+              aria-pressed={statusFilter === 'LATE'}
               className={`teacher-route-filter-chip ${statusFilter === 'LATE' ? 'teacher-route-filter-chip--active' : ''}`}
-              onClick={() => setStatusFilter('LATE')}
-              role="tab"
+              onClick={() => {
+                setStatusFilter('LATE');
+                setPage(1);
+              }}
+
               type="button"
             >
               <Icon name="clock" />
@@ -686,10 +730,13 @@ export function TeacherActivitySubmissionsView({
               <span className="chip-badge">{metrics.late}</span>
             </button>
             <button
-              aria-selected={statusFilter === 'UNSUBMITTED'}
+              aria-pressed={statusFilter === 'UNSUBMITTED'}
               className={`teacher-route-filter-chip ${statusFilter === 'UNSUBMITTED' ? 'teacher-route-filter-chip--active' : ''}`}
-              onClick={() => setStatusFilter('UNSUBMITTED')}
-              role="tab"
+              onClick={() => {
+                setStatusFilter('UNSUBMITTED');
+                setPage(1);
+              }}
+
               type="button"
             >
               <Icon name="people" />
@@ -1013,9 +1060,12 @@ export function TeacherSubmissionQueue({
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (initialSelectedItemId) {
-      setSelectedItemId(initialSelectedItemId);
-    }
+    if (!initialSelectedItemId) return;
+    const timer = window.setTimeout(
+      () => setSelectedItemId(initialSelectedItemId),
+      0,
+    );
+    return () => window.clearTimeout(timer);
   }, [initialSelectedItemId]);
 
   useEffect(() => {
@@ -1144,60 +1194,138 @@ export function TeacherSubmissionDetail({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const loadRequestId = useRef(0);
+  const [loadedSubmissionId, setLoadedSubmissionId] = useState<
+    string | undefined
+  >();
+  const submissionIdRef = useRef(submissionId);
 
-  const load = useCallback(async () => {
-    if (!submissionId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const nextSubmission = await api.getSubmission(submissionId);
-      const nextItem = await api.getLearningItem(nextSubmission.learningItemId);
-      const [nextRoster, siblings] = await Promise.all([
-        getTeacherRoster(api, nextItem.courseSubjectId).catch(() => []),
-        typeof api.listSubmissions === 'function'
-          ? api.listSubmissions(nextItem.id).catch(() => [])
-          : Promise.resolve([] as Submission[]),
-      ]);
-      setSubmission(nextSubmission);
-      setItem(nextItem);
-      setRoster(nextRoster);
-      setActivitySubmissions(siblings);
-      setSelectedRevisionId(
-        (current) =>
-          current ||
-          nextSubmission.revisions[nextSubmission.revisions.length - 1]?.id ||
-          '',
-      );
-    } catch (nextError) {
-      setError(
-        nextError instanceof AcademicApiError && nextError.status === 404
-          ? 'La entrega no está disponible para tu sesión.'
-          : 'No pudimos cargar esta entrega.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [api, submissionId]);
+  useLayoutEffect(() => {
+    submissionIdRef.current = submissionId;
+  }, [submissionId]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
+    const requestId = ++loadRequestId.current;
+    const isCurrentRequest = () => loadRequestId.current === requestId;
+    if (!submissionId) return;
+
+    void (async () => {
+      try {
+        const nextSubmission = await api.getSubmission(submissionId);
+        const nextItem = await api.getLearningItem(nextSubmission.learningItemId);
+        const [nextRoster, siblings] = await Promise.all([
+          getTeacherRoster(api, nextItem.courseSubjectId).catch(() => []),
+          typeof api.listSubmissions === 'function'
+            ? api.listSubmissions(nextItem.id).catch(() => [])
+            : Promise.resolve([] as Submission[]),
+        ]);
+        if (!isCurrentRequest()) return;
+        setSubmission(nextSubmission);
+        setItem(nextItem);
+        setRoster(nextRoster);
+        setActivitySubmissions(siblings);
+        setSelectedRevisionId(
+          nextSubmission.revisions[nextSubmission.revisions.length - 1]?.id ?? '',
+        );
+        setComment('');
+        setError('');
+        setSuccess('');
+        setSaving(false);
+        setLoadedSubmissionId(submissionId);
+      } catch (nextError) {
+        if (!isCurrentRequest()) return;
+        setSubmission(null);
+        setItem(null);
+        setRoster([]);
+        setActivitySubmissions([]);
+        setSelectedRevisionId('');
+        setComment('');
+        setSaving(false);
+        setError(
+          nextError instanceof AcademicApiError && nextError.status === 404
+            ? 'La entrega no está disponible para tu sesión.'
+            : 'No pudimos cargar esta entrega.',
+        );
+        setLoadedSubmissionId(submissionId);
+      } finally {
+        if (isCurrentRequest()) setLoading(false);
+      }
+    })();
+
+    return () => {
+      loadRequestId.current += 1;
+    };
+  }, [api, submissionId]);
+
+  useEffect(() => {
+    if (!comment.trim()) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [comment]);
+
+  useEffect(() => {
+    const protectPendingReview = (event: MouseEvent) => {
+      if (event.defaultPrevented || !(event.target instanceof Element)) return;
+      const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
+      if (
+        !anchor ||
+        anchor.target === '_blank' ||
+        anchor.hasAttribute('download') ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) return;
+
+      const target = new URL(anchor.href, window.location.href);
+      const current = new URL(window.location.href);
+      if (
+        target.origin === current.origin &&
+        target.pathname === current.pathname &&
+        target.search === current.search &&
+        target.hash
+      ) return;
+
+      if (saving) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (
+        comment.trim() &&
+        !window.confirm('Tienes un comentario sin enviar. ¿Salir y descartarlo?')
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    document.addEventListener('click', protectPendingReview, true);
+    return () => document.removeEventListener('click', protectPendingReview, true);
+  }, [comment, saving]);
 
   async function review(
     action: 'COMMENTED' | 'REVIEWED' | 'CHANGES_REQUESTED',
   ) {
     if (!selectedRevisionId) return;
+    const targetSubmissionId = submissionId;
+    const targetLoadRequestId = loadRequestId.current;
+    const targetRevisionId = selectedRevisionId;
     setSaving(true);
     setError('');
     setSuccess('');
     try {
       const nextSubmission = await api.reviewSubmissionRevision(
-        selectedRevisionId,
+        targetRevisionId,
         { action, comment: comment.trim() || undefined },
       );
+      if (
+        submissionIdRef.current !== targetSubmissionId ||
+        loadRequestId.current !== targetLoadRequestId
+      ) return;
       setSubmission(nextSubmission);
       setComment('');
       setSuccess(
@@ -1208,13 +1336,20 @@ export function TeacherSubmissionDetail({
             : 'Se solicitaron cambios al estudiante.',
       );
     } catch (nextError) {
+      if (
+        submissionIdRef.current !== targetSubmissionId ||
+        loadRequestId.current !== targetLoadRequestId
+      ) return;
       setError(
         nextError instanceof AcademicApiError
           ? nextError.message
           : 'No pudimos guardar la revisión.',
       );
     } finally {
-      setSaving(false);
+      if (
+        submissionIdRef.current === targetSubmissionId &&
+        loadRequestId.current === targetLoadRequestId
+      ) setSaving(false);
     }
   }
 
@@ -1233,15 +1368,23 @@ export function TeacherSubmissionDetail({
       ) ?? latestRevision(submission))
     : undefined;
   const status = submission ? submissionStatus(submission.status) : null;
-  if (loading)
+  if (!submissionId || loading || loadedSubmissionId !== submissionId)
     return (
-      <div aria-label="Cargando entrega" className="academic-loading">
-        <Skeleton />
-        <Skeleton />
-        <Skeleton />
-      </div>
+      !submissionId ? (
+        <EmptyState
+          icon={<Icon name="review" />}
+          title="Entrega no disponible"
+          description="Selecciona una entrega autorizada para revisar."
+        />
+      ) : (
+        <div aria-label="Cargando entrega" className="academic-loading">
+          <Skeleton />
+          <Skeleton />
+          <Skeleton />
+        </div>
+      )
     );
-  if (!submissionId || !submission || !item)
+  if (!submission || !item)
     return (
       <EmptyState
         icon={<Icon name="review" />}
@@ -1354,7 +1497,7 @@ export function TeacherSubmissionDetail({
             </p>
             <div className="teacher-submission-hero__pills">
               <Badge tone={item.type === 'ASSESSMENT' ? 'creative' : 'info'}>
-                {item.type === 'ASSESSMENT' ? 'Evaluación Sumativa' : 'Actividad Formativa'}
+                {item.type === 'ASSESSMENT' ? 'Evaluación' : 'Actividad'}
               </Badge>
               {selectedRevision?.isLate ? (
                 <Badge tone="warning">
@@ -1533,7 +1676,7 @@ export function TeacherSubmissionDetail({
             href="#teacher-review-panel"
           >
             <Icon name="review" />
-            <span>Calificar y retroalimentar esta entrega ↓</span>
+            <span>Revisar y retroalimentar esta entrega ↓</span>
           </a>
         </section>
 
@@ -1543,7 +1686,7 @@ export function TeacherSubmissionDetail({
               <Icon name="review" />
             </div>
             <div>
-              <h3>Revisión y calificación</h3>
+              <h3>Revisión</h3>
               <p>Revisión {selectedRevision?.revisionNumber ?? '—'} · {status?.label}</p>
             </div>
           </div>
@@ -1553,7 +1696,7 @@ export function TeacherSubmissionDetail({
               <Icon name="check-circle" />
               <div>
                 <strong>Entrega completada</strong>
-                <p>Esta entrega ya fue calificada y marcada como revisada. Puedes añadir comentarios de seguimiento si es necesario.</p>
+                <p>Esta entrega ya fue marcada como revisada. Puedes añadir comentarios de seguimiento si es necesario.</p>
               </div>
             </div>
           ) : submission.status === 'CHANGES_REQUESTED' ? (
@@ -1569,7 +1712,7 @@ export function TeacherSubmissionDetail({
               <Icon name="clock" />
               <div>
                 <strong>Pendiente de revisión</strong>
-                <p>Examina los archivos adjuntos y selecciona la acción correspondiente para calificar al estudiante.</p>
+                <p>Examina los archivos adjuntos y selecciona la acción correspondiente para completar la revisión.</p>
               </div>
             </div>
           )}
@@ -1582,6 +1725,12 @@ export function TeacherSubmissionDetail({
               placeholder="Escribe una orientación constructiva, observaciones o sugerencias concretas para el estudiante…"
               value={comment}
             />
+            {comment.trim() ? (
+              <p className="form-hint" role="status">
+                Comentario sin enviar. Si navegas a otra entrega, se te pedirá
+                confirmación antes de descartarlo.
+              </p>
+            ) : null}
           </div>
 
           <div className="review-actions">

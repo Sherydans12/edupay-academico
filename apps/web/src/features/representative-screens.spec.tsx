@@ -100,14 +100,23 @@ describe('representative workspaces', () => {
   it('renders the teacher authorized spaces without synthetic submissions', async () => {
     const api = {
       getTeacherContextSubjects: vi.fn(async () => [subject]),
+      getLearningRoute: vi.fn(async () => route),
+      listSubmissions: vi.fn().mockRejectedValue(new Error('offline')),
     } as unknown as AcademicApiClient;
     render(<TeacherDashboardScreen api={api} />);
     expect(
-      screen.getByRole('heading', { name: 'Buenos días, Camila' }),
+      screen.getByRole('heading', { name: 'Hola, Camila' }),
     ).toBeTruthy();
     expect(
       await screen.findByRole('heading', { name: 'Mis asignaturas' }),
     ).toBeTruthy();
+    const reviewState = screen
+      .getByText('Estado de revisiones')
+      .closest('.teacher-stat-card');
+    expect(reviewState?.textContent).toContain('—');
+    expect(reviewState?.textContent).toContain(
+      'No fue posible consultar todas las actividades',
+    );
     expect(screen.getByRole('link', { name: /ver contenido/i })).toBeTruthy();
     expect(screen.queryByText('Emilia Vargas')).toBeNull();
   });
@@ -120,6 +129,7 @@ describe('representative workspaces', () => {
     }));
     const api = {
       getTeacherContextSubjects: vi.fn(async () => subjects),
+      getLearningRoute: vi.fn(async () => route),
     } as unknown as AcademicApiClient;
     render(<TeacherDashboardScreen api={api} />);
     expect(

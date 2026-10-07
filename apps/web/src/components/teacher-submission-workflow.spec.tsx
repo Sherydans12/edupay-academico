@@ -11,6 +11,7 @@ import type { AcademicApiClient } from '@/api/academic-client';
 import {
   TeacherActivitySubmissionsView,
   TeacherDeliverablesCatalog,
+  TeacherSubmissionDetail,
   TeacherSubmissionQueue,
 } from './teacher-submission-workflow';
 
@@ -214,8 +215,7 @@ describe('Teacher Deliverables & Submissions Workflow', () => {
       expect(screen.getAllByText('Unidad 1: Literatura Contemporánea').length).toBe(2);
 
       // Filter chips
-      const evalTab = screen.getByRole('tab', { name: /evaluaciones/i });
-      fireEvent.click(evalTab);
+      fireEvent.click(screen.getByRole('button', { name: /evaluaciones/i }));
 
       // Only assessment is shown
       expect(screen.queryByText('Guía 1: Comprensión Lectora')).toBeNull();
@@ -287,8 +287,7 @@ describe('Teacher Deliverables & Submissions Workflow', () => {
       expect(screen.getByText('Sin entrega aún')).toBeTruthy();
 
       // Click "Sin entrega" filter chip to see student 3 (Sofía Morales)
-      const unsubmittedChip = screen.getByRole('tab', { name: /sin entrega/i });
-      fireEvent.click(unsubmittedChip);
+      fireEvent.click(screen.getByRole('button', { name: /sin entrega/i }));
 
       expect(screen.getByText('Sofía Morales')).toBeTruthy();
       expect(screen.queryByText('Camila Valenzuela')).toBeNull();
@@ -360,6 +359,74 @@ describe('Teacher Deliverables & Submissions Workflow', () => {
       expect(screen.getByText('Bandeja de Entregas y Evaluaciones')).toBeTruthy();
       expect(screen.getByText('Guía 1: Comprensión Lectora')).toBeTruthy();
       expect(screen.getByText('Evaluación Parcial 1: Ensayo Literario')).toBeTruthy();
+    });
+  });
+
+  describe('4. TeacherSubmissionDetail route changes', () => {
+    it('protects unsent comments when leaving through shell navigation', async () => {
+      const api = {
+        getLearningItem: vi.fn(async () => assignmentItem),
+        getSubmission: vi.fn(async () => mockSubmissions[0]!),
+        getTeacherCourseSubjectRoster: vi.fn(async () => mockRoster),
+        listSubmissions: vi.fn(async () => mockSubmissions),
+      } as unknown as AcademicApiClient;
+      render(<TeacherSubmissionDetail api={api} submissionId="sub-1" />);
+      await screen.findByRole('heading', { name: 'Camila Valenzuela' });
+      fireEvent.change(screen.getByLabelText('Comentario para el estudiante'), {
+        target: { value: 'Comentario pendiente' },
+      });
+
+      const shellLink = document.createElement('a');
+      shellLink.href = '/docente';
+      document.body.append(shellLink);
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+      const wasNotCanceled = shellLink.dispatchEvent(click);
+
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(wasNotCanceled).toBe(false);
+      shellLink.remove();
+    });
+
+    it('resets student-specific state and reviews the newly selected revision', async () => {
+      const nextSubmission: Submission = {
+        ...mockSubmissions[1]!,
+        status: 'SUBMITTED',
+      };
+      const submissions = new Map([
+        ['sub-1', mockSubmissions[0]!],
+        ['sub-2', nextSubmission],
+      ]);
+      const reviewSubmissionRevision = vi.fn(async () => nextSubmission);
+      const api = {
+        getLearningItem: vi.fn(async () => assignmentItem),
+        getSubmission: vi.fn(async (id: string) => submissions.get(id)!),
+        getTeacherCourseSubjectRoster: vi.fn(async () => mockRoster),
+        listSubmissions: vi.fn(async () => [mockSubmissions[0]!, nextSubmission]),
+        reviewSubmissionRevision,
+      } as unknown as AcademicApiClient;
+
+      const { rerender } = render(
+        <TeacherSubmissionDetail api={api} submissionId="sub-1" />,
+      );
+      expect(await screen.findByRole('heading', { name: 'Camila Valenzuela' })).toBeTruthy();
+      fireEvent.change(screen.getByLabelText('Comentario para el estudiante'), {
+        target: { value: 'Comentario de Camila' },
+      });
+
+      rerender(<TeacherSubmissionDetail api={api} submissionId="sub-2" />);
+      expect(await screen.findByRole('heading', { name: 'Matías González' })).toBeTruthy();
+      expect(
+        (screen.getByLabelText('Comentario para el estudiante') as HTMLTextAreaElement).value,
+      ).toBe('');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Marcar revisada' }));
+      await waitFor(() =>
+        expect(reviewSubmissionRevision).toHaveBeenCalledWith('rev-2', {
+          action: 'REVIEWED',
+          comment: undefined,
+        }),
+      );
     });
   });
 });

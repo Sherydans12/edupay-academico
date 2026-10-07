@@ -8,10 +8,6 @@ export interface ScrollableTabsBarProps {
   className?: string;
   ariaLabel?: string;
   scrollStep?: number;
-  /**
-   * If true, shows a subtle visual cue "Desliza ›" when scrollable right.
-   */
-  showSwipeCue?: boolean;
 }
 
 export function ScrollableTabsBar({
@@ -19,12 +15,10 @@ export function ScrollableTabsBar({
   className = '',
   ariaLabel,
   scrollStep = 220,
-  showSwipeCue = true,
 }: ScrollableTabsBarProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [hasScrolledOnce, setHasScrolledOnce] = useState(false);
 
   const updateScrollState = useCallback(() => {
     const el = scrollerRef.current;
@@ -32,9 +26,6 @@ export function ScrollableTabsBar({
     const { scrollLeft, scrollWidth, clientWidth } = el;
     setCanScrollLeft(scrollLeft > 6);
     setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 6);
-    if (scrollLeft > 20) {
-      setHasScrolledOnce(true);
-    }
   }, []);
 
   useEffect(() => {
@@ -52,7 +43,21 @@ export function ScrollableTabsBar({
         updateScrollState();
       });
       observer.observe(el);
+      Array.from(el.children).forEach((child) => observer?.observe(child));
     }
+
+    const childObserver =
+      typeof MutationObserver === 'undefined'
+        ? undefined
+        : new MutationObserver((records) => {
+            records.forEach((record) => {
+              record.addedNodes.forEach((node) => {
+                if (node instanceof HTMLElement) observer?.observe(node);
+              });
+            });
+            updateScrollState();
+          });
+    childObserver?.observe(el, { childList: true });
 
     const timer = setTimeout(updateScrollState, 80);
 
@@ -60,6 +65,7 @@ export function ScrollableTabsBar({
       el.removeEventListener('scroll', updateScrollState);
       window.removeEventListener('resize', updateScrollState);
       observer?.disconnect();
+      childObserver?.disconnect();
       clearTimeout(timer);
     };
   }, [updateScrollState]);
@@ -68,21 +74,23 @@ export function ScrollableTabsBar({
     const el = scrollerRef.current;
     if (!el) return;
     const delta = direction === 'left' ? -scrollStep : scrollStep;
-    el.scrollBy({ left: delta, behavior: 'smooth' });
-    setHasScrolledOnce(true);
+    const reduceMotion = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+    el.scrollBy({ left: delta, behavior: reduceMotion ? 'auto' : 'smooth' });
   };
 
   return (
     <div
-      aria-label={ariaLabel}
       className={`scroll-affordance-wrapper ${canScrollLeft ? 'scroll-affordance--has-left' : ''} ${canScrollRight ? 'scroll-affordance--has-right' : ''} ${className}`}
+      role="group"
+      aria-label={ariaLabel}
     >
       {canScrollLeft ? (
         <button
           aria-label="Desplazar opciones hacia la izquierda"
           className="scroll-affordance-btn scroll-affordance-btn--left"
           onClick={() => handleScroll('left')}
-          tabIndex={-1}
           type="button"
         >
           <Icon name="chevron-left" />
@@ -98,21 +106,10 @@ export function ScrollableTabsBar({
 
       {canScrollRight ? (
         <>
-          {showSwipeCue && !hasScrolledOnce ? (
-            <div
-              aria-hidden="true"
-              className="scroll-affordance-cue"
-              onClick={() => handleScroll('right')}
-            >
-              <span>Desliza</span>
-              <Icon name="arrow-right" />
-            </div>
-          ) : null}
           <button
             aria-label="Desplazar opciones hacia la derecha"
             className="scroll-affordance-btn scroll-affordance-btn--right"
             onClick={() => handleScroll('right')}
-            tabIndex={-1}
             type="button"
           >
             <Icon name="chevron-right" />

@@ -74,22 +74,24 @@ export function RichTextEditor({
           {label}
           {required ? ' *' : ''}
         </label>
-        <div className="rich-text-editor__tabs" role="tablist">
+        <div
+          aria-label="Vista del contenido"
+          className="rich-text-editor__tabs"
+          role="group"
+        >
           <button
-            aria-selected={tab === 'edit'}
+            aria-pressed={tab === 'edit'}
             className={`rich-text-tab ${tab === 'edit' ? 'rich-text-tab--active' : ''}`}
             onClick={() => setTab('edit')}
-            role="tab"
             type="button"
           >
             <Icon name="edit" />
             <span>Editor</span>
           </button>
           <button
-            aria-selected={tab === 'preview'}
+            aria-pressed={tab === 'preview'}
             className={`rich-text-tab ${tab === 'preview' ? 'rich-text-tab--active' : ''}`}
             onClick={() => setTab('preview')}
-            role="tab"
             type="button"
           >
             <Icon name="eye" />

@@ -15,6 +15,7 @@ import {
 } from '@/api/academic-client';
 import { CourseBuilder } from './course-builder/course-builder';
 import { ItemEditor } from './course-builder/item-editor';
+import { ItemActionsMenu } from './course-builder/item-actions-menu';
 import { UnitEditor } from './course-builder/unit-editor';
 import { TeacherSubjectScreen } from './teacher-screens';
 
@@ -28,6 +29,7 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   const subject = {
@@ -133,6 +135,89 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
     updatedAt: '',
     version: 1,
   };
+
+  it('supports arrow navigation and Escape in the desktop item actions menu', () => {
+    render(
+      <ItemActionsMenu
+        attachmentSupported
+        item={itemA as LearningItem}
+        onArchive={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={vi.fn()}
+        onManageAttachments={vi.fn()}
+        onMoveToUnit={vi.fn()}
+        onOpenAdvancedEditor={vi.fn()}
+        onOpenHistory={vi.fn()}
+        onRestore={vi.fn()}
+        onSchedule={vi.fn()}
+      />,
+    );
+    const trigger = screen.getByRole('button', {
+      name: `Más opciones para ${itemA.title}`,
+    });
+    fireEvent.click(trigger);
+    const menu = screen.getByRole('menu', {
+      name: `Opciones de contenido para ${itemA.title}`,
+    });
+    const actions = screen.getAllByRole('menuitem');
+    expect(document.activeElement).toBe(actions[0]);
+
+    fireEvent.keyDown(actions[0]!, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(actions[1]);
+    fireEvent.keyDown(actions[1]!, { key: 'Escape' });
+
+    expect(screen.queryByRole('menu', { name: menu.getAttribute('aria-label')! })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('treats the mobile item action sheet as a modal dialog and traps focus', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        addEventListener: vi.fn(),
+        matches: true,
+        removeEventListener: vi.fn(),
+      }),
+    );
+    render(
+      <ItemActionsMenu
+        attachmentSupported
+        item={itemA as LearningItem}
+        onArchive={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={vi.fn()}
+        onManageAttachments={vi.fn()}
+        onMoveToUnit={vi.fn()}
+        onOpenAdvancedEditor={vi.fn()}
+        onOpenHistory={vi.fn()}
+        onRestore={vi.fn()}
+        onSchedule={vi.fn()}
+      />,
+    );
+    const trigger = screen.getByRole('button', {
+      name: `Más opciones para ${itemA.title}`,
+    });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', {
+      name: `Opciones de contenido para ${itemA.title}`,
+    });
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(document.body.style.overflow).toBe('hidden');
+    const closeButton = screen.getAllByRole('button', {
+      name: 'Cerrar opciones',
+    })[0]!;
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>('button:not([disabled])'),
+    );
+    const last = focusable[focusable.length - 1];
+    expect(document.activeElement).toBe(closeButton);
+    fireEvent.keyDown(closeButton, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+    fireEvent.keyDown(last!, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.body.style.overflow).toBe('');
+    expect(document.activeElement).toBe(trigger);
+  });
 
   describe('1. Form Dirty States & Navigation Protection (ItemEditor with React Hook Form)', () => {
     it('detects dirty state when typing and sets beforeunload listener, clearing after save', async () => {
@@ -579,19 +664,19 @@ describe('Phase 4: Course Builder Evolution & Component Extraction', () => {
       expect(screen.getByText('Contenido Archivado')).toBeTruthy();
 
       // Click "Publicados" filter
-      fireEvent.click(screen.getByRole('tab', { name: /publicados/i }));
+      fireEvent.click(screen.getByRole('button', { name: /publicados/i }));
       expect(screen.getByText('Contenido Publicado')).toBeTruthy();
       expect(screen.queryByText('Contenido en Borrador')).toBeNull();
       expect(screen.queryByText('Contenido Archivado')).toBeNull();
 
       // Click "Borradores" filter
-      fireEvent.click(screen.getByRole('tab', { name: /borradores/i }));
+      fireEvent.click(screen.getByRole('button', { name: /borradores/i }));
       expect(screen.queryByText('Contenido Publicado')).toBeNull();
       expect(screen.getByText('Contenido en Borrador')).toBeTruthy();
       expect(screen.queryByText('Contenido Archivado')).toBeNull();
 
       // Click "Archivados" filter
-      fireEvent.click(screen.getByRole('tab', { name: /archivados/i }));
+      fireEvent.click(screen.getByRole('button', { name: /archivados/i }));
       expect(screen.queryByText('Contenido Publicado')).toBeNull();
       expect(screen.queryByText('Contenido en Borrador')).toBeNull();
       expect(screen.getByText('Contenido Archivado')).toBeTruthy();

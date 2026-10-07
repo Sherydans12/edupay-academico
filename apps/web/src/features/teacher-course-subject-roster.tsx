@@ -215,7 +215,7 @@ export function TeacherCourseSubjectRosterScreen({
                   </div>
                   <h3>Nómina y Registro de Estudiantes</h3>
                   <p>
-                    {subjectName(data.subject)} · Consulta de estudiantes autorizados para acceder a contenidos, evaluaciones y calificaciones.
+                    {subjectName(data.subject)} · Consulta de estudiantes vinculados a esta asignatura y su acceso a contenidos.
                   </p>
                 </div>
               </div>

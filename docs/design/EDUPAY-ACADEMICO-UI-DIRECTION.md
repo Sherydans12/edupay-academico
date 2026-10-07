@@ -127,14 +127,11 @@ Las ilustraciones forman parte de la identidad de marca de EduPay Académico, ap
   - Si todo está corregido: fondo menta pastel suave (`#ecfdf5`), icono de verificación y felicitación de bandeja al día.
 - **Agenda de plazos:** Feed ordenado con chips distintivos según el hito (*"Vence entrega"* en coral / *"Publicación"* en azul), fecha formateada en español y título con límite de 2 líneas en móviles.
 
-### 5.6. Patrón Universal de Asequibilidad de Desplazamiento Horizontal (`Scroll Affordance`)
-- **Problema resuelto:** En dispositivos móviles, las barras de pestañas con múltiples opciones (ej. *"Todas"*, *"Entregas"*, *"Evaluaciones"*, *"Actividades"*, *"Publicaciones"*, *"Unidades"*) o *"Ruta y contenido"*, *"Entregas"*, *"Colaboradores"* suelen recortarse sin que el usuario advierta que puede deslizar.
-- **Componentes canónicos:** [`ScrollableTabsBar`](file:///c:/Users/nicol/Documents/EduPayAcademico-worktrees/live-improvements/apps/web/src/components/scrollable-tabs-bar.tsx) y [`Tabs`](file:///c:/Users/nicol/Documents/EduPayAcademico-worktrees/live-improvements/packages/ui/src/interactive.tsx).
-- **Mecanismos integrados:**
-  - **Indicador animado "Desliza" (`.scroll-affordance-cue`):** Pill interactivo con icono de flecha pulsante que informa al usuario que existe más contenido. Al hacer clic o al deslizar por primera vez, se desvanece suavemente.
-  - **Máscaras de gradiente:** Bordes con degradado blanco (`.scroll-affordance--has-left`, `.scroll-affordance--has-right`) que indican sutilmente continuidad de contenido.
-  - **Botones de flecha accesibles:** Controles táctiles en los extremos para desplazar el carrusel en incrementos de 180px con animación suave.
-  - **Detección reactiva:** `ResizeObserver` y listeners pasivos de scroll para recalcular la visibilidad de los controles al redimensionar la ventana o rotar el dispositivo.
+### 5.6. Desplazamiento horizontal (`Scroll Affordance`)
+- **Componentes canónicos:** [`ScrollableTabsBar`](apps/web/src/components/scrollable-tabs-bar.tsx) y [`Tabs`](packages/ui/src/interactive.tsx).
+- Las máscaras laterales aparecen solo mientras existe contenido fuera de vista; las flechas aparecen según la dirección disponible y desplazan el contenedor. Las flechas son botones con nombre accesible y permanecen en el orden de teclado.
+- El desplazamiento conserva gesto táctil/trackpad y respeta `prefers-reduced-motion`. No se añade un aviso animado que compita con el contenido.
+- `ResizeObserver`, cambios de tamaño de ventana y scroll actualizan la disponibilidad de las flechas. Las pestañas reales conservan `tablist`/`tab`/`tabpanel` y navegación por teclado; filtros y selectores de vista usan grupos de botones con `aria-pressed`.
 
 ### 5.7. Doble Acceso Canónico a Perfil y Configuración
 Para evitar saturar la barra de navegación lateral con enlaces redundantes, se define estrictamente el patrón de **doble acceso**:
@@ -143,23 +140,20 @@ Para evitar saturar la barra de navegación lateral con enlaces redundantes, se 
 - ❌ **Prohibido:** Colocar *"Mi perfil"* y *"Configuración"* como ítems sueltos dentro del listado principal de módulos docentes.
 
 ### 5.8. Centro de Notificaciones Pedagógico (`NotificationCenter`)
-- Pestañas de filtrado contextual: *"Todas"* y *"Sin leer"*.
-- Indicador numérico de alertas con pulso sutil ámbar cuando hay requerimientos urgentes.
-- Acción de marcado individual en un toque (*"Marcar como leída"*) sin recargar ni redirigir.
-- Estado vacío amigable ilustrado cuando la bandeja está al día.
+- Filtros *"Todas"* y *"Sin leer"* expuestos como botones con estado presionado.
+- El contador muestra el número de pendientes sin animación persistente.
+- Permite marcar una notificación o toda la bandeja como leída; errores conservan el panel y ofrecen reintento.
+- La lista pagina el historial y comunica los estados vacío, carga y error.
+- Escape cierra el panel y devuelve el foco al botón que lo abrió; al salir del panel con teclado el foco continúa hacia la página.
 
-### 5.9. Espacio de Revisiones y Calificaciones de Alta Densidad
-- **Modos de cola:** Cola unificada global de todas las asignaturas o agrupada curso por curso.
-- **Paginación y búsqueda rápida:** Manejo ágil de grandes volúmenes de alumnos con filtro en tiempo real por nombre de estudiante o título de la tarea.
-- **Modal de corrección asistida:**
-  - Validación numérica con escala oficial chilena (1.0 a 7.0).
-  - Selector de frases pedagógicas rápidas (macros de retroalimentación constructiva).
-  - Alerta y distintivo visual prioritario para estudiantes del programa de inclusión educativa (**DIE**), exponiendo adaptaciones curriculares sugeridas.
-  - Acción *"Guardar y siguiente entrega"* para corrección en lote de alta velocidad.
+### 5.9. Revisiones de entregas
+- La cola permite filtrar entregas por estado y buscar por estudiante o actividad. Los filtros son controles de vista, no pestañas ARIA.
+- El flujo revisa una entrega, muestra su actividad, estudiante, contenido y revisiones previas, y permite marcar el estado y guardar un comentario.
+- El dominio actual no ofrece nota numérica, rúbrica, frases de corrección, adecuaciones DIE ni guardado con avance automático a la siguiente entrega. La interfaz no debe insinuar esas capacidades hasta que existan contratos y persistencia para ellas.
 
-### 5.10. Ficha Docente (`/docente/perfil`) y Preferencias (`/docente/configuracion`)
-- **Perfil:** Horarios de atención presencial y virtual (con enlaces Meet integrados), carga lectiva activa con matrículas reales y gestión de seguridad/2FA.
-- **Configuración:** Modo de *"Desconexión Digital"* (silencia alertas docentes fuera de la jornada laboral), preferencias de densidad de pantalla y soporte de accesibilidad de alto contraste.
+### 5.10. Ficha Docente (`/docente/perfil`) y Configuración (`/docente/configuracion`)
+- **Perfil:** Identidad y roles provienen de la sesión confiable; las asignaturas se consultan desde la API. No se muestran horarios, datos institucionales, métricas o seguridad que no entregue una fuente real.
+- **Configuración:** No ofrecer controles de preferencias hasta que puedan persistirse y aplicarse. La vista debe comunicar su disponibilidad real, sin switches de demostración.
 
 ---
 
@@ -263,3 +257,16 @@ Antes de considerar terminada una pantalla en cualquier módulo de EduPay Acadé
 - **Sistema de iconos:** [`apps/web/src/components/icons.tsx`](file:///c:/Users/nicol/Documents/EduPayAcademico-worktrees/live-improvements/apps/web/src/components/icons.tsx).
 - **Estilos y reglas responsive:** [`apps/web/src/app/globals.css`](file:///c:/Users/nicol/Documents/EduPayAcademico-worktrees/live-improvements/apps/web/src/app/globals.css#L7221) (Sección `TEACHER WORKSPACE`).
 - **Primitivas de página:** [`apps/web/src/components/page-primitives.tsx`](file:///c:/Users/nicol/Documents/EduPayAcademico-worktrees/live-improvements/apps/web/src/components/page-primitives.tsx).
+
+---
+
+## 14. Límites funcionales verificados del Portal Docente
+
+Esta sección evita que una interfaz comunique capacidades que la sesión o la API aún no respaldan:
+
+- **Revisiones:** El flujo permite revisar entregas, marcar su estado y enviar comentarios. No presenta notas numéricas, rúbricas ni calificaciones mientras el dominio no las exponga.
+- **Equipo docente:** No se afirma co-docencia activa, edición colaborativa en tiempo real ni una nómina de docentes colaboradores si esa asignación no está disponible en la vista.
+- **Perfil y preferencias:** El perfil muestra identidad de sesión y asignaturas obtenidas de la API. Las preferencias personales no se ofrecen como controles hasta que se puedan guardar y aplicar.
+- **Editor curricular:** El autor trabaja con bloques estructurados y previsualización. El guardado es explícito; las pantallas no deben describirlo como autoguardado.
+- **Desplazamiento horizontal:** Los filtros son grupos de botones con `aria-pressed`; las vistas que usan pestañas conservan el patrón de teclado de `Tabs`. Las flechas de desplazamiento son operables por teclado y respetan `prefers-reduced-motion`; no se acumulan avisos repetidos como gradientes, flechas y una etiqueta animada.
+- **Datos parciales:** Una consulta fallida no se representa como cero ni como “al día”. Se comunica el estado no disponible y se ofrece volver a consultar.

@@ -306,23 +306,21 @@ export function BlockBodyEditor({
         </div>
         <div
           className="block-body-editor__tabs"
-          role="tablist"
+          role="group"
           aria-label="Editor de contenido"
         >
           <button
-            aria-selected={tab === 'edit'}
+            aria-pressed={tab === 'edit'}
             className={`rich-text-tab ${tab === 'edit' ? 'rich-text-tab--active' : ''}`}
             onClick={() => setTab('edit')}
-            role="tab"
             type="button"
           >
             Editar
           </button>
           <button
-            aria-selected={tab === 'preview'}
+            aria-pressed={tab === 'preview'}
             className={`rich-text-tab ${tab === 'preview' ? 'rich-text-tab--active' : ''}`}
             onClick={() => setTab('preview')}
-            role="tab"
             type="button"
           >
             Vista previa
@@ -331,7 +329,7 @@ export function BlockBodyEditor({
       </div>
 
       {tab === 'preview' ? (
-        <div className="block-body-editor__preview" role="tabpanel">
+        <div className="block-body-editor__preview">
           <BodyDocumentRenderer document={resolved} fallbackText={legacyText} />
           {!resolved ? (
             <p className="body-document-empty">
@@ -340,7 +338,7 @@ export function BlockBodyEditor({
           ) : null}
         </div>
       ) : (
-        <div className="block-body-editor__workspace" role="tabpanel">
+        <div className="block-body-editor__workspace">
           <div className="block-body-editor__add-row">
             <Select
               id={`${id}-add-type`}

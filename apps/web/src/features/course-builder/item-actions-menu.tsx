@@ -1,6 +1,6 @@
 'use client';
 
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { LearningItem } from '@edupay/contracts';
 import { Badge, Button } from '@edupay/ui';
 import { Icon } from '@/components/icons';
@@ -33,9 +33,14 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
   onSchedule,
 }: ItemActionsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [placement, setPlacement] = useState<'down' | 'up'>('down');
+  const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const actionItemProps = isMobileViewport
+    ? {}
+    : { role: 'menuitem' as const, tabIndex: -1 as const };
 
   const calculatePlacement = useCallback(() => {
     if (!triggerRef.current) return;
@@ -66,8 +71,36 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
     callback();
   };
 
+  const closeAndRestoreFocus = () => {
+    setIsOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia?.('(max-width: 768px)');
+    if (!mediaQuery) return;
+    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
+    updateViewport();
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', updateViewport);
+      return () => mediaQuery.removeEventListener('change', updateViewport);
+    }
+    mediaQuery.addListener?.(updateViewport);
+    return () => mediaQuery.removeListener?.(updateViewport);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
+
+    const panel = panelRef.current;
+    const previousOverflow = document.body.style.overflow;
+    if (isMobileViewport) document.body.style.overflow = 'hidden';
+    const initialFocus = isMobileViewport
+      ? panel?.querySelector<HTMLElement>(
+          '.item-actions-panel__close-icon-btn',
+        )
+      : panel?.querySelector<HTMLElement>('[role="menuitem"]');
+    initialFocus?.focus();
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -77,6 +110,10 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
         triggerRef.current &&
         !triggerRef.current.contains(target)
       ) {
+        if (
+          target instanceof Element &&
+          target.closest('.item-actions-backdrop')
+        ) return;
         setIsOpen(false);
       }
     };
@@ -88,20 +125,77 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
       }
     };
 
+    const handlePanelKeyDown = (event: KeyboardEvent) => {
+      const currentPanel = panelRef.current;
+      if (!currentPanel) return;
+      if (!isMobileViewport && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        const items = Array.from(
+          currentPanel.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+        );
+        const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+        let nextIndex = currentIndex;
+        if (event.key === 'ArrowDown') {
+          nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+        }
+        if (event.key === 'ArrowUp') {
+          nextIndex =
+            currentIndex < 0
+              ? items.length - 1
+              : (currentIndex - 1 + items.length) % items.length;
+        }
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = items.length - 1;
+        if (items[nextIndex]) {
+          event.preventDefault();
+          items[nextIndex]?.focus();
+        }
+      }
+      if (isMobileViewport && event.key === 'Tab') {
+        const focusable = Array.from(
+          currentPanel.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+          ),
+        ).filter((element) => {
+          const style = window.getComputedStyle(element);
+          return style.display !== 'none' && style.visibility !== 'hidden';
+        });
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first || !last) {
+          event.preventDefault();
+          currentPanel.focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+      if (!isMobileViewport && event.key === 'Tab') {
+        event.preventDefault();
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+
     const handleResize = () => {
       calculatePlacement();
     };
 
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
+    panel?.addEventListener('keydown', handlePanelKeyDown);
     window.addEventListener('resize', handleResize);
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
+      panel?.removeEventListener('keydown', handlePanelKeyDown);
       window.removeEventListener('resize', handleResize);
+      document.body.style.overflow = previousOverflow;
     };
-  }, [isOpen, calculatePlacement]);
+  }, [isMobileViewport, isOpen, calculatePlacement]);
 
   const isArchived = item.publicationStatus === 'ARCHIVED';
 
@@ -117,7 +211,8 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
     >
       <button
         aria-expanded={isOpen}
-        aria-haspopup="menu"
+        aria-controls={isOpen ? panelId : undefined}
+        aria-haspopup={isMobileViewport ? 'dialog' : 'menu'}
         aria-label={`Más opciones para ${item.title}`}
         className="ui-dropdown__trigger dropdown-trigger-icon item-actions-trigger"
         onClick={handleToggle}
@@ -134,15 +229,27 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
           <div
             aria-hidden="true"
             className="item-actions-backdrop"
-            onClick={() => setIsOpen(false)}
+            onClick={closeAndRestoreFocus}
           />
 
           {/* Action Menu / Sheet Panel */}
           <div
             aria-label={`Opciones de contenido para ${item.title}`}
             className="item-actions-panel"
+            id={panelId}
+            aria-modal={isMobileViewport ? true : undefined}
             ref={panelRef}
-            role="menu"
+            role={isMobileViewport ? 'dialog' : 'menu'}
+            tabIndex={-1}
+            onBlur={(event) => {
+              if (isMobileViewport) return;
+              const nextTarget = event.relatedTarget;
+              if (
+                nextTarget instanceof Node &&
+                panelRef.current?.contains(nextTarget)
+              ) return;
+              setIsOpen(false);
+            }}
           >
             {/* Mobile Sheet Grab Handle */}
             <div aria-hidden="true" className="item-actions-sheet__handle-bar">
@@ -200,7 +307,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                 <button
                   aria-label="Cerrar opciones"
                   className="item-actions-panel__close-icon-btn"
-                  onClick={() => setIsOpen(false)}
+                  onClick={closeAndRestoreFocus}
                   type="button"
                 >
                   <Icon name="close" />
@@ -219,7 +326,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                   <button
                     className="item-action-btn"
                     onClick={() => handleSelect(() => onRestore(item))}
-                    role="menuitem"
+                    {...actionItemProps}
                     type="button"
                   >
                     <span className="item-action-btn__icon item-action-btn__icon--primary">
@@ -238,7 +345,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                   <button
                     className="item-action-btn"
                     onClick={() => handleSelect(() => onOpenHistory(item))}
-                    role="menuitem"
+                    {...actionItemProps}
                     type="button"
                   >
                     <span className="item-action-btn__icon item-action-btn__icon--neutral">
@@ -258,7 +365,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                     <button
                       className="item-action-btn item-action-btn--danger"
                       onClick={() => handleSelect(() => onDelete(item))}
-                      role="menuitem"
+                      {...actionItemProps}
                       type="button"
                     >
                       <span className="item-action-btn__icon item-action-btn__icon--danger">
@@ -288,7 +395,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                       onClick={() =>
                         handleSelect(() => onOpenAdvancedEditor(item))
                       }
-                      role="menuitem"
+                      {...actionItemProps}
                       type="button"
                     >
                       <span className="item-action-btn__icon item-action-btn__icon--accent">
@@ -310,7 +417,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                         onClick={() =>
                           handleSelect(() => onManageAttachments(item))
                         }
-                        role="menuitem"
+                        {...actionItemProps}
                         type="button"
                       >
                         <span className="item-action-btn__icon item-action-btn__icon--info">
@@ -321,7 +428,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                             Archivos adjuntos
                           </strong>
                           <small className="item-action-btn__desc">
-                            Documentos, lecturas o rúbricas de apoyo
+                            Documentos y lecturas de apoyo
                           </small>
                         </div>
                       </button>
@@ -339,7 +446,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                       <button
                         className="item-action-btn"
                         onClick={() => handleSelect(() => onSchedule(item))}
-                        role="menuitem"
+                        {...actionItemProps}
                         type="button"
                       >
                         <span className="item-action-btn__icon item-action-btn__icon--warning">
@@ -359,7 +466,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                     <button
                       className="item-action-btn"
                       onClick={() => handleSelect(() => onMoveToUnit(item))}
-                      role="menuitem"
+                      {...actionItemProps}
                       type="button"
                     >
                       <span className="item-action-btn__icon item-action-btn__icon--primary">
@@ -378,7 +485,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                     <button
                       className="item-action-btn"
                       onClick={() => handleSelect(() => onDuplicate(item))}
-                      role="menuitem"
+                      {...actionItemProps}
                       type="button"
                     >
                       <span className="item-action-btn__icon item-action-btn__icon--purple">
@@ -403,7 +510,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                     <button
                       className="item-action-btn"
                       onClick={() => handleSelect(() => onOpenHistory(item))}
-                      role="menuitem"
+                      {...actionItemProps}
                       type="button"
                     >
                       <span className="item-action-btn__icon item-action-btn__icon--neutral">
@@ -422,7 +529,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                     <button
                       className="item-action-btn"
                       onClick={() => handleSelect(() => onArchive(item))}
-                      role="menuitem"
+                      {...actionItemProps}
                       type="button"
                     >
                       <span className="item-action-btn__icon item-action-btn__icon--neutral">
@@ -445,7 +552,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
                       <button
                         className="item-action-btn item-action-btn--danger"
                         onClick={() => handleSelect(() => onDelete(item))}
-                        role="menuitem"
+                        {...actionItemProps}
                         type="button"
                       >
                         <span className="item-action-btn__icon item-action-btn__icon--danger">
@@ -470,7 +577,7 @@ export const ItemActionsMenu = memo(function ItemActionsMenu({
             <div className="item-actions-sheet__footer">
               <Button
                 className="item-actions-sheet__close-btn"
-                onClick={() => setIsOpen(false)}
+                onClick={closeAndRestoreFocus}
                 type="button"
                 variant="secondary"
               >
