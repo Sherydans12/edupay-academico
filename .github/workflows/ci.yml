@@ -46,6 +46,9 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Build shared contracts
+        run: pnpm --filter @edupay/contracts build
+
       - name: Lint
         run: pnpm lint
 
@@ -104,6 +107,9 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
+
+      - name: Build shared contracts
+        run: pnpm --filter @edupay/contracts build
 
       - name: Apply production migrations
         run: pnpm --filter @edupay/api db:migrate:deploy
