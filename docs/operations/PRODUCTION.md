@@ -1,17 +1,17 @@
 # Topología productiva EduPay
 
-Verificado: **2026-09-28**. Estado: **corte estudiantil desplegado en FRONT; API e Identity saludables; piloto DIE sin configurar; BL flags apagados**. El [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) registran el estado operativo observado. Las observaciones anteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
+Verificado: **2026-10-07 para el FRONT Académico**. Estado: **release docente desplegado en FRONT; API e Identity sin cambios en este corte; piloto DIE sin configurar; BL flags apagados**. El [release docente del FRONT](teacher-frontend-release-2026-10-07.md) registra el artefacto y sus smokes. El [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) conservan la evidencia operativa anterior. Las observaciones anteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 
-Después de ese inventario se retiró por Coolify el servicio obsoleto `ajf4d2ebozcpauguebm3alh1` (migrador Identity); el contador del proyecto bajó de 28 a 27. La lista posterior mostró el API Académico, Identity y FRONT activo como `Running`. La comprobación HTTP pública posterior quedó pendiente porque el navegador bloqueó la navegación de health; el registro del retiro y sus límites está en el [informe de limpieza](coolify-resource-cleanup-2026-09-28.md).
+Después de ese inventario se retiró por Coolify el servicio obsoleto `ajf4d2ebozcpauguebm3alh1` (migrador Identity); el contador del proyecto bajó de 28 a 27. La lista posterior mostró el API Académico, Identity y FRONT activo como `Running`. El registro de ese retiro está en el [informe de limpieza](coolify-resource-cleanup-2026-09-28.md); las comprobaciones actuales del FRONT están en su [cierre de release](teacher-frontend-release-2026-10-07.md).
 
-## Estado operativo vigente — 2026-09-28
+## Estado operativo vigente — 2026-10-07
 
 | Componente | Commit integrado | Imagen activa | Recurso |
 |---|---|---|---|
-| Académico API | `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b` | `ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d` | `iobfkpujjoa2kj5urbpnjvzi` |
-| Académico FRONT | `56ea2ae770f48d9b6ad6bdc0f3d184fcbe315fe6` | `ghcr.io/sherydans12/edupay-academico-web@sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2` | `cct0rtf5iku6fkd3t9hldnv4` |
+| Académico API | `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b` (sin cambio; última evidencia 2026-09-28) | `ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d` | `iobfkpujjoa2kj5urbpnjvzi` |
+| Académico FRONT | `7c050e158cae855066d14ed8769892d3a083b3dc` | `ghcr.io/sherydans12/edupay-academico-web@sha256:126c06d85dbc6ca94810d5b49c635a7533a1c22f8caae3cb06f573c720ddbf47` | `cct0rtf5iku6fkd3t9hldnv4` |
 
-Identity, BL, workers, ClamAV, redes, dominios y flags no cambiaron en este release. No se ejecutaron migraciones ni escrituras de prueba en producción. El rollback del FRONT y las comprobaciones constan en [el cierre del corte estudiantil](student-experience-release-2026-09-28.md); el rollback del API permanece en [el cierre docente](2026-09-27-teacher-release.md).
+Identity, BL, workers, ClamAV, redes, dominios y flags no cambiaron en este release. No se ejecutaron migraciones ni escrituras de prueba en producción. El rollback del FRONT y las comprobaciones constan en [el release docente del FRONT](teacher-frontend-release-2026-10-07.md); el rollback del API permanece en [el cierre docente](2026-09-27-teacher-release.md).
 
 ## Cierre DIE histórico — 2026-09-24
 
