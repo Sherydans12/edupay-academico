@@ -29,10 +29,15 @@
 - Recurso: `edupay-academico-web-die-20260924`, UUID
   `cct0rtf5iku6fkd3t9hldnv4`.
 - Tag guardado para futuros redeploys: `main`.
-- Redeploy manual: `b7vdtgrpj8eip1plkaju8y5i`, iniciado `2026-10-09 14:06:27 UTC`,
-  estado `Success`, duración `37 s`.
-- El log registró el pull de `ghcr.io/sherydans12/edupay-academico-web:main`,
-  `New container started`, `Removing old containers` y `Rolling update completed`.
+- Redeploy manual inicial: `b7vdtgrpj8eip1plkaju8y5i`, iniciado
+  `2026-10-09 14:06:27 UTC`, estado `Success`, duración `37 s`.
+- Coolify registra además un segundo redeploy manual:
+  `fvzn2bfaadnkcyusupnimw9f`, iniciado `2026-10-09 14:08:24 UTC`, estado
+  `Success`, duración `9 s`. Ambos consumieron el mismo tag `main`; el digest de
+  `main` no cambió entre ejecuciones.
+- El log del despliegue más reciente registró el pull de
+  `ghcr.io/sherydans12/edupay-academico-web:main`, `New container started`,
+  `Removing old containers` y `Rolling update completed`.
 - La validación DNS del dominio canónico `academico.edupay.baselogic.cl` figura
   `DNS OK`. El host secundario `www.academico.edupay.baselogic.cl` conserva el
   estado previo `DNS mismatch`; no se modificaron dominios ni DNS en este corte.
@@ -46,7 +51,8 @@
 - `GET /login`: HTTP `200`; no incluye `Cuentas de prueba`.
 - `GET /forgot-password`: HTTP `200`.
 - `GET /reset-password`: HTTP `200`.
-- El estado del recurso en Coolify quedó `Running` y el deployment `Success`.
+- El estado del recurso en Coolify quedó `Running`; el deployment más reciente
+  (`fvzn2bfaadnkcyusupnimw9f`) terminó en `Success`.
 
 ## Alcance
 
