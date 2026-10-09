@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DEV_ACCOUNTS, signDevAccessToken } from '@/dev-identity/dev-auth';
+import { devIdentityRouteGuard } from '@/dev-identity/dev-route-guard';
 
 export async function POST(request: NextRequest) {
+  const unavailable = devIdentityRouteGuard();
+  if (unavailable) return unavailable;
+
   try {
     const devUsername = request.cookies.get('edupay_dev_user')?.value;
     const account = devUsername && DEV_ACCOUNTS[devUsername] ? DEV_ACCOUNTS[devUsername] : null;

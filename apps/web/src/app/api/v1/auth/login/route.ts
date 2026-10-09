@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findDevAccount, signDevAccessToken, DEV_ACCOUNTS } from '@/dev-identity/dev-auth';
+import { findDevAccount, signDevAccessToken } from '@/dev-identity/dev-auth';
+import { devIdentityRouteGuard } from '@/dev-identity/dev-route-guard';
 
 export async function POST(request: NextRequest) {
+  const unavailable = devIdentityRouteGuard();
+  if (unavailable) return unavailable;
+
   try {
     const body = await request.json().catch(() => ({}));
     const { identifier, password } = body as { identifier?: string; password?: string };

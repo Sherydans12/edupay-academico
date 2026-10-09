@@ -157,6 +157,11 @@ Para evitar saturar la barra de navegación lateral con enlaces redundantes, se 
 
 ---
 
+### 5.11. Acceso institucional y recuperación de cuenta
+- Login, activación y recuperación reutilizan un único shell de cuenta, con superficies claras, marca académica compartida, formularios etiquetados y un bloque breve que explica el límite de responsabilidad de Identity.
+- La composición conserva el fondo neutral y reserva el color institucional para la marca, los controles y los estados; evita bandas oscuras que compitan con el formulario.
+- Las cuentas de prueba y los endpoints de identidad simulada existen solo durante el desarrollo local. No forman parte de la experiencia ni de la superficie pública de producción.
+
 ## 6. Espaciado, Composición y Tipografía
 
 - **Tipografía canónica:** **Montserrat** (cargada en el root layout mediante variable CSS `--font-montserrat`). Ligeramente redondeada, moderna, amigable y muy legible.

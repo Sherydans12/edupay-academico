@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DEV_ACCOUNTS } from '@/dev-identity/dev-auth';
+import { devIdentityRouteGuard } from '@/dev-identity/dev-route-guard';
 
 export async function POST(request: NextRequest) {
+  const unavailable = devIdentityRouteGuard();
+  if (unavailable) return unavailable;
+
   const body = await request.json().catch(() => ({}));
-  const { targetIdentityUserId, expectedRole } = body as {
+  const { targetIdentityUserId } = body as {
     targetIdentityUserId?: string;
-    expectedRole?: string;
   };
 
   const account = Object.values(DEV_ACCOUNTS).find(

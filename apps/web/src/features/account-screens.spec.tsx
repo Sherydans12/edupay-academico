@@ -86,6 +86,45 @@ afterEach(() => {
 });
 
 describe('login', () => {
+  it('shows test-account shortcuts only in development', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const auth = authValue();
+    render(
+      <IdentitySessionContext.Provider value={auth}>
+        <LoginScreen />
+      </IdentitySessionContext.Provider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Entrar como Administrador: Martín Silva',
+      }),
+    );
+
+    await waitFor(() =>
+      expect(auth.login).toHaveBeenCalledWith(
+        expect.objectContaining({ identifier: 'admin', password: '' }),
+      ),
+    );
+  });
+
+  it('does not render test-account shortcuts in production', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    render(
+      <IdentitySessionContext.Provider value={authValue()}>
+        <LoginScreen />
+      </IdentitySessionContext.Provider>,
+    );
+
+    expect(
+      screen.queryByRole('group', {
+        name: 'Cuentas de prueba · solo en desarrollo',
+      }),
+    ).toBeNull();
+    expect(screen.queryByText('Martín Silva')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeTruthy();
+  });
+
   it('uses real session login and redirects a student to the student workspace', async () => {
     const auth = authValue();
     render(
@@ -330,6 +369,7 @@ describe('activation and recovery', () => {
     expect(
       await screen.findByRole('heading', { name: 'Contraseña actualizada' }),
     ).toBeTruthy();
+    expect(screen.getByRole('status')).toBeTruthy();
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       resetToken: 'reset-secret',
       password: 'twelve-chars-password',
@@ -369,5 +409,32 @@ describe('activation and recovery', () => {
 
     expect(await screen.findByText(/expiró o ya fue utilizado/i)).toBeTruthy();
     expect(screen.queryByText(/provider detail/i)).toBeNull();
+  });
+
+  it('connects password guidance and mismatch feedback to their fields', () => {
+    navigation.pathname = '/reset-password';
+    navigation.search = 'token=reset-secret';
+    render(<ResetPasswordScreen />);
+
+    const password = screen.getByLabelText(/Nueva contraseña/);
+    const confirmation = screen.getByLabelText(/Confirmar contraseña/);
+    const passwordHelpId = password.getAttribute('aria-describedby');
+    expect(passwordHelpId).toBeTruthy();
+    expect(document.getElementById(String(passwordHelpId))?.textContent).toMatch(
+      /12 caracteres/,
+    );
+
+    fireEvent.change(password, { target: { value: 'one-valid-password' } });
+    fireEvent.change(confirmation, { target: { value: 'another-password' } });
+
+    expect(confirmation.getAttribute('aria-invalid')).toBe('true');
+    const confirmationDescriptionIds = confirmation
+      .getAttribute('aria-describedby')
+      ?.split(/\s+/);
+    expect(confirmationDescriptionIds).toHaveLength(2);
+    expect(
+      confirmationDescriptionIds?.every((id) => document.getElementById(id)),
+    ).toBe(true);
+    expect(screen.getByRole('alert').textContent).toMatch(/no coinciden/i);
   });
 });

@@ -4,13 +4,14 @@ import { Alert, Button } from '@edupay/ui';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 
 import {
   destinationForRoles,
   useIdentitySession,
 } from '@/auth/session-provider';
 import { AccountShell, PasswordFields } from '@/components/account-shell';
+import { Icon, type IconName } from '@/components/icons';
 import {
   IdentityApiError,
   IdentityBrowserClient,
@@ -68,6 +69,7 @@ function errorTitle(error: unknown): string {
 export function LoginScreen() {
   const auth = useIdentitySession();
   const router = useRouter();
+  const tenantHintId = useId();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [tenantHandle, setTenantHandle] = useState('');
@@ -115,10 +117,10 @@ export function LoginScreen() {
     }
   }
 
-  function handleQuickAccess(user: string, pass: string) {
+  function handleQuickAccess(user: string) {
     setIdentifier(user);
-    setPassword(pass);
-    void submit({ preventDefault() {} }, tenantHandle, user, pass);
+    setPassword('');
+    void submit({ preventDefault() {} }, tenantHandle, user, '');
   }
 
   return (
@@ -127,99 +129,55 @@ export function LoginScreen() {
       description="Usa tu usuario institucional o correo verificado. Identity confirmará tu institución, membresía y rol."
       showBackLink={false}
     >
-      <div
-        style={{
-          marginBottom: '1.25rem',
-          padding: '1rem',
-          backgroundColor: '#f8fafc',
-          border: '1px solid #cbd5e1',
-          borderRadius: '8px',
-        }}
-      >
-        <div
-          style={{
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: '#475569',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: '0.6rem',
-          }}
-        >
-          Accesos rápidos de desarrollo (Local)
-        </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '0.5rem',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => handleQuickAccess('admin', 'admin123456')}
-            style={{
-              padding: '0.6rem 0.4rem',
-              fontSize: '0.78rem',
-              backgroundColor: '#eff6ff',
-              color: '#1d4ed8',
-              border: '1px solid #bfdbfe',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '2px',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontWeight: 600 }}>👑 Admin</span>
-            <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>Martín Silva</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickAccess('profesor', 'profesor123456')}
-            style={{
-              padding: '0.6rem 0.4rem',
-              fontSize: '0.78rem',
-              backgroundColor: '#f0fdf4',
-              color: '#15803d',
-              border: '1px solid #bbf7d0',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '2px',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontWeight: 600 }}>👨‍🏫 Profesor</span>
-            <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>Camila Rojas</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickAccess('alumno', 'alumno123456')}
-            style={{
-              padding: '0.6rem 0.4rem',
-              fontSize: '0.78rem',
-              backgroundColor: '#fffbeb',
-              color: '#b45309',
-              border: '1px solid #fde68a',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '2px',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontWeight: 600 }}>🎓 Alumno</span>
-            <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>Sofía Herrera</span>
-          </button>
-        </div>
-      </div>
+      {process.env.NODE_ENV === 'development' ? (
+        <fieldset className="account-dev-shortcuts">
+          <legend>Cuentas de prueba · solo en desarrollo</legend>
+          <div className="account-dev-shortcuts__grid">
+            {(
+              [
+                {
+                  icon: 'people',
+                  label: 'Administrador',
+                  name: 'Martín Silva',
+                  username: 'admin',
+                },
+                {
+                  icon: 'book-open',
+                  label: 'Profesor',
+                  name: 'Camila Rojas',
+                  username: 'profesor',
+                },
+                {
+                  icon: 'graduation-cap',
+                  label: 'Alumno',
+                  name: 'Sofía Herrera',
+                  username: 'alumno',
+                },
+              ] satisfies ReadonlyArray<{
+                icon: IconName;
+                label: string;
+                name: string;
+                username: string;
+              }>
+            ).map((account) => (
+              <button
+                aria-label={`Entrar como ${account.label}: ${account.name}`}
+                className="account-dev-shortcuts__button"
+                disabled={loading}
+                key={account.username}
+                onClick={() => handleQuickAccess(account.username)}
+                type="button"
+              >
+                <Icon name={account.icon} />
+                <span>
+                  <strong>{account.label}</strong>
+                  <small>{account.name}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
 
       <form className="account-form" onSubmit={submit}>
         {error ? (
@@ -257,6 +215,8 @@ export function LoginScreen() {
               <span>Usuario institucional o correo verificado</span>
               <input
                 autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 maxLength={320}
                 onChange={(event) => setIdentifier(event.target.value)}
                 required
@@ -279,13 +239,14 @@ export function LoginScreen() {
                 Institución <small>(opcional)</small>
               </span>
               <input
+                aria-describedby={tenantHintId}
                 autoCapitalize="none"
                 maxLength={128}
                 onChange={(event) => setTenantHandle(event.target.value)}
                 placeholder="colegio-conquistadores"
                 value={tenantHandle}
               />
-              <small>
+              <small id={tenantHintId}>
                 Úsala solo si tu correo pertenece a más de una institución.
               </small>
             </label>
@@ -344,8 +305,10 @@ function SecretPasswordFlow({ kind }: { kind: 'invitation' | 'reset' }) {
       }
     >
       {state === 'success' ? (
-        <div className="account-success">
-          <span aria-hidden="true">✓</span>
+        <div aria-live="polite" className="account-success" role="status">
+          <span aria-hidden="true">
+            <Icon name="check-circle" />
+          </span>
           <h2>{isInvitation ? 'Cuenta activada' : 'Contraseña actualizada'}</h2>
           <p>Ya puedes iniciar sesión con tus credenciales.</p>
           <Link className="button-link button-link--primary" href="/login">
@@ -425,8 +388,10 @@ export function ActivationCodeScreen() {
       description="Ingresa el usuario institucional y el código de un solo uso que te entregó la institución. Después define tu propia contraseña."
     >
       {state === 'success' ? (
-        <div className="account-success">
-          <span aria-hidden="true">✓</span>
+        <div aria-live="polite" className="account-success" role="status">
+          <span aria-hidden="true">
+            <Icon name="check-circle" />
+          </span>
           <h2>Cuenta activada</h2>
           <p>
             El código ya fue consumido. Inicia sesión con tu usuario
@@ -518,8 +483,10 @@ export function ForgotPasswordScreen() {
       description="Si existe una cuenta elegible con correo verificado, Identity enviará un enlace de recuperación. La respuesta es siempre privada y genérica."
     >
       {accepted ? (
-        <div className="account-success">
-          <span aria-hidden="true">✓</span>
+        <div aria-live="polite" className="account-success" role="status">
+          <span aria-hidden="true">
+            <Icon name="check-circle" />
+          </span>
           <h2>Solicitud recibida</h2>
           <p>
             Si la cuenta puede recuperar acceso por correo, recibirás un mensaje

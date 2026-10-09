@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DEV_ACCOUNTS } from '@/dev-identity/dev-auth';
+import { devIdentityRouteGuard } from '@/dev-identity/dev-route-guard';
 
 export async function GET(request: NextRequest) {
+  const unavailable = devIdentityRouteGuard();
+  if (unavailable) return unavailable;
+
   const authHeader = request.headers.get('authorization');
   const token = authHeader?.replace(/^Bearer\s+/i, '');
 

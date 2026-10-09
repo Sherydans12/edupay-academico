@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
+
+import { Icon } from '@/components/icons';
 
 export function AccountShell({
   children,
@@ -21,15 +23,15 @@ export function AccountShell({
         aria-labelledby="account-title"
         className="account-shell"
         id="account-content"
+        tabIndex={-1}
       >
         <header className="account-brand">
-          <div
-            aria-label="EduPay Académico"
+          <span
+            aria-hidden="true"
             className="account-brand__mark"
-            role="img"
           >
-            EP
-          </div>
+            <Icon name="graduation-cap" />
+          </span>
           <div>
             <strong>EduPay Académico</strong>
             <span>Acceso institucional</span>
@@ -42,11 +44,16 @@ export function AccountShell({
         {children}
       </section>
       <aside className="account-assurance" aria-label="Protección de cuenta">
-        <span aria-hidden="true">✓</span>
-        <p>
-          <strong>Tu acceso pertenece a EduPay Identity.</strong> Académico no
-          guarda contraseñas, códigos de activación ni tokens de recuperación.
-        </p>
+        <span className="account-assurance__mark" aria-hidden="true">
+          <Icon name="check-circle" />
+        </span>
+        <div>
+          <strong>Tu acceso pertenece a EduPay Identity.</strong>
+          <p>
+            Académico no guarda contraseñas, códigos de activación ni tokens de
+            recuperación.
+          </p>
+        </div>
       </aside>
       {showBackLink ? (
         <footer className="account-footer">
@@ -68,6 +75,9 @@ export function PasswordFields({
   onPassword(value: string): void;
   onConfirmation(value: string): void;
 }) {
+  const passwordHelpId = useId();
+  const confirmationHelpId = useId();
+  const mismatchId = useId();
   const mismatch = Boolean(confirmation && password !== confirmation);
   return (
     <div className="account-password-fields">
@@ -75,6 +85,7 @@ export function PasswordFields({
         <span>Nueva contraseña</span>
         <input
           autoComplete="new-password"
+          aria-describedby={passwordHelpId}
           maxLength={1024}
           minLength={12}
           onChange={(event) => onPassword(event.target.value)}
@@ -82,7 +93,7 @@ export function PasswordFields({
           type="password"
           value={password}
         />
-        <small>
+        <small id={passwordHelpId}>
           Usa al menos 12 caracteres y evita caracteres de control. Identity
           realizará la validación final.
         </small>
@@ -91,6 +102,11 @@ export function PasswordFields({
         <span>Confirmar contraseña</span>
         <input
           aria-invalid={mismatch}
+          aria-describedby={
+            mismatch
+              ? `${confirmationHelpId} ${mismatchId}`
+              : confirmationHelpId
+          }
           autoComplete="new-password"
           maxLength={1024}
           minLength={12}
@@ -99,8 +115,15 @@ export function PasswordFields({
           type="password"
           value={confirmation}
         />
+        <small id={confirmationHelpId}>
+          Repite la contraseña para confirmarla.
+        </small>
         {mismatch ? (
-          <small className="account-field__error" role="alert">
+          <small
+            className="account-field__error"
+            id={mismatchId}
+            role="alert"
+          >
             Las contraseñas no coinciden.
           </small>
         ) : null}

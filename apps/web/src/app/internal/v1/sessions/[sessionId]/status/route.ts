@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DEV_ACCOUNTS } from '@/dev-identity/dev-auth';
+import { devIdentityRouteGuard } from '@/dev-identity/dev-route-guard';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
+  const unavailable = devIdentityRouteGuard();
+  if (unavailable) return unavailable;
+
   const { sessionId } = await params;
 
   let account = Object.values(DEV_ACCOUNTS)[0]!;
