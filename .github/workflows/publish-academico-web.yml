@@ -1,0 +1,131 @@
+name: Publish Academic web image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-academico-web.yml'
+      - '.dockerignore'
+      - 'apps/**'
+      - 'packages/**'
+      - 'deploy/Dockerfile.web'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.npmrc'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-academico-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/sherydans12/edupay-academico-web
+      SOURCE_SHA: ${{ github.sha }}
+      SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+      NEXT_PUBLIC_API_BASE_URL: https://academico-api.edupay.baselogic.cl/api/v1
+      NEXT_PUBLIC_IDENTITY_BASE_URL: https://identity.edupay.baselogic.cl
+    steps:
+      - name: Check out the exact main revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "SOURCE_SHA=$SOURCE_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Authenticate to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish the immutable and redeploy tags
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/Dockerfile.web
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ env.NEXT_PUBLIC_API_BASE_URL }}
+            NEXT_PUBLIC_IDENTITY_BASE_URL=${{ env.NEXT_PUBLIC_IDENTITY_BASE_URL }}
+          tags: |
+            ${{ env.IMAGE }}:${{ env.SOURCE_SHA }}
+            ${{ env.IMAGE }}:main
+          labels: |
+            org.opencontainers.image.source=${{ env.SOURCE_URL }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.title=EduPay Academico web
+          cache-from: type=gha,scope=academico-web
+          cache-to: type=gha,mode=max,scope=academico-web
+          provenance: mode=max
+          sbom: true
+
+      - name: Verify the published image and production routes
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$IMAGE_DIGEST"
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          IMAGE_REFERENCE="$IMAGE@$IMAGE_DIGEST"
+          docker buildx imagetools inspect "$IMAGE_REFERENCE"
+          docker pull "$IMAGE_REFERENCE"
+          test "$(docker inspect "$IMAGE_REFERENCE" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "$SOURCE_URL"
+          test "$(docker inspect "$IMAGE_REFERENCE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+
+          container_name=academico-web-image-smoke
+          cleanup() {
+            docker rm --force "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run --detach --name "$container_name" --publish 127.0.0.1:3180:3000 "$IMAGE_REFERENCE"
+
+          healthy=0
+          for attempt in $(seq 1 40); do
+            if curl --silent --fail http://127.0.0.1:3180/api/health >/dev/null; then
+              healthy=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$healthy" -ne 1 ]; then
+            docker logs "$container_name"
+            exit 1
+          fi
+
+          curl --fail --silent --show-error http://127.0.0.1:3180/api/health | jq -e '.service == "edupay-academico-web" and .status == "ok"'
+          curl --fail --silent --show-error http://127.0.0.1:3180/login --output /tmp/academico-web-login.html
+          if grep --fixed-strings --quiet 'Cuentas de prueba' /tmp/academico-web-login.html; then
+            echo 'Production login unexpectedly contains development test accounts.' >&2
+            exit 1
+          fi
+
+          echo "Published image: $IMAGE_REFERENCE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source commit: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Mutable Coolify tag: main" >> "$GITHUB_STEP_SUMMARY"
