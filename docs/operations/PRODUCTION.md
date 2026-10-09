@@ -1,17 +1,17 @@
 # Topología productiva EduPay
 
-Verificado: **2026-10-07 para el FRONT Académico**. Estado: **release docente desplegado en FRONT; API e Identity sin cambios en este corte; piloto DIE sin configurar; BL flags apagados**. El [release docente del FRONT](teacher-frontend-release-2026-10-07.md) registra el artefacto y sus smokes. El [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) conservan la evidencia operativa anterior. Las observaciones anteriores conservan su fecha y son evidencia histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
+Verificado: **2026-10-09 para el FRONT Académico**. Estado: **release docente/login desplegado en FRONT; API e Identity sin cambios en este corte; piloto DIE sin configurar; BL flags apagados**. El [release docente del FRONT](teacher-frontend-release-2026-10-09.md) registra el artefacto y sus smokes; el [procedimiento de publicación y redeploy](ACADEMICO-WEB-REDEPLOY.md) documenta el flujo vigente. El [release anterior del FRONT](teacher-frontend-release-2026-10-07.md), el [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) conservan la evidencia operativa histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 
-Después de ese inventario se retiró por Coolify el servicio obsoleto `ajf4d2ebozcpauguebm3alh1` (migrador Identity); el contador del proyecto bajó de 28 a 27. La lista posterior mostró el API Académico, Identity y FRONT activo como `Running`. El registro de ese retiro está en el [informe de limpieza](coolify-resource-cleanup-2026-09-28.md); las comprobaciones actuales del FRONT están en su [cierre de release](teacher-frontend-release-2026-10-07.md).
+Después de ese inventario se retiró por Coolify el servicio obsoleto `ajf4d2ebozcpauguebm3alh1` (migrador Identity); el contador del proyecto bajó de 28 a 27. La lista posterior mostró el API Académico, Identity y FRONT activo como `Running`. El registro de ese retiro está en el [informe de limpieza](coolify-resource-cleanup-2026-09-28.md); la validación vigente del FRONT está en el [cierre de release 2026-10-09](teacher-frontend-release-2026-10-09.md).
 
-## Estado operativo vigente — 2026-10-07
+## Estado operativo vigente — 2026-10-09
 
 | Componente | Commit integrado | Imagen activa | Recurso |
 |---|---|---|---|
 | Académico API | `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b` (sin cambio; última evidencia 2026-09-28) | `ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d` | `iobfkpujjoa2kj5urbpnjvzi` |
-| Académico FRONT | `7c050e158cae855066d14ed8769892d3a083b3dc` | `ghcr.io/sherydans12/edupay-academico-web@sha256:126c06d85dbc6ca94810d5b49c635a7533a1c22f8caae3cb06f573c720ddbf47` | `cct0rtf5iku6fkd3t9hldnv4` |
+| Académico FRONT | `a7faa51a026c1898f7843afdb2ceb52dce48f3d6` | `ghcr.io/sherydans12/edupay-academico-web@sha256:aa3783c8b44d7b7456c8cdc82eebdb500b42a9393e0165ca1d311e6aa69c1e82` | `cct0rtf5iku6fkd3t9hldnv4` |
 
-Identity, BL, workers, ClamAV, redes, dominios y flags no cambiaron en este release. No se ejecutaron migraciones ni escrituras de prueba en producción. El rollback del FRONT y las comprobaciones constan en [el release docente del FRONT](teacher-frontend-release-2026-10-07.md); el rollback del API permanece en [el cierre docente](2026-09-27-teacher-release.md).
+Identity, BL, workers, ClamAV, redes, dominios y flags no cambiaron en este release. No se ejecutaron migraciones ni escrituras de prueba en producción. El tag de Coolify es `main`, resuelto durante este redeploy al digest de la tabla; GHCR conserva además el tag inmutable del commit para rollback. La evidencia y el procedimiento constan en [el release docente del FRONT](teacher-frontend-release-2026-10-09.md) y [el runbook de publicación](ACADEMICO-WEB-REDEPLOY.md); el rollback del API permanece en [el cierre docente](2026-09-27-teacher-release.md).
 
 ## Cierre DIE histórico — 2026-09-24
 
@@ -33,10 +33,12 @@ primer uso está en [DIE-PILOT-GUIDE.md](DIE-PILOT-GUIDE.md).
 
 El dominio canónico `academico.edupay.baselogic.cl` pertenece al recurso activo
 `cct0rtf5iku6fkd3t9hldnv4`. El recurso previo `qf65r4ltig6jhb6t8dmv2qyw` quedó
-`Exited`, sin dominios, retenido como rollback. El FRONT nuevo usa una imagen
-preconstruida inmutable por digest, puerto 3000 y red compartida `coolify`; el
-auto deploy permanece manual (`autoDeploy: false`). Es stateless y Coolify no
-muestra almacenamiento persistente asociado.
+`Exited`, sin dominios, retenido como rollback. El FRONT consume una imagen
+preconstruida en puerto 3000 y red compartida `coolify`; Coolify conserva el tag
+de redeploy `main`, mientras el workflow publica también tags inmutables por
+commit. El auto deploy permanece manual (`autoDeploy: false`): tras publicar y
+validar la imagen, la promoción requiere **Redeploy** en Coolify. Es stateless y
+Coolify no muestra almacenamiento persistente asociado.
 
 La imagen `/deploy/Dockerfile.web` configura Docker `HEALTHCHECK` a
 `GET http://127.0.0.1:3000/api/health`. `/login` es el smoke externo. La pantalla

@@ -1,6 +1,6 @@
 # Publicar y desplegar el FRONT Académico
 
-## Flujo normal
+## Configuración única ya realizada
 
 La aplicación de Coolify `cct0rtf5iku6fkd3t9hldnv4` consume una imagen Docker
 preconstruida de GHCR. Coolify no compila este repositorio. El workflow
@@ -8,19 +8,35 @@ preconstruida de GHCR. Coolify no compila este repositorio. El workflow
 construye y publica el FRONT desde `main` cuando cambian los archivos de la
 aplicación o sus dependencias.
 
+- Coolify está configurado con la imagen `ghcr.io/sherydans12/edupay-academico-web`
+  y tag `main`. No habilitar auto deploy.
+- El paquete GHCR permanece **privado**. En **Manage Actions access**, el
+  repositorio `Sherydans12/edupay-academico` tiene rol **Write**; el workflow
+  utiliza su `GITHUB_TOKEN` con `packages: write`. Este permiso permite publicar
+  la imagen y su metadata, sin dar acceso a otros repositorios.
+- Los tags publicados son `main` (redeploy habitual) y el SHA completo del
+  commit (inmutable, útil para rollback). `main` es un tag de imagen Docker; no
+  es una rama Git.
+- Esta configuración quedó verificada en el release
+  [2026-10-09](teacher-frontend-release-2026-10-09.md).
+
+## Flujo normal
+
 1. Integra el cambio aprobado en `main`.
-2. Espera a que el workflow publique la imagen y termine su smoke test. El
-   workflow publica dos tags: `main` para el redeploy habitual y el SHA completo
-   del commit para una referencia inmutable y rollback.
-3. En Coolify, confirma que el recurso sea `edupay-academico-web-die-20260924`,
-   la imagen `ghcr.io/sherydans12/edupay-academico-web` y el tag `main`. El tag
-   `main` se configura una sola vez; no habilites auto deploy.
-4. Pulsa **Redeploy**. Coolify vuelve a descargar la imagen referenciada por el
-   tag guardado. No uses **Restart** como sustituto ni cambies el tag a un SHA
-   Git: el tag es el identificador de la imagen, no la rama ni el commit.
-5. En **Deployment Logs**, confirma el digest resuelto y que el contenedor
-   termine en `Running`. Verifica `https://academico.edupay.baselogic.cl/api/health`
-   y `/login`.
+2. Espera a que `Publish Academic web image` termine correctamente. El workflow
+   valida el commit, publica ambos tags, comprueba los labels OCI y ejecuta la
+   imagen para probar `/api/health` y `/login` (incluida la ausencia de las
+   cuentas de prueba del entorno local).
+3. En Coolify, abre el recurso `edupay-academico-web-die-20260924` y pulsa
+   **Redeploy**. Con el tag `main` ya configurado, no hay que copiar hashes ni
+   editar el formulario de imagen en cada release.
+4. En **Deployment Logs**, confirma `Success`/`Running` y el pull de la imagen.
+   Verifica `https://academico.edupay.baselogic.cl/api/health` y `/login`.
+
+Para cada release, el paso de Coolify es solo **Redeploy** después de que el
+workflow de publicación haya terminado correctamente. La publicación se inicia
+al integrar cambios de aplicación/dependencias en `main`; no se debe redeployar
+mientras Actions siga construyendo o si la verificación falla.
 
 El workflow solo publica imágenes; no llama a Coolify ni cambia producción. La
 promoción sigue siendo manual y afecta únicamente al FRONT. API, Identity,
@@ -50,5 +66,6 @@ redeploys sigan la imagen más reciente publicada desde `main`.
 - El workflow verifica los labels de procedencia, ejecuta el contenedor y prueba
   `/api/health` y `/login`; también comprueba que el login de producción no
   incluya las cuentas de prueba de desarrollo.
-- El registry usa `GITHUB_TOKEN` de Actions con `packages: write`. No crear ni
+- El registry usa `GITHUB_TOKEN` de Actions con `packages: write` y el acceso
+  Write del repositorio al paquete privado configurado arriba. No crear ni
   copiar tokens de registry a variables del workflow.
