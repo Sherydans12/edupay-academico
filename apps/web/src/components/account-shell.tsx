@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useId, type ReactNode } from 'react';
 
+import { TeacherHeroIllustration } from '@/components/educational-illustrations';
 import { Icon } from '@/components/icons';
 
 export function AccountShell({
@@ -19,47 +20,49 @@ export function AccountShell({
       <a className="skip-link" href="#account-content">
         Saltar al formulario
       </a>
-      <section
-        aria-labelledby="account-title"
-        className="account-shell"
-        id="account-content"
-        tabIndex={-1}
-      >
-        <header className="account-brand">
-          <span
-            aria-hidden="true"
-            className="account-brand__mark"
-          >
-            <Icon name="graduation-cap" />
-          </span>
-          <div>
-            <strong>EduPay Académico</strong>
-            <span>Acceso institucional</span>
+      <div className="account-layout">
+        <section aria-labelledby="account-title" className="account-story">
+          <header className="account-brand">
+            <span aria-hidden="true" className="account-brand__mark">
+              <Icon name="graduation-cap" />
+            </span>
+            <div>
+              <strong>EduPay Académico</strong>
+              <span>Acceso institucional</span>
+            </div>
+          </header>
+          <div className="account-intro">
+            <h1 id="account-title">{title}</h1>
+            <p>{description}</p>
           </div>
-        </header>
-        <div className="account-intro">
-          <h1 id="account-title">{title}</h1>
-          <p>{description}</p>
-        </div>
-        {children}
-      </section>
-      <aside className="account-assurance" aria-label="Protección de cuenta">
-        <span className="account-assurance__mark" aria-hidden="true">
-          <Icon name="check-circle" />
-        </span>
-        <div>
-          <strong>Tu acceso pertenece a EduPay Identity.</strong>
-          <p>
-            Académico no guarda contraseñas, códigos de activación ni tokens de
-            recuperación.
-          </p>
-        </div>
-      </aside>
-      {showBackLink ? (
-        <footer className="account-footer">
-          <Link href="/login">Volver al inicio de sesión</Link>
-        </footer>
-      ) : null}
+          <TeacherHeroIllustration className="account-story__illustration" />
+        </section>
+        <section
+          aria-label="Acceso a EduPay Académico"
+          className="account-shell"
+          id="account-content"
+          tabIndex={-1}
+        >
+          <div className="account-shell__content">{children}</div>
+          <aside aria-label="Protección de cuenta" className="account-assurance">
+            <span className="account-assurance__mark" aria-hidden="true">
+              <Icon name="check-circle" />
+            </span>
+            <div>
+              <strong>Tu acceso pertenece a EduPay Identity.</strong>
+              <p>
+                Académico no guarda contraseñas, códigos de activación ni tokens
+                de recuperación.
+              </p>
+            </div>
+          </aside>
+          {showBackLink ? (
+            <footer className="account-footer">
+              <Link href="/login">Volver al inicio de sesión</Link>
+            </footer>
+          ) : null}
+        </section>
+      </div>
     </main>
   );
 }

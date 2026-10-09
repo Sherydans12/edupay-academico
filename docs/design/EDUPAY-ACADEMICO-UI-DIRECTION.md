@@ -158,8 +158,9 @@ Para evitar saturar la barra de navegación lateral con enlaces redundantes, se 
 ---
 
 ### 5.11. Acceso institucional y recuperación de cuenta
-- Login, activación y recuperación reutilizan un único shell de cuenta, con superficies claras, marca académica compartida, formularios etiquetados y un bloque breve que explica el límite de responsabilidad de Identity.
-- La composición conserva el fondo neutral y reserva el color institucional para la marca, los controles y los estados; evita bandas oscuras que compitan con el formulario.
+- Login, activación y recuperación reutilizan un único shell de cuenta con una composición de dos zonas: bienvenida académica ilustrada y formulario sobre superficie blanca. La paleta índigo, el hero educativo y la elevación tenue conectan el acceso con el espacio docente.
+- La nota sobre Identity acompaña al formulario como contexto secundario; no ocupa una tarjeta paralela. En tablet se apila el shell y la ilustración se reduce; en móvil se omite la ilustración para priorizar el formulario y evitar scroll decorativo.
+- Se mantienen el fondo limpio, los controles accesibles y la neutralidad institucional. El copy de identidad y seguridad debe corresponder al límite real de responsabilidad de Identity; no se agregan claims ni datos de colegio.
 - Las cuentas de prueba y los endpoints de identidad simulada existen solo durante el desarrollo local. No forman parte de la experiencia ni de la superficie pública de producción.
 
 ## 6. Espaciado, Composición y Tipografía
