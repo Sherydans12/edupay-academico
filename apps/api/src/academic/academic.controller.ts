@@ -20,7 +20,8 @@ import {
   courseEnrollmentPromotionResultSchema,
   courseListQuerySchema,
   coursePageSchema,
-  courseRosterItemSchema,
+  courseRosterPageSchema,
+  courseRosterSummarySchema,
   courseSchema,
   courseSubjectListQuerySchema,
   courseSubjectPageSchema,
@@ -405,9 +406,18 @@ export class AcademicAdminController {
   }
 
   @Get('courses/:id/roster')
-  @ContractResponse(courseRosterItemSchema.array())
-  courseRoster(@Param('id', uuid) id: string): Promise<object[]> {
-    return this.academics.courseRoster(this.context(), id);
+  @ContractResponse(courseRosterPageSchema)
+  courseRoster(
+    @Param('id', uuid) id: string,
+    @Query(new ZodValidationPipe(cursorQuerySchema)) query: CursorQuery,
+  ): Promise<object> {
+    return this.academics.courseRoster(this.context(), id, query);
+  }
+
+  @Get('courses/:id/roster/summary')
+  @ContractResponse(courseRosterSummarySchema)
+  courseRosterSummary(@Param('id', uuid) id: string): Promise<object> {
+    return this.academics.courseRosterSummary(this.context(), id);
   }
 
   @Post('student-subject-enrollments')

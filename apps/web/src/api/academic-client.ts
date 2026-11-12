@@ -5,7 +5,8 @@ import {
   courseEnrollmentSchema,
   courseEnrollmentPromotionResultSchema,
   coursePageSchema,
-  courseRosterItemSchema,
+  courseRosterPageSchema,
+  courseRosterSummarySchema,
   courseSchema,
   courseSubjectPageSchema,
   courseSubjectRosterItemSchema,
@@ -812,8 +813,17 @@ export class AcademicApiClient {
       body: JSON.stringify(updateCourseSchema.parse(input)),
     });
   }
-  getCourseRoster(id: string) {
-    return this.request(`courses/${id}/roster`, courseRosterItemSchema.array());
+  getCourseRoster(id: string, cursor?: string) {
+    return this.request(
+      addQuery(`courses/${id}/roster`, { cursor, limit: 50 }),
+      courseRosterPageSchema,
+    );
+  }
+  getCourseRosterSummary(id: string) {
+    return this.request(
+      `courses/${id}/roster/summary`,
+      courseRosterSummarySchema,
+    );
   }
   promoteCourseEnrollments(
     input: PromoteCourseEnrollments,

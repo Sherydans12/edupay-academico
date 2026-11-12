@@ -40,6 +40,7 @@ export class CommandIdempotencyService {
     idempotencyKey?: string | null | undefined;
     payload: unknown;
     isolationLevel?: Prisma.TransactionIsolationLevel | undefined;
+    transactionTimeoutMs?: number | undefined;
     returnReplayMetadata?: boolean | undefined;
     action: (
       tx: Prisma.TransactionClient,
@@ -52,15 +53,18 @@ export class CommandIdempotencyService {
       idempotencyKey,
       payload,
       isolationLevel,
+      transactionTimeoutMs,
       returnReplayMetadata = false,
       action,
     } = params;
+    const transactionOptions = {
+      ...(isolationLevel ? { isolationLevel } : {}),
+      ...(transactionTimeoutMs ? { timeout: transactionTimeoutMs } : {}),
+    };
 
     if (!idempotencyKey || !idempotencyKey.trim()) {
-      return isolationLevel
-        ? this.prisma.$transaction(async (tx) => action(tx), {
-            isolationLevel,
-          })
+      return Object.keys(transactionOptions).length > 0
+        ? this.prisma.$transaction(async (tx) => action(tx), transactionOptions)
         : this.prisma.$transaction(async (tx) => action(tx));
     }
 
@@ -143,8 +147,8 @@ export class CommandIdempotencyService {
         return result;
       };
 
-      return isolationLevel
-        ? await this.prisma.$transaction(transaction, { isolationLevel })
+      return Object.keys(transactionOptions).length > 0
+        ? await this.prisma.$transaction(transaction, transactionOptions)
         : await this.prisma.$transaction(transaction);
     } catch (error: unknown) {
       if (

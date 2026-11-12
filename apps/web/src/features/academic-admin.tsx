@@ -1,5 +1,6 @@
 'use client';
 
+import { courseEnrollmentPromotionOverrideLimit } from '@edupay/contracts';
 import {
   Alert,
   Badge,
@@ -1670,8 +1671,15 @@ function CourseRoster({
   course: AdminData['courses'][number];
 }) {
   const [roster, setRoster] = useState<
-    Awaited<ReturnType<AcademicApiClient['getCourseRoster']>>
+    Awaited<ReturnType<AcademicApiClient['getCourseRoster']>>['items']
   >([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [pageCursor, setPageCursor] = useState<string | undefined>(undefined);
+  const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([
+    undefined,
+  ]);
+  const [pageIndex, setPageIndex] = useState(0);
   const [rosterContextId, setRosterContextId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1686,10 +1694,12 @@ function CourseRoster({
       setError('');
       setErrorContextId('');
       void api
-        .getCourseRoster(course.id)
-        .then((nextRoster) => {
+        .getCourseRoster(course.id, pageCursor)
+        .then((page) => {
           if (sequence === requestSequence.current) {
-            setRoster(nextRoster);
+            setRoster(page.items);
+            setTotalCount(page.totalCount);
+            setNextCursor(page.nextCursor);
             setRosterContextId(course.id);
           }
         })
@@ -1707,7 +1717,26 @@ function CourseRoster({
       window.clearTimeout(timer);
       requestSequence.current += 1;
     };
-  }, [api, course.id, retryCount]);
+  }, [api, course.id, pageCursor, retryCount]);
+
+  function changePage(direction: 'previous' | 'next') {
+    const cursor =
+      direction === 'next'
+        ? (nextCursor ?? undefined)
+        : pageCursors[pageIndex - 1];
+    if (direction === 'next' && !cursor) return;
+    if (direction === 'previous' && pageIndex === 0) return;
+    const nextPageIndex = pageIndex + (direction === 'next' ? 1 : -1);
+    setRosterContextId('');
+    setLoading(true);
+    setError('');
+    setPageCursor(cursor ?? undefined);
+    setPageCursors((current) => [
+      ...current.slice(0, nextPageIndex),
+      cursor ?? undefined,
+    ]);
+    setPageIndex(nextPageIndex);
+  }
 
   const rosterIsCurrent = rosterContextId === course.id;
   const errorIsCurrent = errorContextId === course.id && Boolean(error);
@@ -1742,7 +1771,7 @@ function CourseRoster({
         <Skeleton />
       </div>
     );
-  if (!roster.length)
+  if (totalCount === 0)
     return (
       <EmptyState
         description={`Todavía no hay alumnos inscritos en ${course.label}.`}
@@ -1791,10 +1820,10 @@ function CourseRoster({
                   {item.student.email ?? 'Sin correo'}
                 </td>
                 <td data-label="Origen">
-                  {item.student.source === 'EDUPAY' ? (
-                    <Badge tone="info">EduPay</Badge>
+                  {item.sourceManaged ? (
+                    <Badge tone="info">Gestionado por sincronización</Badge>
                   ) : (
-                    <Badge tone="neutral">Manual</Badge>
+                    <Badge tone="neutral">Registro manual</Badge>
                   )}
                 </td>
                 <td data-label="Estado">
@@ -1805,6 +1834,30 @@ function CourseRoster({
           </tbody>
         </table>
       </div>
+      {totalCount > 50 ? (
+        <div className="pagination-bar">
+          <span className="pagination-info">
+            Página {pageIndex + 1} de {Math.ceil(totalCount / 50)} ·{' '}
+            {totalCount.toLocaleString('es-CL')} alumnos
+          </span>
+          <div className="provisioning-actions">
+            <Button
+              disabled={pageIndex === 0 || loading}
+              onClick={() => changePage('previous')}
+              variant="secondary"
+            >
+              Anterior
+            </Button>
+            <Button
+              disabled={!nextCursor || loading}
+              onClick={() => changePage('next')}
+              variant="secondary"
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -1826,6 +1879,21 @@ function SubjectCoverageSummary({
   onSelectCourse: (courseId: string) => void;
   onOpenAssociations: () => void;
 }) {
+  const [pendingPageIndex, setPendingPageIndex] = useState(0);
+  const pendingPageSize = 25;
+  const pendingPageCount = Math.max(
+    1,
+    Math.ceil(coursesWithoutSubjects.length / pendingPageSize),
+  );
+  const visiblePendingPageIndex = Math.min(
+    pendingPageIndex,
+    pendingPageCount - 1,
+  );
+  const visiblePendingCourses = coursesWithoutSubjects.slice(
+    visiblePendingPageIndex * pendingPageSize,
+    (visiblePendingPageIndex + 1) * pendingPageSize,
+  );
+
   if (!selectedYear) {
     return (
       <section
@@ -1923,7 +1991,7 @@ function SubjectCoverageSummary({
               archivadas siguen formando parte de la historia.
             </p>
           </div>
-          {coursesWithoutSubjects.map((course) => (
+          {visiblePendingCourses.map((course) => (
             <div
               className="academic-subject-progress-row"
               key={course.id}
@@ -1947,6 +2015,34 @@ function SubjectCoverageSummary({
               </Button>
             </div>
           ))}
+          {pendingCount > pendingPageSize ? (
+            <div className="pagination-bar">
+              <span className="pagination-info">
+                Página {visiblePendingPageIndex + 1} de {pendingPageCount} ·{' '}
+                {pendingCount} cursos
+              </span>
+              <div className="provisioning-actions">
+                <Button
+                  disabled={visiblePendingPageIndex === 0}
+                  onClick={() =>
+                    setPendingPageIndex(visiblePendingPageIndex - 1)
+                  }
+                  variant="secondary"
+                >
+                  Anterior
+                </Button>
+                <Button
+                  disabled={visiblePendingPageIndex >= pendingPageCount - 1}
+                  onClick={() =>
+                    setPendingPageIndex(visiblePendingPageIndex + 1)
+                  }
+                  variant="secondary"
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <p className="academic-subject-progress-confirmation" role="status">
@@ -2046,6 +2142,7 @@ function StructureView({
 }) {
   const [selectedYearId, setSelectedYearId] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [coursePageIndex, setCoursePageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<
     'years-courses' | 'subjects' | 'course-subjects'
   >('years-courses');
@@ -2077,6 +2174,16 @@ function StructureView({
     : (scopedCourses[0]?.id ?? '');
   const selectedCourse = scopedCourses.find(
     (course) => course.id === resolvedSelectedCourseId,
+  );
+  const coursePageSize = 25;
+  const coursePageCount = Math.max(
+    1,
+    Math.ceil(data.courses.length / coursePageSize),
+  );
+  const visibleCoursePageIndex = Math.min(coursePageIndex, coursePageCount - 1);
+  const visibleCourses = data.courses.slice(
+    visibleCoursePageIndex * coursePageSize,
+    (visibleCoursePageIndex + 1) * coursePageSize,
   );
   const subjectCounts = useMemo(
     () =>
@@ -2295,7 +2402,7 @@ function StructureView({
                     </div>
                     <span>{data.courses.length} total</span>
                   </div>
-                  {data.courses.map((course) => {
+                  {visibleCourses.map((course) => {
                     const courseYear = data.academicYears.find(
                       (year) => year.id === course.academicYearId,
                     );
@@ -2344,6 +2451,36 @@ function StructureView({
                       </div>
                     );
                   })}
+                  {data.courses.length > coursePageSize ? (
+                    <div className="pagination-bar">
+                      <span className="pagination-info">
+                        Página {visibleCoursePageIndex + 1} de {coursePageCount}{' '}
+                        · {data.courses.length} cursos
+                      </span>
+                      <div className="provisioning-actions">
+                        <Button
+                          disabled={visibleCoursePageIndex === 0}
+                          onClick={() =>
+                            setCoursePageIndex(visibleCoursePageIndex - 1)
+                          }
+                          variant="secondary"
+                        >
+                          Anterior
+                        </Button>
+                        <Button
+                          disabled={
+                            visibleCoursePageIndex >= coursePageCount - 1
+                          }
+                          onClick={() =>
+                            setCoursePageIndex(visibleCoursePageIndex + 1)
+                          }
+                          variant="secondary"
+                        >
+                          Siguiente
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {selectedCourse ? (
@@ -2353,7 +2490,11 @@ function StructureView({
                     Roster del curso en contexto:{' '}
                     <strong>{selectedCourse.label}</strong>
                   </p>
-                  <CourseRoster api={api} course={selectedCourse} />
+                  <CourseRoster
+                    api={api}
+                    course={selectedCourse}
+                    key={selectedCourse.id}
+                  />
                 </>
               ) : (
                 <EmptyState
@@ -2526,20 +2667,24 @@ function StudentsView({
   identityActions?: AccountProvisioningActions | undefined;
   onSaved: () => void;
 }) {
-  const [queriedStudents, setQueriedStudents] = useState<
+  const [pageStudents, setPageStudents] = useState<
     AdminData['students'] | null
   >(null);
-  const [queriedCursor, setQueriedCursor] = useState<string | null | undefined>(
-    undefined,
+  const [nextCursor, setNextCursor] = useState<string | null | undefined>(
+    initialCursor,
   );
-  const [queriedTotalCount, setQueriedTotalCount] = useState<
-    number | undefined
-  >(undefined);
+  const [totalCount, setTotalCount] = useState<number | undefined>(
+    initialTotalCount,
+  );
+  const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([
+    undefined,
+  ]);
+  const [pageIndex, setPageIndex] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [paginationError, setPaginationError] = useState('');
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingPage, setLoadingPage] = useState(false);
   const searchSequence = useRef(0);
   const [editStudent, setEditStudent] = useState<
     AdminData['students'][number] | null
@@ -2550,15 +2695,8 @@ function StudentsView({
   const [editError, setEditError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const displayedStudents = queriedStudents ?? initialStudents;
-  const currentCursor =
-    queriedStudents !== null ? queriedCursor : initialCursor;
-  const currentTotalCount =
-    queriedStudents !== null ? queriedTotalCount : initialTotalCount;
-  const totalCountLabel =
-    currentTotalCount !== undefined
-      ? currentTotalCount
-      : displayedStudents.length;
+  const displayedStudents = pageStudents ?? initialStudents;
+  const totalPages = Math.max(1, Math.ceil((totalCount ?? 0) / 50));
 
   const handleSearch = useCallback(
     async (query: string) => {
@@ -2566,11 +2704,13 @@ function StudentsView({
       const normalizedQuery = query.trim();
       setSearchError('');
       setPaginationError('');
-      setLoadingMore(false);
+      setLoadingPage(false);
       if (!normalizedQuery) {
-        setQueriedStudents(null);
-        setQueriedCursor(undefined);
-        setQueriedTotalCount(undefined);
+        setPageStudents(null);
+        setNextCursor(initialCursor);
+        setTotalCount(initialTotalCount);
+        setPageCursors([undefined]);
+        setPageIndex(0);
         setSearching(false);
         return;
       }
@@ -2579,9 +2719,11 @@ function StudentsView({
       try {
         const res = await api.listStudents(normalizedQuery);
         if (sequence === searchSequence.current) {
-          setQueriedStudents(res.items);
-          setQueriedCursor(res.nextCursor);
-          setQueriedTotalCount(res.totalCount);
+          setPageStudents(res.items);
+          setNextCursor(res.nextCursor);
+          setTotalCount(res.totalCount);
+          setPageCursors([undefined]);
+          setPageIndex(0);
         }
       } catch (error) {
         if (sequence === searchSequence.current)
@@ -2590,31 +2732,38 @@ function StudentsView({
         if (sequence === searchSequence.current) setSearching(false);
       }
     },
-    [api],
+    [api, initialCursor, initialTotalCount],
   );
 
-  async function handleLoadMore() {
-    if (!currentCursor) return;
-    const sequence = searchSequence.current;
+  async function handlePageChange(direction: 'previous' | 'next') {
+    const cursor =
+      direction === 'next'
+        ? (nextCursor ?? undefined)
+        : pageCursors[pageIndex - 1];
+    if (direction === 'next' && !cursor) return;
+    if (direction === 'previous' && pageIndex === 0) return;
+    const targetPageIndex = pageIndex + (direction === 'next' ? 1 : -1);
+    const sequence = ++searchSequence.current;
     const query = searchTerm.trim();
-    const cursor = currentCursor;
-    setLoadingMore(true);
+    setLoadingPage(true);
     setPaginationError('');
     try {
       const res = await api.listStudents(query || undefined, cursor);
       if (sequence === searchSequence.current) {
-        setQueriedStudents((prev) => [
-          ...(prev ?? initialStudents),
-          ...res.items,
+        setPageStudents(res.items);
+        setNextCursor(res.nextCursor);
+        setTotalCount(res.totalCount);
+        setPageCursors((current) => [
+          ...current.slice(0, targetPageIndex),
+          cursor,
         ]);
-        setQueriedCursor(res.nextCursor);
-        setQueriedTotalCount(res.totalCount);
+        setPageIndex(targetPageIndex);
       }
     } catch (error) {
       if (sequence === searchSequence.current)
         setPaginationError(errorMessage(error).message);
     } finally {
-      setLoadingMore(false);
+      if (sequence === searchSequence.current) setLoadingPage(false);
     }
   }
 
@@ -2699,7 +2848,7 @@ function StudentsView({
         </Alert>
       ) : null}
       {paginationError ? (
-        <Alert title="No pudimos cargar más alumnos" tone="error">
+        <Alert title="No pudimos cambiar de página" tone="error">
           {paginationError}
         </Alert>
       ) : null}
@@ -2783,18 +2932,29 @@ function StudentsView({
       {displayedStudents.length > 0 ? (
         <div className="pagination-bar">
           <span className="pagination-info">
-            Mostrando {displayedStudents.length} de {totalCountLabel}{' '}
-            {searchTerm.trim() ? 'resultados' : 'alumnos'}
+            {totalCount !== undefined
+              ? `${totalCount} ${searchTerm.trim() ? 'resultados' : 'alumnos'} · `
+              : ''}
+            Página {pageIndex + 1} de {totalPages}
           </span>
-          {currentCursor ? (
+          <div className="provisioning-actions">
             <Button
-              loading={loadingMore}
+              disabled={pageIndex === 0 || loadingPage || searching}
+              loading={loadingPage && pageIndex > 0}
               variant="secondary"
-              onClick={() => void handleLoadMore()}
+              onClick={() => void handlePageChange('previous')}
             >
-              Cargar más alumnos
+              Anterior
             </Button>
-          ) : null}
+            <Button
+              disabled={!nextCursor || loadingPage || searching}
+              loading={loadingPage && Boolean(nextCursor)}
+              variant="secondary"
+              onClick={() => void handlePageChange('next')}
+            >
+              Siguiente
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -3211,7 +3371,10 @@ function CoursePromotionPanel({
   type Choice = { targetCourseId: string | null; decision: Decision };
   type RosterItem = Awaited<
     ReturnType<AcademicApiClient['getCourseRoster']>
-  >[number];
+  >['items'][number];
+  type RosterSummary = Awaited<
+    ReturnType<AcademicApiClient['getCourseRosterSummary']>
+  >;
 
   const sourceOptions = useMemo(
     () =>
@@ -3277,6 +3440,20 @@ function CoursePromotionPanel({
     : (targetCourses[0]?.id ?? '');
   const [roster, setRoster] = useState<RosterItem[]>([]);
   const [rosterCourseId, setRosterCourseId] = useState('');
+  const [rosterSummary, setRosterSummary] = useState<RosterSummary | null>(
+    null,
+  );
+  const [rosterSummaryCourseId, setRosterSummaryCourseId] = useState('');
+  const [rosterTotalCount, setRosterTotalCount] = useState(0);
+  const [rosterNextCursor, setRosterNextCursor] = useState<string | null>(null);
+  const [rosterPageCursor, setRosterPageCursor] = useState<string | undefined>(
+    undefined,
+  );
+  const [rosterPageCursors, setRosterPageCursors] = useState<
+    Array<string | undefined>
+  >([undefined]);
+  const [rosterPageIndex, setRosterPageIndex] = useState(0);
+  const [rosterPageLoading, setRosterPageLoading] = useState(false);
   const [rosterError, setRosterError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
   const [choices, setChoices] = useState<Record<string, Choice>>({});
@@ -3286,28 +3463,60 @@ function CoursePromotionPanel({
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [saving, setSaving] = useState(false);
   const [commandKey, setCommandKey] = useState<string | null>(null);
-  const requestSequence = useRef(0);
+  const rosterRequestSequence = useRef(0);
+  const summaryRequestSequence = useRef(0);
 
   useEffect(() => {
-    const sequence = ++requestSequence.current;
+    const sequence = ++rosterRequestSequence.current;
     if (sourceCourseId) {
       void api
-        .getCourseRoster(sourceCourseId)
-        .then((nextRoster) => {
-          if (sequence === requestSequence.current) {
-            setRoster(nextRoster);
+        .getCourseRoster(sourceCourseId, rosterPageCursor)
+        .then((page) => {
+          if (sequence === rosterRequestSequence.current) {
+            setRoster(page.items);
+            setRosterNextCursor(page.nextCursor);
+            setRosterTotalCount(page.totalCount);
             setRosterCourseId(sourceCourseId);
+            setRosterError('');
           }
         })
         .catch((error: unknown) => {
-          if (sequence === requestSequence.current) {
+          if (sequence === rosterRequestSequence.current) {
             setRosterError(errorMessage(error).message);
             setRosterCourseId(sourceCourseId);
+          }
+        })
+        .finally(() => {
+          if (sequence === rosterRequestSequence.current) {
+            setRosterPageLoading(false);
           }
         });
     }
     return () => {
-      requestSequence.current += 1;
+      rosterRequestSequence.current += 1;
+    };
+  }, [api, retryCount, rosterPageCursor, sourceCourseId]);
+
+  useEffect(() => {
+    const sequence = ++summaryRequestSequence.current;
+    if (sourceCourseId) {
+      void api
+        .getCourseRosterSummary(sourceCourseId)
+        .then((summary) => {
+          if (sequence === summaryRequestSequence.current) {
+            setRosterSummary(summary);
+            setRosterSummaryCourseId(sourceCourseId);
+          }
+        })
+        .catch((error: unknown) => {
+          if (sequence === summaryRequestSequence.current) {
+            setRosterError(errorMessage(error).message);
+            setRosterSummaryCourseId(sourceCourseId);
+          }
+        });
+    }
+    return () => {
+      summaryRequestSequence.current += 1;
     };
   }, [api, retryCount, sourceCourseId]);
 
@@ -3323,20 +3532,34 @@ function CoursePromotionPanel({
     );
   }
 
-  const counts = roster.reduce(
-    (total, item) => {
-      const choice = choiceFor(item);
-      if (choice.decision === 'PROMOTE') total.promoted += 1;
-      if (choice.decision === 'REPEAT') total.repeated += 1;
-      if (choice.decision === 'TRANSFER') total.transferred += 1;
-      if (choice.decision === 'DEFER') total.deferred += 1;
-      if (choice.decision === 'SOURCE_MANAGED') total.sourceManaged += 1;
-      return total;
-    },
-    { promoted: 0, repeated: 0, transferred: 0, deferred: 0, sourceManaged: 0 },
-  );
+  const overrideChoices = Object.values(choices);
+  const repeatedCount = overrideChoices.filter(
+    (choice) => choice.decision === 'REPEAT',
+  ).length;
+  const transferredCount = overrideChoices.filter(
+    (choice) => choice.decision === 'TRANSFER',
+  ).length;
+  const deferredCount = overrideChoices.filter(
+    (choice) => choice.decision === 'DEFER',
+  ).length;
+  const counts = {
+    promoted: Math.max(
+      0,
+      (rosterSummary?.totalCount ?? 0) -
+        (rosterSummary?.sourceManagedCount ?? 0) -
+        repeatedCount -
+        transferredCount -
+        deferredCount,
+    ),
+    repeated: repeatedCount,
+    transferred: transferredCount,
+    deferred: deferredCount,
+    sourceManaged: rosterSummary?.sourceManagedCount ?? 0,
+  };
   const hasCurrentRoster =
-    Boolean(sourceCourseId) && rosterCourseId === sourceCourseId;
+    Boolean(sourceCourseId) &&
+    rosterCourseId === sourceCourseId &&
+    rosterSummaryCourseId === sourceCourseId;
   const rosterLoading =
     Boolean(sourceCourseId) && !hasCurrentRoster && !rosterError;
   const cannotSubmit =
@@ -3344,14 +3567,27 @@ function CoursePromotionPanel({
     !targetAcademicYearId ||
     !selectedDefaultTargetId ||
     !hasCurrentRoster ||
+    !rosterSummary?.operationAllowed ||
+    !rosterSummary.fingerprint ||
     rosterLoading ||
-    roster.length === 0 ||
-    roster.length > 500 ||
+    rosterTotalCount === 0 ||
+    overrideChoices.length > courseEnrollmentPromotionOverrideLimit ||
     counts.promoted + counts.repeated + counts.transferred === 0 ||
     saving;
 
   function editChoice(item: RosterItem, next: Choice) {
-    setChoices((current) => ({ ...current, [item.enrollmentId]: next }));
+    setChoices((current) => {
+      const updated = { ...current };
+      if (
+        next.decision === 'PROMOTE' &&
+        next.targetCourseId === selectedDefaultTargetId
+      ) {
+        delete updated[item.enrollmentId];
+      } else {
+        updated[item.enrollmentId] = next;
+      }
+      return updated;
+    });
     setCommandKey(null);
     setOperationError('');
     setOperationSuccess('');
@@ -3362,6 +3598,14 @@ function CoursePromotionPanel({
     setCommandKey(null);
     setRoster([]);
     setRosterCourseId('');
+    setRosterSummary(null);
+    setRosterSummaryCourseId('');
+    setRosterTotalCount(0);
+    setRosterPageCursor(undefined);
+    setRosterPageCursors([undefined]);
+    setRosterPageIndex(0);
+    setRosterPageLoading(false);
+    setRosterNextCursor(null);
     setRosterError('');
     setChoices({});
     setOperationError('');
@@ -3370,17 +3614,39 @@ function CoursePromotionPanel({
     setRetryCount((current) => current + 1);
   }
 
+  function changeRosterPage(direction: 'previous' | 'next') {
+    const cursor =
+      direction === 'next'
+        ? rosterNextCursor
+        : rosterPageCursors[rosterPageIndex - 1];
+    if (direction === 'next' && !cursor) return;
+    if (direction === 'previous' && rosterPageIndex === 0) return;
+    const nextPageIndex = rosterPageIndex + (direction === 'next' ? 1 : -1);
+    setRosterCourseId('');
+    setRosterPageLoading(true);
+    setRosterError('');
+    setRosterPageCursor(cursor ?? undefined);
+    setRosterPageCursors((current) => [
+      ...current.slice(0, nextPageIndex),
+      cursor ?? undefined,
+    ]);
+    setRosterPageIndex(nextPageIndex);
+  }
+
   async function confirmPromotion() {
     if (cannotSubmit || !sourceCourseId || !targetAcademicYearId) return;
     const payload = {
       sourceCourseId,
       targetAcademicYearId,
       defaultTargetCourseId: selectedDefaultTargetId,
-      sourceEnrollmentIds: roster.map((item) => item.enrollmentId),
-      assignments: roster.map((item) => ({
-        sourceEnrollmentId: item.enrollmentId,
-        ...choiceFor(item),
-      })),
+      expectedRosterFingerprint: rosterSummary?.fingerprint ?? '',
+      overrides: Object.entries(choices).map(
+        ([sourceEnrollmentId, choice]) => ({
+          sourceEnrollmentId,
+          targetCourseId: choice.targetCourseId,
+          decision: choice.decision as 'REPEAT' | 'TRANSFER' | 'DEFER',
+        }),
+      ),
     };
     const idempotencyKey = commandKey ?? crypto.randomUUID();
     setCommandKey(idempotencyKey);
@@ -3398,6 +3664,13 @@ function CoursePromotionPanel({
       setCommandKey(null);
       setChoices({});
       setRosterCourseId('');
+      setRosterSummary(null);
+      setRosterSummaryCourseId('');
+      setRosterTotalCount(0);
+      setRosterPageCursor(undefined);
+      setRosterPageCursors([undefined]);
+      setRosterPageIndex(0);
+      setRosterNextCursor(null);
       setRosterError('');
       setRequiresRosterRefresh(false);
       setRetryCount((current) => current + 1);
@@ -3453,6 +3726,14 @@ function CoursePromotionPanel({
             setSourceCourseId(event.target.value);
             setRoster([]);
             setRosterCourseId('');
+            setRosterSummary(null);
+            setRosterSummaryCourseId('');
+            setRosterTotalCount(0);
+            setRosterNextCursor(null);
+            setRosterPageCursor(undefined);
+            setRosterPageCursors([undefined]);
+            setRosterPageIndex(0);
+            setRosterPageLoading(false);
             setRosterError('');
             setChoices({});
             setOperationError('');
@@ -3537,7 +3818,7 @@ function CoursePromotionPanel({
       ) : null}
 
       {hasCurrentRoster &&
-      roster.length === 0 &&
+      rosterSummary?.totalCount === 0 &&
       !rosterLoading &&
       !rosterError ? (
         <EmptyState
@@ -3545,17 +3826,28 @@ function CoursePromotionPanel({
           title="No hay alumnos para avanzar"
         />
       ) : null}
-      {hasCurrentRoster && roster.length > 500 ? (
+      {hasCurrentRoster && rosterSummary && !rosterSummary.operationAllowed ? (
         <Alert
-          title="El curso supera el límite de una operación"
+          title="El curso supera el límite de avance por operación"
           tone="warning"
         >
-          Esta primera versión procesa hasta 500 alumnos por curso en una única
-          transacción. No se aplicó ningún cambio.
+          Este flujo permite hasta{' '}
+          {rosterSummary.maxRosterCount.toLocaleString('es-CL')} matrículas
+          activas por operación. Hay{' '}
+          {rosterSummary.totalCount.toLocaleString('es-CL')} en este curso; no
+          se aplicó ningún cambio.
+        </Alert>
+      ) : null}
+      {hasCurrentRoster &&
+      overrideChoices.length > courseEnrollmentPromotionOverrideLimit ? (
+        <Alert title="Hay demasiadas excepciones" tone="warning">
+          Mantén hasta {courseEnrollmentPromotionOverrideLimit} excepciones por
+          operación. Puedes procesar las decisiones estándar en bloque y
+          resolver estas excepciones después.
         </Alert>
       ) : null}
 
-      {hasCurrentRoster && roster.length > 0 && roster.length <= 500 ? (
+      {hasCurrentRoster && roster.length > 0 ? (
         <>
           <p aria-live="polite" className="table-muted" role="status">
             Vista previa: {counts.promoted} avanzan al destino principal,{' '}
@@ -3571,6 +3863,35 @@ function CoursePromotionPanel({
               Esas matrículas permanecen sin cambios en este corte. Su origen
               debe migrarse antes de poder avanzarlas desde Académico.
             </Alert>
+          ) : null}
+          {rosterSummary && rosterSummary.totalCount > 50 ? (
+            <div className="pagination-bar">
+              <span className="pagination-info">
+                Página {rosterPageIndex + 1} de{' '}
+                {Math.ceil(rosterSummary.totalCount / 50)} ·{' '}
+                {rosterSummary.totalCount.toLocaleString('es-CL')} alumnos
+              </span>
+              <div className="provisioning-actions">
+                <Button
+                  disabled={
+                    rosterPageIndex === 0 || rosterPageLoading || saving
+                  }
+                  loading={rosterPageLoading && rosterPageIndex > 0}
+                  onClick={() => changeRosterPage('previous')}
+                  variant="secondary"
+                >
+                  Anterior
+                </Button>
+                <Button
+                  disabled={!rosterNextCursor || rosterPageLoading || saving}
+                  loading={rosterPageLoading && Boolean(rosterNextCursor)}
+                  onClick={() => changeRosterPage('next')}
+                  variant="secondary"
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
           ) : null}
           <div className="responsive-table">
             <table>
@@ -3760,16 +4081,135 @@ function EnrollmentsAndAssignmentsView({
 }) {
   const [courseId, setCourseId] = useState(data.courses[0]?.id ?? '');
   const [studentId, setStudentId] = useState(data.students[0]?.id ?? '');
+  const [selectedStudent, setSelectedStudent] = useState<
+    AdminData['students'][number] | null
+  >(data.students[0] ?? null);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentPageItems, setStudentPageItems] = useState<
+    AdminData['students'] | null
+  >(null);
+  const [studentPageNextCursor, setStudentPageNextCursor] = useState<
+    string | null
+  >(null);
+  const [studentPageTotalCount, setStudentPageTotalCount] = useState<
+    number | undefined
+  >(undefined);
+  const [studentPageCursors, setStudentPageCursors] = useState<
+    Array<string | undefined>
+  >([undefined]);
+  const [studentPageIndex, setStudentPageIndex] = useState(0);
+  const [studentSearchLoading, setStudentSearchLoading] = useState(false);
+  const [studentSearchError, setStudentSearchError] = useState('');
+  const studentSearchSequence = useRef(0);
+  const [courseSearch, setCourseSearch] = useState('');
   const [courseSubjectId, setCourseSubjectId] = useState(
     data.courseSubjects[0]?.id ?? '',
   );
   const [teacherId, setTeacherId] = useState(data.teachers[0]?.id ?? '');
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const normalizedCourseSearch = courseSearch.trim().toLocaleLowerCase('es-CL');
+  const matchingCourses = data.courses.filter((course) => {
+    if (!normalizedCourseSearch) return true;
+    const yearLabel =
+      data.academicYears.find((year) => year.id === course.academicYearId)
+        ?.label ?? '';
+    return `${course.label} ${yearLabel}`
+      .toLocaleLowerCase('es-CL')
+      .includes(normalizedCourseSearch);
+  });
+  const courseOptions =
+    courseId && !matchingCourses.some((course) => course.id === courseId)
+      ? [
+          ...data.courses.filter((course) => course.id === courseId),
+          ...matchingCourses,
+        ]
+      : matchingCourses;
+  const studentOptions = studentPageItems ?? data.students;
+  const studentNextCursor =
+    studentPageItems === null && !studentSearch.trim()
+      ? (data.studentsNextCursor ?? null)
+      : studentPageNextCursor;
+  const studentTotalCount =
+    studentPageItems === null && !studentSearch.trim()
+      ? (data.studentsTotalCount ?? data.students.length)
+      : (studentPageTotalCount ?? studentPageItems?.length ?? 0);
+  const studentSelectOptions =
+    selectedStudent &&
+    !studentOptions.some((student) => student.id === selectedStudent.id)
+      ? [selectedStudent, ...studentOptions]
+      : studentOptions;
 
   const availableCourseSubjects = data.courseSubjects.filter(
     (item) => !courseId || item.courseId === courseId,
   );
+
+  useEffect(() => {
+    const sequence = ++studentSearchSequence.current;
+    const normalizedSearch = studentSearch.trim();
+    if (!normalizedSearch) return;
+    const timer = window.setTimeout(() => {
+      void api
+        .listStudents(normalizedSearch)
+        .then((page) => {
+          if (sequence === studentSearchSequence.current) {
+            setStudentPageItems(page.items);
+            setStudentPageNextCursor(page.nextCursor);
+            setStudentPageTotalCount(page.totalCount ?? page.items.length);
+            setStudentPageIndex(0);
+            setStudentPageCursors([undefined]);
+          }
+        })
+        .catch((error: unknown) => {
+          if (sequence === studentSearchSequence.current) {
+            setStudentSearchError(errorMessage(error).message);
+          }
+        })
+        .finally(() => {
+          if (sequence === studentSearchSequence.current) {
+            setStudentSearchLoading(false);
+          }
+        });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [api, studentSearch]);
+
+  async function changeStudentPage(direction: 'previous' | 'next') {
+    const cursor =
+      direction === 'next'
+        ? (studentNextCursor ?? undefined)
+        : studentPageCursors[studentPageIndex - 1];
+    if (direction === 'next' && !cursor) return;
+    if (direction === 'previous' && studentPageIndex === 0) return;
+    const nextPageIndex = studentPageIndex + (direction === 'next' ? 1 : -1);
+    const sequence = ++studentSearchSequence.current;
+    setStudentSearchLoading(true);
+    setStudentSearchError('');
+    try {
+      const page = await api.listStudents(
+        studentSearch.trim() || undefined,
+        cursor,
+      );
+      if (sequence === studentSearchSequence.current) {
+        setStudentPageItems(page.items);
+        setStudentPageNextCursor(page.nextCursor);
+        setStudentPageTotalCount(page.totalCount ?? page.items.length);
+        setStudentPageCursors((current) => [
+          ...current.slice(0, nextPageIndex),
+          cursor,
+        ]);
+        setStudentPageIndex(nextPageIndex);
+      }
+    } catch (error) {
+      if (sequence === studentSearchSequence.current) {
+        setStudentSearchError(errorMessage(error).message);
+      }
+    } finally {
+      if (sequence === studentSearchSequence.current) {
+        setStudentSearchLoading(false);
+      }
+    }
+  }
 
   async function run(action: () => Promise<unknown>, successMsg: string) {
     try {
@@ -3777,6 +4217,12 @@ function EnrollmentsAndAssignmentsView({
       setActionSuccess('');
       await action();
       setActionSuccess(successMsg);
+      setStudentSearch('');
+      setStudentPageItems(null);
+      setStudentPageNextCursor(null);
+      setStudentPageTotalCount(undefined);
+      setStudentPageIndex(0);
+      setStudentPageCursors([undefined]);
       onSaved();
     } catch (error) {
       setActionError(errorMessage(error).message);
@@ -3824,23 +4270,95 @@ function EnrollmentsAndAssignmentsView({
             }}
           >
             <h3>Inscribir alumno en curso</h3>
+            <Input
+              id="enroll-student-search"
+              label="Buscar alumno"
+              placeholder="Nombre, apellido, correo o identificador"
+              value={studentSearch}
+              onChange={(event) => {
+                studentSearchSequence.current += 1;
+                setStudentSearch(event.target.value);
+                setStudentPageItems(null);
+                setStudentPageNextCursor(null);
+                setStudentPageTotalCount(undefined);
+                setStudentPageIndex(0);
+                setStudentPageCursors([undefined]);
+                setStudentSearchError('');
+                setStudentSearchLoading(Boolean(event.target.value.trim()));
+              }}
+            />
+            {studentSearchLoading ? (
+              <p aria-live="polite" className="table-muted" role="status">
+                Buscando alumnos…
+              </p>
+            ) : null}
+            {studentSearchError ? (
+              <Alert title="No pudimos buscar alumnos" tone="error">
+                {studentSearchError}
+              </Alert>
+            ) : null}
             <Select
-              disabled={!data.students.length}
+              disabled={!studentSelectOptions.length || studentSearchLoading}
               id="enroll-student"
               label="Alumno"
               required
               value={studentId}
-              onChange={(event) => setStudentId(event.target.value)}
+              onChange={(event) => {
+                const nextStudentId = event.target.value;
+                setStudentId(nextStudentId);
+                setSelectedStudent(
+                  studentOptions.find(
+                    (student) => student.id === nextStudentId,
+                  ) ??
+                    (selectedStudent?.id === nextStudentId
+                      ? selectedStudent
+                      : null),
+                );
+              }}
             >
               <option value="">Selecciona un alumno</option>
-              {data.students.map((student) => (
+              {studentSelectOptions.map((student) => (
                 <option key={student.id} value={student.id}>
                   {student.firstName} {student.lastName}
                 </option>
               ))}
             </Select>
+            {studentTotalCount > 50 ? (
+              <div className="pagination-bar">
+                <span className="pagination-info">
+                  Página {studentPageIndex + 1} de{' '}
+                  {Math.ceil(studentTotalCount / 50)} ·{' '}
+                  {studentTotalCount.toLocaleString('es-CL')} coincidencias
+                </span>
+                <div className="provisioning-actions">
+                  <Button
+                    disabled={studentPageIndex === 0 || studentSearchLoading}
+                    onClick={() => void changeStudentPage('previous')}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    disabled={!studentNextCursor || studentSearchLoading}
+                    onClick={() => void changeStudentPage('next')}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            <Input
+              id="enroll-course-search"
+              label="Buscar curso"
+              placeholder="Curso o año académico"
+              value={courseSearch}
+              onChange={(event) => setCourseSearch(event.target.value)}
+            />
             <Select
-              disabled={!data.courses.length}
+              disabled={!courseOptions.length}
               id="enroll-course"
               label="Curso"
               required
@@ -3848,7 +4366,7 @@ function EnrollmentsAndAssignmentsView({
               onChange={(event) => setCourseId(event.target.value)}
             >
               <option value="">Selecciona un curso</option>
-              {data.courses.map((course) => (
+              {courseOptions.map((course) => (
                 <option key={course.id} value={course.id}>
                   {course.label} ·{' '}
                   {data.academicYears.find(
