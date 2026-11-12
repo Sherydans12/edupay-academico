@@ -3543,17 +3543,27 @@ function CoursePromotionPanel({
     (choice) => choice.decision === 'DEFER',
   ).length;
   const counts = {
-    promoted: Math.max(
-      0,
-      (rosterSummary?.totalCount ?? 0) -
-        (rosterSummary?.sourceManagedCount ?? 0) -
-        repeatedCount -
-        transferredCount -
-        deferredCount,
-    ),
+    promoted: selectedDefaultTargetId
+      ? Math.max(
+          0,
+          (rosterSummary?.totalCount ?? 0) -
+            (rosterSummary?.sourceManagedCount ?? 0) -
+            repeatedCount -
+            transferredCount -
+            deferredCount,
+        )
+      : 0,
     repeated: repeatedCount,
     transferred: transferredCount,
-    deferred: deferredCount,
+    deferred:
+      deferredCount +
+      (selectedDefaultTargetId
+        ? 0
+        : Math.max(
+            0,
+            (rosterSummary?.totalCount ?? 0) -
+              (rosterSummary?.sourceManagedCount ?? 0),
+          )),
     sourceManaged: rosterSummary?.sourceManagedCount ?? 0,
   };
   const hasCurrentRoster =
@@ -3570,6 +3580,8 @@ function CoursePromotionPanel({
     !rosterSummary?.operationAllowed ||
     !rosterSummary.fingerprint ||
     rosterLoading ||
+    rosterPageLoading ||
+    Boolean(rosterError) ||
     rosterTotalCount === 0 ||
     overrideChoices.length > courseEnrollmentPromotionOverrideLimit ||
     counts.promoted + counts.repeated + counts.transferred === 0 ||
@@ -3622,6 +3634,7 @@ function CoursePromotionPanel({
     if (direction === 'next' && !cursor) return;
     if (direction === 'previous' && rosterPageIndex === 0) return;
     const nextPageIndex = rosterPageIndex + (direction === 'next' ? 1 : -1);
+    setRoster([]);
     setRosterCourseId('');
     setRosterPageLoading(true);
     setRosterError('');
