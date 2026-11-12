@@ -57,7 +57,7 @@ import {
   SparseOrderingService,
   SPARSE_ORDER_STEP,
 } from './ordering/sparse-ordering.service';
-import { CommandIdempotencyService } from './idempotency/command-idempotency.service';
+import { CommandIdempotencyService } from '../idempotency/command-idempotency.service';
 import {
   assertBodyDocumentReferences,
   bodyDocumentHasMeaningfulContent,

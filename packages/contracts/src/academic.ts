@@ -283,6 +283,135 @@ export const createCourseEnrollmentSchema = z
   })
   .strict();
 
+export const courseEnrollmentPromotionDecisionSchema = z.enum([
+  'PROMOTE',
+  'REPEAT',
+  'TRANSFER',
+  'DEFER',
+  'SOURCE_MANAGED',
+]);
+
+export const promoteCourseEnrollmentsSchema = z
+  .object({
+    sourceCourseId: opaqueIdSchema,
+    targetAcademicYearId: opaqueIdSchema,
+    defaultTargetCourseId: opaqueIdSchema,
+    sourceEnrollmentIds: z.array(opaqueIdSchema).min(1).max(500),
+    assignments: z
+      .array(
+        z
+          .object({
+            sourceEnrollmentId: opaqueIdSchema,
+            targetCourseId: opaqueIdSchema.nullable(),
+            decision: courseEnrollmentPromotionDecisionSchema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(500),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const enrollmentIds = new Set(value.sourceEnrollmentIds);
+    const assignmentIds = new Set(
+      value.assignments.map((assignment) => assignment.sourceEnrollmentId),
+    );
+
+    if (
+      enrollmentIds.size !== value.sourceEnrollmentIds.length ||
+      assignmentIds.size !== value.assignments.length ||
+      enrollmentIds.size !== assignmentIds.size ||
+      [...enrollmentIds].some((id) => !assignmentIds.has(id))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'assignments must cover every source enrollment exactly once',
+        path: ['assignments'],
+      });
+    }
+
+    if (!value.assignments.some((assignment) => assignment.targetCourseId)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'At least one student must be assigned to a target course',
+        path: ['assignments'],
+      });
+    }
+
+    value.assignments.forEach((assignment, index) => {
+      const hasTarget = assignment.targetCourseId !== null;
+      const target = assignment.targetCourseId;
+      if (
+        (assignment.decision === 'DEFER' ||
+          assignment.decision === 'SOURCE_MANAGED') &&
+        hasTarget
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message:
+            'A deferred or source-managed enrollment cannot have a target',
+          path: ['assignments', index, 'targetCourseId'],
+        });
+      }
+      if (
+        ['PROMOTE', 'REPEAT', 'TRANSFER'].includes(assignment.decision) &&
+        !hasTarget
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'A promotion decision requires a target course',
+          path: ['assignments', index, 'targetCourseId'],
+        });
+      }
+      if (
+        assignment.decision === 'PROMOTE' &&
+        target !== value.defaultTargetCourseId
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'PROMOTE must use the default target course',
+          path: ['assignments', index, 'targetCourseId'],
+        });
+      }
+      if (
+        assignment.decision === 'TRANSFER' &&
+        target === value.defaultTargetCourseId
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'TRANSFER must use a different target course',
+          path: ['assignments', index, 'targetCourseId'],
+        });
+      }
+    });
+  });
+
+export const courseEnrollmentPromotionResultSchema = z
+  .object({
+    sourceCourseId: opaqueIdSchema,
+    targetAcademicYearId: opaqueIdSchema,
+    defaultTargetCourseId: opaqueIdSchema,
+    promotedCount: z.number().int().nonnegative(),
+    repeatedCount: z.number().int().nonnegative(),
+    transferredCount: z.number().int().nonnegative(),
+    deferredCount: z.number().int().nonnegative(),
+    sourceManagedCount: z.number().int().nonnegative(),
+    completedAt: timestampSchema,
+    items: z
+      .array(
+        z
+          .object({
+            sourceEnrollmentId: opaqueIdSchema,
+            targetCourseId: opaqueIdSchema.nullable(),
+            newEnrollmentId: opaqueIdSchema.nullable(),
+            decision: courseEnrollmentPromotionDecisionSchema,
+          })
+          .strict(),
+      )
+      .max(500),
+  })
+  .strict();
+
 export const studentSubjectEnrollmentSchema = z
   .object({
     id: opaqueIdSchema,
@@ -328,6 +457,7 @@ export const assignCourseSubjectTeachersSchema = z
 export const courseRosterItemSchema = z
   .object({
     enrollmentId: opaqueIdSchema,
+    sourceManaged: z.boolean(),
     student: studentSchema,
   })
   .strict();
@@ -395,6 +525,12 @@ export type UpdateCourseSubject = z.infer<typeof updateCourseSubjectSchema>;
 export type CourseSubject = z.infer<typeof courseSubjectSchema>;
 export type CreateCourseEnrollment = z.infer<
   typeof createCourseEnrollmentSchema
+>;
+export type PromoteCourseEnrollments = z.infer<
+  typeof promoteCourseEnrollmentsSchema
+>;
+export type CourseEnrollmentPromotionResult = z.infer<
+  typeof courseEnrollmentPromotionResultSchema
 >;
 export type CreateStudentSubjectEnrollment = z.infer<
   typeof createStudentSubjectEnrollmentSchema

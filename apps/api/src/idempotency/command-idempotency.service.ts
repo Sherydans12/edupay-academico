@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, Injectable } from '@nestjs/common';
-import type { Prisma } from '../../generated/prisma/client';
-import { PrismaService } from '../../persistence/prisma.service';
+import type { Prisma } from '../generated/prisma/client';
+import { PrismaService } from '../persistence/prisma.service';
 
 function stableSerialize(value: unknown): string {
   if (value === null || typeof value !== 'object') {
@@ -26,6 +26,7 @@ export function computePayloadFingerprint(payload: unknown): string {
 export interface IdempotentExecutionResult<T> {
   status?: number | undefined;
   data: T;
+  replayed?: boolean | undefined;
 }
 
 @Injectable()
@@ -38,6 +39,8 @@ export class CommandIdempotencyService {
     commandName: string;
     idempotencyKey?: string | null | undefined;
     payload: unknown;
+    isolationLevel?: Prisma.TransactionIsolationLevel | undefined;
+    returnReplayMetadata?: boolean | undefined;
     action: (
       tx: Prisma.TransactionClient,
     ) => Promise<IdempotentExecutionResult<T>>;
@@ -48,11 +51,17 @@ export class CommandIdempotencyService {
       commandName,
       idempotencyKey,
       payload,
+      isolationLevel,
+      returnReplayMetadata = false,
       action,
     } = params;
 
     if (!idempotencyKey || !idempotencyKey.trim()) {
-      return this.prisma.$transaction(async (tx) => action(tx));
+      return isolationLevel
+        ? this.prisma.$transaction(async (tx) => action(tx), {
+            isolationLevel,
+          })
+        : this.prisma.$transaction(async (tx) => action(tx));
     }
 
     const trimmedKey = idempotencyKey.trim();
@@ -72,10 +81,11 @@ export class CommandIdempotencyService {
 
     if (existing) {
       if (existing.payloadFingerprint === fingerprint) {
-        return {
+        const result = {
           status: existing.responseStatus,
           data: existing.responseBody as T,
         };
+        return returnReplayMetadata ? { ...result, replayed: true } : result;
       }
 
       throw new ConflictException({
@@ -86,7 +96,7 @@ export class CommandIdempotencyService {
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const transaction = async (tx: Prisma.TransactionClient) => {
         const inTxExisting = await tx.commandReceipt.findUnique({
           where: {
             tenantId_actorIdentityUserId_commandName_idempotencyKey: {
@@ -100,10 +110,13 @@ export class CommandIdempotencyService {
 
         if (inTxExisting) {
           if (inTxExisting.payloadFingerprint === fingerprint) {
-            return {
+            const result = {
               status: inTxExisting.responseStatus,
               data: inTxExisting.responseBody as T,
             };
+            return returnReplayMetadata
+              ? { ...result, replayed: true }
+              : result;
           }
 
           throw new ConflictException({
@@ -128,7 +141,11 @@ export class CommandIdempotencyService {
         });
 
         return result;
-      });
+      };
+
+      return isolationLevel
+        ? await this.prisma.$transaction(transaction, { isolationLevel })
+        : await this.prisma.$transaction(transaction);
     } catch (error: unknown) {
       if (
         error &&
@@ -149,10 +166,13 @@ export class CommandIdempotencyService {
 
         if (committedReceipt) {
           if (committedReceipt.payloadFingerprint === fingerprint) {
-            return {
+            const result = {
               status: committedReceipt.responseStatus,
               data: committedReceipt.responseBody as T,
             };
+            return returnReplayMetadata
+              ? { ...result, replayed: true }
+              : result;
           }
 
           throw new ConflictException({

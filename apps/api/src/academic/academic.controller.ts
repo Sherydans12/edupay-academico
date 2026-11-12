@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -16,6 +17,7 @@ import {
   academicPreparationStatusSchema,
   assignCourseSubjectTeachersSchema,
   courseEnrollmentSchema,
+  courseEnrollmentPromotionResultSchema,
   courseListQuerySchema,
   coursePageSchema,
   courseRosterItemSchema,
@@ -27,6 +29,7 @@ import {
   courseSubjectTeacherSchema,
   createAcademicYearSchema,
   createCourseEnrollmentSchema,
+  promoteCourseEnrollmentsSchema,
   createCourseSchema,
   createCourseSubjectSchema,
   createStudentSchema,
@@ -57,6 +60,7 @@ import {
   type CreateAcademicYear,
   type CreateCourse,
   type CreateCourseEnrollment,
+  type PromoteCourseEnrollments,
   type CreateCourseSubject,
   type CreateStudent,
   type CreateStudentSubjectEnrollment,
@@ -380,6 +384,20 @@ export class AcademicAdminController {
     return this.academics.enrollStudentInCourse(this.context(), input);
   }
 
+  @Post('course-enrollment-promotions')
+  @ContractBody(promoteCourseEnrollmentsSchema)
+  @ContractResponse(courseEnrollmentPromotionResultSchema)
+  promoteCourseEnrollments(
+    @Body(new ZodValidationPipe(promoteCourseEnrollmentsSchema))
+    input: PromoteCourseEnrollments,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<object> {
+    return this.academics.promoteCourseEnrollments(
+      this.context(idempotencyKey),
+      input,
+    );
+  }
+
   @Post('course-enrollments/:id/deactivate')
   @ContractResponse(courseEnrollmentSchema)
   deactivateEnrollment(@Param('id', uuid) id: string): Promise<object> {
@@ -430,11 +448,12 @@ export class AcademicAdminController {
     return this.academics.assignedTeachers(this.context(), id);
   }
 
-  private context(): AcademicRequestContext {
+  private context(idempotencyKey?: string): AcademicRequestContext {
     return {
       principal: this.current.principal(),
       requestId: this.current.requestId(),
       tenant: this.current.tenant(),
+      ...(idempotencyKey ? { idempotencyKey } : {}),
     };
   }
 }

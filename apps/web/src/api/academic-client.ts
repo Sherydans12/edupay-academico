@@ -3,6 +3,7 @@ import {
   academicYearSchema,
   academicPreparationStatusSchema,
   courseEnrollmentSchema,
+  courseEnrollmentPromotionResultSchema,
   coursePageSchema,
   courseRosterItemSchema,
   courseSchema,
@@ -14,6 +15,7 @@ import {
   createCourseSchema,
   createCourseSubjectSchema,
   createCourseEnrollmentSchema,
+  promoteCourseEnrollmentsSchema,
   createStudentSchema,
   createStudentSubjectEnrollmentSchema,
   createSubjectSchema,
@@ -93,6 +95,7 @@ import {
   type AcademicPreparationStatus,
   type CreateCourse,
   type CreateCourseEnrollment,
+  type PromoteCourseEnrollments,
   type CreateCourseSubject,
   type CreateStudent,
   type CreateStudentSubjectEnrollment,
@@ -811,6 +814,20 @@ export class AcademicApiClient {
   }
   getCourseRoster(id: string) {
     return this.request(`courses/${id}/roster`, courseRosterItemSchema.array());
+  }
+  promoteCourseEnrollments(
+    input: PromoteCourseEnrollments,
+    options: { idempotencyKey: string },
+  ) {
+    return this.request(
+      'course-enrollment-promotions',
+      courseEnrollmentPromotionResultSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(promoteCourseEnrollmentsSchema.parse(input)),
+        headers: { 'Idempotency-Key': options.idempotencyKey },
+      },
+    );
   }
 
   listStudents(search?: string, cursor?: string) {

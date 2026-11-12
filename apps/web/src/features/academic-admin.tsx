@@ -3195,6 +3195,560 @@ function TeachersView({
   );
 }
 
+function CoursePromotionPanel({
+  api,
+  courses,
+  academicYears,
+  onSaved,
+}: {
+  api: AcademicApiClient;
+  courses: AdminData['courses'];
+  academicYears: AdminData['academicYears'];
+  onSaved: () => void;
+}) {
+  type Decision =
+    'PROMOTE' | 'REPEAT' | 'TRANSFER' | 'DEFER' | 'SOURCE_MANAGED';
+  type Choice = { targetCourseId: string | null; decision: Decision };
+  type RosterItem = Awaited<
+    ReturnType<AcademicApiClient['getCourseRoster']>
+  >[number];
+
+  const sourceOptions = useMemo(
+    () =>
+      courses.filter(
+        (course) =>
+          course.status === 'ACTIVE' &&
+          academicYears.some(
+            (year) =>
+              year.id === course.academicYearId && year.status === 'ACTIVE',
+          ),
+      ),
+    [academicYears, courses],
+  );
+  const [sourceCourseId, setSourceCourseId] = useState(
+    sourceOptions[0]?.id ?? '',
+  );
+  const sourceCourse = sourceOptions.find(
+    (course) => course.id === sourceCourseId,
+  );
+  const sourceYear = academicYears.find(
+    (year) => year.id === sourceCourse?.academicYearId,
+  );
+  const eligibleTargetYears = useMemo(
+    () =>
+      sourceYear
+        ? academicYears
+            .filter(
+              (year) =>
+                ['DRAFT', 'ACTIVE'].includes(year.status) &&
+                year.startDate > sourceYear.endDate,
+            )
+            .sort((left, right) =>
+              left.startDate.localeCompare(right.startDate),
+            )
+        : [],
+    [academicYears, sourceYear],
+  );
+  const [requestedTargetAcademicYearId, setRequestedTargetAcademicYearId] =
+    useState('');
+  const targetAcademicYearId = eligibleTargetYears.some(
+    (year) => year.id === requestedTargetAcademicYearId,
+  )
+    ? requestedTargetAcademicYearId
+    : (eligibleTargetYears[0]?.id ?? '');
+  const targetYear = eligibleTargetYears.find(
+    (year) => year.id === targetAcademicYearId,
+  );
+  const targetCourses = useMemo(
+    () =>
+      courses.filter(
+        (course) =>
+          course.academicYearId === targetAcademicYearId &&
+          course.status !== 'ARCHIVED' &&
+          (targetYear?.status !== 'DRAFT' || course.status === 'DRAFT'),
+      ),
+    [courses, targetAcademicYearId, targetYear?.status],
+  );
+  const [defaultTargetCourseId, setDefaultTargetCourseId] = useState('');
+  const selectedDefaultTargetId = targetCourses.some(
+    (course) => course.id === defaultTargetCourseId,
+  )
+    ? defaultTargetCourseId
+    : (targetCourses[0]?.id ?? '');
+  const [roster, setRoster] = useState<RosterItem[]>([]);
+  const [rosterCourseId, setRosterCourseId] = useState('');
+  const [rosterError, setRosterError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
+  const [choices, setChoices] = useState<Record<string, Choice>>({});
+  const [operationError, setOperationError] = useState('');
+  const [operationSuccess, setOperationSuccess] = useState('');
+  const [requiresRosterRefresh, setRequiresRosterRefresh] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [commandKey, setCommandKey] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+
+  useEffect(() => {
+    const sequence = ++requestSequence.current;
+    if (sourceCourseId) {
+      void api
+        .getCourseRoster(sourceCourseId)
+        .then((nextRoster) => {
+          if (sequence === requestSequence.current) {
+            setRoster(nextRoster);
+            setRosterCourseId(sourceCourseId);
+          }
+        })
+        .catch((error: unknown) => {
+          if (sequence === requestSequence.current) {
+            setRosterError(errorMessage(error).message);
+            setRosterCourseId(sourceCourseId);
+          }
+        });
+    }
+    return () => {
+      requestSequence.current += 1;
+    };
+  }, [api, retryCount, sourceCourseId]);
+
+  function choiceFor(item: RosterItem): Choice {
+    if (item.sourceManaged) {
+      return { targetCourseId: null, decision: 'SOURCE_MANAGED' };
+    }
+    return (
+      choices[item.enrollmentId] ?? {
+        targetCourseId: selectedDefaultTargetId || null,
+        decision: selectedDefaultTargetId ? 'PROMOTE' : 'DEFER',
+      }
+    );
+  }
+
+  const counts = roster.reduce(
+    (total, item) => {
+      const choice = choiceFor(item);
+      if (choice.decision === 'PROMOTE') total.promoted += 1;
+      if (choice.decision === 'REPEAT') total.repeated += 1;
+      if (choice.decision === 'TRANSFER') total.transferred += 1;
+      if (choice.decision === 'DEFER') total.deferred += 1;
+      if (choice.decision === 'SOURCE_MANAGED') total.sourceManaged += 1;
+      return total;
+    },
+    { promoted: 0, repeated: 0, transferred: 0, deferred: 0, sourceManaged: 0 },
+  );
+  const hasCurrentRoster =
+    Boolean(sourceCourseId) && rosterCourseId === sourceCourseId;
+  const rosterLoading =
+    Boolean(sourceCourseId) && !hasCurrentRoster && !rosterError;
+  const cannotSubmit =
+    !sourceCourseId ||
+    !targetAcademicYearId ||
+    !selectedDefaultTargetId ||
+    !hasCurrentRoster ||
+    rosterLoading ||
+    roster.length === 0 ||
+    roster.length > 500 ||
+    counts.promoted + counts.repeated + counts.transferred === 0 ||
+    saving;
+
+  function editChoice(item: RosterItem, next: Choice) {
+    setChoices((current) => ({ ...current, [item.enrollmentId]: next }));
+    setCommandKey(null);
+    setOperationError('');
+    setOperationSuccess('');
+    setRequiresRosterRefresh(false);
+  }
+
+  function refreshRoster() {
+    setCommandKey(null);
+    setRoster([]);
+    setRosterCourseId('');
+    setRosterError('');
+    setChoices({});
+    setOperationError('');
+    setOperationSuccess('');
+    setRequiresRosterRefresh(false);
+    setRetryCount((current) => current + 1);
+  }
+
+  async function confirmPromotion() {
+    if (cannotSubmit || !sourceCourseId || !targetAcademicYearId) return;
+    const payload = {
+      sourceCourseId,
+      targetAcademicYearId,
+      defaultTargetCourseId: selectedDefaultTargetId,
+      sourceEnrollmentIds: roster.map((item) => item.enrollmentId),
+      assignments: roster.map((item) => ({
+        sourceEnrollmentId: item.enrollmentId,
+        ...choiceFor(item),
+      })),
+    };
+    const idempotencyKey = commandKey ?? crypto.randomUUID();
+    setCommandKey(idempotencyKey);
+    setSaving(true);
+    setOperationError('');
+    setOperationSuccess('');
+    try {
+      const result = await api.promoteCourseEnrollments(payload, {
+        idempotencyKey,
+      });
+      setOperationSuccess(
+        `Avance completado: ${result.promotedCount} promovidos, ${result.repeatedCount} repitentes y ${result.transferredCount} con cambio de curso. ${result.deferredCount + result.sourceManagedCount} quedaron sin movimiento.`,
+      );
+      setShowConfirmation(false);
+      setCommandKey(null);
+      setChoices({});
+      setRosterCourseId('');
+      setRosterError('');
+      setRequiresRosterRefresh(false);
+      setRetryCount((current) => current + 1);
+      onSaved();
+    } catch (error) {
+      setOperationError(errorMessage(error).message);
+      setRequiresRosterRefresh(
+        error instanceof AcademicApiError &&
+          error.code === 'COURSE_ROSTER_CHANGED',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="academic-panel">
+      <div className="section-heading">
+        <div>
+          <h2>Avanzar un curso al siguiente año</h2>
+          <p>
+            Revisa la matrícula vigente, define el destino de cada alumno y
+            confirma todos los cambios en una sola operación.
+          </p>
+        </div>
+      </div>
+
+      {operationError && !showConfirmation ? (
+        <Alert title="No se pudo completar el avance" tone="error">
+          {operationError}
+          {requiresRosterRefresh ? (
+            <div className="provisioning-actions">
+              <Button onClick={refreshRoster} variant="secondary">
+                Actualizar vista previa
+              </Button>
+            </div>
+          ) : null}
+        </Alert>
+      ) : null}
+      {operationSuccess ? (
+        <Alert title="Avance de curso completado" tone="success">
+          {operationSuccess}
+        </Alert>
+      ) : null}
+
+      <div className="assignment-form-grid">
+        <Select
+          disabled={sourceOptions.length === 0 || saving}
+          id="promotion-source-course"
+          label="Curso de origen"
+          value={sourceCourseId}
+          onChange={(event) => {
+            setSourceCourseId(event.target.value);
+            setRoster([]);
+            setRosterCourseId('');
+            setRosterError('');
+            setChoices({});
+            setOperationError('');
+            setOperationSuccess('');
+            setRequiresRosterRefresh(false);
+            setCommandKey(null);
+          }}
+        >
+          <option value="">Selecciona un curso activo</option>
+          {sourceOptions.map((course) => (
+            <option key={course.id} value={course.id}>
+              {course.label} ·{' '}
+              {academicYears.find((year) => year.id === course.academicYearId)
+                ?.label ?? 'Año no disponible'}
+            </option>
+          ))}
+        </Select>
+        <Select
+          disabled={eligibleTargetYears.length === 0 || saving}
+          id="promotion-target-year"
+          label="Año de destino"
+          value={targetAcademicYearId}
+          onChange={(event) => {
+            setRequestedTargetAcademicYearId(event.target.value);
+            setDefaultTargetCourseId('');
+            setChoices({});
+            setCommandKey(null);
+          }}
+        >
+          <option value="">Selecciona un año posterior</option>
+          {eligibleTargetYears.map((year) => (
+            <option key={year.id} value={year.id}>
+              {year.label} ·{' '}
+              {year.status === 'DRAFT' ? 'En preparación' : 'Activo'}
+            </option>
+          ))}
+        </Select>
+        <Select
+          disabled={targetCourses.length === 0 || saving}
+          id="promotion-default-course"
+          label="Curso de destino predeterminado"
+          value={selectedDefaultTargetId}
+          onChange={(event) => {
+            setDefaultTargetCourseId(event.target.value);
+            setChoices({});
+            setCommandKey(null);
+          }}
+        >
+          <option value="">Selecciona un curso de destino</option>
+          {targetCourses.map((course) => (
+            <option key={course.id} value={course.id}>
+              {course.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      {!sourceOptions.length ? (
+        <EmptyState
+          description="Activa un curso dentro del año vigente para preparar su matrícula de destino."
+          title="No hay cursos activos para avanzar"
+        />
+      ) : null}
+      {sourceCourse && !eligibleTargetYears.length ? (
+        <EmptyState
+          description="Crea un año académico posterior y sus cursos para preparar el avance. Los destinos se eligen explícitamente; no se deducen del nombre del curso."
+          title="Falta preparar el año de destino"
+        />
+      ) : null}
+      {rosterLoading ? (
+        <p aria-live="polite" className="table-muted" role="status">
+          Cargando la matrícula vigente…
+        </p>
+      ) : null}
+      {rosterError ? (
+        <Alert title="No se pudo cargar la matrícula" tone="error">
+          {rosterError}{' '}
+          <Button onClick={refreshRoster} variant="secondary">
+            Volver a cargar
+          </Button>
+        </Alert>
+      ) : null}
+
+      {hasCurrentRoster &&
+      roster.length === 0 &&
+      !rosterLoading &&
+      !rosterError ? (
+        <EmptyState
+          description="Este curso no tiene alumnos activos en su matrícula."
+          title="No hay alumnos para avanzar"
+        />
+      ) : null}
+      {hasCurrentRoster && roster.length > 500 ? (
+        <Alert
+          title="El curso supera el límite de una operación"
+          tone="warning"
+        >
+          Esta primera versión procesa hasta 500 alumnos por curso en una única
+          transacción. No se aplicó ningún cambio.
+        </Alert>
+      ) : null}
+
+      {hasCurrentRoster && roster.length > 0 && roster.length <= 500 ? (
+        <>
+          <p aria-live="polite" className="table-muted" role="status">
+            Vista previa: {counts.promoted} avanzan al destino principal,{' '}
+            {counts.repeated} repiten, {counts.transferred} cambian de curso,{' '}
+            {counts.deferred} quedan pendientes y {counts.sourceManaged} están
+            gestionados por sincronización.
+          </p>
+          {counts.sourceManaged > 0 ? (
+            <Alert
+              title="Hay matrículas administradas por sincronización"
+              tone="warning"
+            >
+              Esas matrículas permanecen sin cambios en este corte. Su origen
+              debe migrarse antes de poder avanzarlas desde Académico.
+            </Alert>
+          ) : null}
+          <div className="responsive-table">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Alumno</th>
+                  <th scope="col">Destino</th>
+                  <th scope="col">Decisión</th>
+                </tr>
+              </thead>
+              <tbody>
+                {roster.map((item) => {
+                  const choice = choiceFor(item);
+                  const name = `${item.student.firstName} ${item.student.lastName}`;
+                  const isDefault =
+                    choice.targetCourseId === selectedDefaultTargetId;
+                  return (
+                    <tr key={item.enrollmentId}>
+                      <td data-label="Alumno">
+                        <strong>{name}</strong>
+                        {item.sourceManaged ? (
+                          <small>
+                            {' '}
+                            · Matrícula administrada por sincronización
+                          </small>
+                        ) : null}
+                      </td>
+                      <td data-label="Destino">
+                        <Select
+                          disabled={
+                            item.sourceManaged ||
+                            saving ||
+                            !targetCourses.length
+                          }
+                          id={`promotion-target-${item.enrollmentId}`}
+                          label={`Destino de ${name}`}
+                          value={choice.targetCourseId ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value || null;
+                            editChoice(item, {
+                              targetCourseId: value,
+                              decision: value
+                                ? value === selectedDefaultTargetId
+                                  ? 'PROMOTE'
+                                  : 'TRANSFER'
+                                : 'DEFER',
+                            });
+                          }}
+                        >
+                          <option value="">Dejar pendiente</option>
+                          {targetCourses.map((course) => (
+                            <option key={course.id} value={course.id}>
+                              {course.label}
+                              {course.id === selectedDefaultTargetId
+                                ? ' · Principal'
+                                : ''}
+                            </option>
+                          ))}
+                        </Select>
+                      </td>
+                      <td data-label="Decisión">
+                        <Select
+                          disabled={item.sourceManaged || saving}
+                          id={`promotion-decision-${item.enrollmentId}`}
+                          label={`Decisión para ${name}`}
+                          value={choice.decision}
+                          onChange={(event) => {
+                            const decision = event.target.value as Decision;
+                            editChoice(item, {
+                              targetCourseId:
+                                decision === 'DEFER'
+                                  ? null
+                                  : (choice.targetCourseId ??
+                                    selectedDefaultTargetId),
+                              decision,
+                            });
+                          }}
+                        >
+                          {item.sourceManaged ? (
+                            <option value="SOURCE_MANAGED">
+                              Gestionada por sincronización
+                            </option>
+                          ) : choice.targetCourseId ? (
+                            <>
+                              {isDefault ? (
+                                <option value="PROMOTE">
+                                  Avanza al curso principal
+                                </option>
+                              ) : null}
+                              <option value="REPEAT">Repite curso</option>
+                              {!isDefault ? (
+                                <option value="TRANSFER">
+                                  Cambio de curso
+                                </option>
+                              ) : null}
+                            </>
+                          ) : (
+                            <option value="DEFER">
+                              Pendiente de asignación
+                            </option>
+                          )}
+                        </Select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="table-muted">
+            Antes de guardar, Académico comprobará que la matrícula no haya
+            cambiado desde esta vista previa. Los destinos se mantienen dentro
+            del año elegido; el curso anterior quedará como historial.
+          </p>
+          <Button
+            disabled={cannotSubmit}
+            onClick={() => {
+              setOperationError('');
+              setShowConfirmation(true);
+            }}
+          >
+            Revisar y confirmar avance
+          </Button>
+        </>
+      ) : null}
+
+      <Dialog
+        description="Confirma el año y el resultado por alumno antes de cambiar las matrículas."
+        onOpenChange={(open) => !open && !saving && setShowConfirmation(false)}
+        open={showConfirmation}
+        title="Confirmar avance del curso"
+      >
+        <div className="academic-form">
+          <p>
+            {sourceCourse?.label} · {sourceYear?.label} → {targetYear?.label} ·{' '}
+            {targetCourses.find(
+              (course) => course.id === selectedDefaultTargetId,
+            )?.label ?? 'Sin destino principal'}
+          </p>
+          <p>
+            {counts.promoted} avanzan, {counts.repeated} repiten,{' '}
+            {counts.transferred} cambian de curso, {counts.deferred} quedan
+            pendientes y {counts.sourceManaged} no se modifican.
+          </p>
+          <p>
+            Las matrículas antiguas de quienes avanzan se conservarán inactivas
+            y se crearán sus nuevas matrículas en el destino seleccionado.
+          </p>
+          {operationError ? (
+            <Alert title="No se confirmó el avance" tone="error">
+              {operationError}
+              {requiresRosterRefresh ? (
+                <div className="provisioning-actions">
+                  <Button onClick={refreshRoster} variant="secondary">
+                    Actualizar vista previa
+                  </Button>
+                </div>
+              ) : null}
+            </Alert>
+          ) : null}
+          <div className="provisioning-actions">
+            <Button
+              disabled={saving}
+              onClick={() => setShowConfirmation(false)}
+              variant="secondary"
+            >
+              Volver a revisar
+            </Button>
+            <Button loading={saving} onClick={() => void confirmPromotion()}>
+              Confirmar avance
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    </section>
+  );
+}
+
 function EnrollmentsAndAssignmentsView({
   api,
   data,
@@ -3230,193 +3784,201 @@ function EnrollmentsAndAssignmentsView({
   }
 
   return (
-    <section className="academic-panel">
-      <div className="section-heading">
-        <div>
-          <h2>Inscripciones y asignaciones directas</h2>
-          <p>
-            Estas relaciones se guardan en Académico; Identity aporta la
-            autenticación segura.
-          </p>
+    <div className="academic-stack">
+      <CoursePromotionPanel
+        api={api}
+        academicYears={data.academicYears}
+        courses={data.courses}
+        onSaved={onSaved}
+      />
+      <section className="academic-panel">
+        <div className="section-heading">
+          <div>
+            <h2>Inscripciones y asignaciones directas</h2>
+            <p>
+              Estas relaciones se guardan en Académico; Identity aporta la
+              autenticación segura.
+            </p>
+          </div>
         </div>
-      </div>
-      {actionError ? (
-        <Alert title="No se pudo guardar la relación" tone="error">
-          {actionError}
-        </Alert>
-      ) : null}
-      {actionSuccess ? (
-        <Alert title="Operación completada" tone="success">
-          {actionSuccess}
-        </Alert>
-      ) : null}
+        {actionError ? (
+          <Alert title="No se pudo guardar la relación" tone="error">
+            {actionError}
+          </Alert>
+        ) : null}
+        {actionSuccess ? (
+          <Alert title="Operación completada" tone="success">
+            {actionSuccess}
+          </Alert>
+        ) : null}
 
-      <div className="assignment-form-grid">
-        <form
-          className="academic-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(
-              () => api.enrollStudent({ studentId, courseId }),
-              'Alumno inscrito correctamente en el curso.',
-            );
-          }}
-        >
-          <h3>Inscribir alumno en curso</h3>
-          <Select
-            disabled={!data.students.length}
-            id="enroll-student"
-            label="Alumno"
-            required
-            value={studentId}
-            onChange={(event) => setStudentId(event.target.value)}
+        <div className="assignment-form-grid">
+          <form
+            className="academic-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run(
+                () => api.enrollStudent({ studentId, courseId }),
+                'Alumno inscrito correctamente en el curso.',
+              );
+            }}
           >
-            <option value="">Selecciona un alumno</option>
-            {data.students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.firstName} {student.lastName}
-              </option>
-            ))}
-          </Select>
-          <Select
-            disabled={!data.courses.length}
-            id="enroll-course"
-            label="Curso"
-            required
-            value={courseId}
-            onChange={(event) => setCourseId(event.target.value)}
-          >
-            <option value="">Selecciona un curso</option>
-            {data.courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.label} ·{' '}
-                {data.academicYears.find(
-                  (year) => year.id === course.academicYearId,
-                )?.label ?? 'Año no disponible'}
-              </option>
-            ))}
-          </Select>
-          <Button disabled={!studentId || !courseId} type="submit">
-            Inscribir alumno
-          </Button>
-        </form>
+            <h3>Inscribir alumno en curso</h3>
+            <Select
+              disabled={!data.students.length}
+              id="enroll-student"
+              label="Alumno"
+              required
+              value={studentId}
+              onChange={(event) => setStudentId(event.target.value)}
+            >
+              <option value="">Selecciona un alumno</option>
+              {data.students.map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.firstName} {student.lastName}
+                </option>
+              ))}
+            </Select>
+            <Select
+              disabled={!data.courses.length}
+              id="enroll-course"
+              label="Curso"
+              required
+              value={courseId}
+              onChange={(event) => setCourseId(event.target.value)}
+            >
+              <option value="">Selecciona un curso</option>
+              {data.courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.label} ·{' '}
+                  {data.academicYears.find(
+                    (year) => year.id === course.academicYearId,
+                  )?.label ?? 'Año no disponible'}
+                </option>
+              ))}
+            </Select>
+            <Button disabled={!studentId || !courseId} type="submit">
+              Inscribir alumno
+            </Button>
+          </form>
 
-        <form
-          className="academic-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(
-              () =>
-                api.assignCourseSubjectTeachers({
-                  courseSubjectId,
-                  teacherIds: [teacherId],
-                }),
-              'Profesor asignado a la asignatura con éxito.',
-            );
-          }}
-        >
-          <h3>Asignar profesor a asignatura</h3>
-          <Select
-            disabled={!availableCourseSubjects.length}
-            id="assignment-course-subject"
-            label="Asignatura del curso"
-            required
-            value={courseSubjectId}
-            onChange={(event) => setCourseSubjectId(event.target.value)}
+          <form
+            className="academic-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run(
+                () =>
+                  api.assignCourseSubjectTeachers({
+                    courseSubjectId,
+                    teacherIds: [teacherId],
+                  }),
+                'Profesor asignado a la asignatura con éxito.',
+              );
+            }}
           >
-            <option value="">Selecciona una asignatura del curso</option>
-            {availableCourseSubjects.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.subject?.name ?? item.subjectId} (
-                {data.courses.find((c) => c.id === item.courseId)?.label ??
-                  'Curso'}{' '}
-                ·{' '}
-                {data.academicYears.find(
-                  (year) =>
-                    year.id ===
-                    data.courses.find((c) => c.id === item.courseId)
-                      ?.academicYearId,
-                )?.label ?? 'Año no disponible'}
-                )
-              </option>
-            ))}
-          </Select>
-          <Select
-            disabled={!data.teachers.length}
-            id="assignment-teacher"
-            label="Profesor"
-            required
-            value={teacherId}
-            onChange={(event) => setTeacherId(event.target.value)}
-          >
-            <option value="">Selecciona un profesor</option>
-            {data.teachers.map((teacher) => (
-              <option key={teacher.id} value={teacher.id}>
-                {teacher.firstName} {teacher.lastName}
-              </option>
-            ))}
-          </Select>
-          <Button disabled={!courseSubjectId || !teacherId} type="submit">
-            Guardar asignación
-          </Button>
-        </form>
+            <h3>Asignar profesor a asignatura</h3>
+            <Select
+              disabled={!availableCourseSubjects.length}
+              id="assignment-course-subject"
+              label="Asignatura del curso"
+              required
+              value={courseSubjectId}
+              onChange={(event) => setCourseSubjectId(event.target.value)}
+            >
+              <option value="">Selecciona una asignatura del curso</option>
+              {availableCourseSubjects.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.subject?.name ?? item.subjectId} (
+                  {data.courses.find((c) => c.id === item.courseId)?.label ??
+                    'Curso'}{' '}
+                  ·{' '}
+                  {data.academicYears.find(
+                    (year) =>
+                      year.id ===
+                      data.courses.find((c) => c.id === item.courseId)
+                        ?.academicYearId,
+                  )?.label ?? 'Año no disponible'}
+                  )
+                </option>
+              ))}
+            </Select>
+            <Select
+              disabled={!data.teachers.length}
+              id="assignment-teacher"
+              label="Profesor"
+              required
+              value={teacherId}
+              onChange={(event) => setTeacherId(event.target.value)}
+            >
+              <option value="">Selecciona un profesor</option>
+              {data.teachers.map((teacher) => (
+                <option key={teacher.id} value={teacher.id}>
+                  {teacher.firstName} {teacher.lastName}
+                </option>
+              ))}
+            </Select>
+            <Button disabled={!courseSubjectId || !teacherId} type="submit">
+              Guardar asignación
+            </Button>
+          </form>
 
-        <form
-          className="academic-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(
-              () => api.directlyEnrollStudent({ studentId, courseSubjectId }),
-              'Asignatura asignada directamente al alumno.',
-            );
-          }}
-        >
-          <h3>Asignar asignatura directamente</h3>
-          <Select
-            disabled={!data.students.length}
-            id="direct-student"
-            label="Alumno"
-            required
-            value={studentId}
-            onChange={(event) => setStudentId(event.target.value)}
+          <form
+            className="academic-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run(
+                () => api.directlyEnrollStudent({ studentId, courseSubjectId }),
+                'Asignatura asignada directamente al alumno.',
+              );
+            }}
           >
-            <option value="">Selecciona un alumno</option>
-            {data.students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.firstName} {student.lastName}
-              </option>
-            ))}
-          </Select>
-          <Select
-            disabled={!availableCourseSubjects.length}
-            id="direct-course-subject"
-            label="Asignatura del curso"
-            required
-            value={courseSubjectId}
-            onChange={(event) => setCourseSubjectId(event.target.value)}
-          >
-            <option value="">Selecciona una asignatura del curso</option>
-            {availableCourseSubjects.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.subject?.name ?? item.subjectId} ·{' '}
-                {data.courses.find((course) => course.id === item.courseId)
-                  ?.label ?? 'Curso'}{' '}
-                ·{' '}
-                {data.academicYears.find(
-                  (year) =>
-                    year.id ===
-                    data.courses.find((course) => course.id === item.courseId)
-                      ?.academicYearId,
-                )?.label ?? 'Año no disponible'}
-              </option>
-            ))}
-          </Select>
-          <Button disabled={!studentId || !courseSubjectId} type="submit">
-            Asignar directamente
-          </Button>
-        </form>
-      </div>
-    </section>
+            <h3>Asignar asignatura directamente</h3>
+            <Select
+              disabled={!data.students.length}
+              id="direct-student"
+              label="Alumno"
+              required
+              value={studentId}
+              onChange={(event) => setStudentId(event.target.value)}
+            >
+              <option value="">Selecciona un alumno</option>
+              {data.students.map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.firstName} {student.lastName}
+                </option>
+              ))}
+            </Select>
+            <Select
+              disabled={!availableCourseSubjects.length}
+              id="direct-course-subject"
+              label="Asignatura del curso"
+              required
+              value={courseSubjectId}
+              onChange={(event) => setCourseSubjectId(event.target.value)}
+            >
+              <option value="">Selecciona una asignatura del curso</option>
+              {availableCourseSubjects.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.subject?.name ?? item.subjectId} ·{' '}
+                  {data.courses.find((course) => course.id === item.courseId)
+                    ?.label ?? 'Curso'}{' '}
+                  ·{' '}
+                  {data.academicYears.find(
+                    (year) =>
+                      year.id ===
+                      data.courses.find((course) => course.id === item.courseId)
+                        ?.academicYearId,
+                  )?.label ?? 'Año no disponible'}
+                </option>
+              ))}
+            </Select>
+            <Button disabled={!studentId || !courseSubjectId} type="submit">
+              Asignar directamente
+            </Button>
+          </form>
+        </div>
+      </section>
+    </div>
   );
 }
 

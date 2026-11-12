@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { SecurityFoundationModule } from '../security/security-foundation.module';
 import { FinancialProjectionContractModule } from '../financial-projection/financial-projection-contract.module';
+import { CommandIdempotencyService } from '../idempotency/command-idempotency.service';
 import {
   ACADEMIC_AUDIT_PORT,
   CorrelatedAcademicAuditLogger,
@@ -17,6 +18,7 @@ import { AcademicService } from './academic.service';
   controllers: [AcademicAdminController, AcademicContextController],
   providers: [
     AcademicService,
+    CommandIdempotencyService,
     CorrelatedAcademicAuditLogger,
     {
       provide: ACADEMIC_AUDIT_PORT,

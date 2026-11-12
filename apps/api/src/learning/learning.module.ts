@@ -11,7 +11,7 @@ import {
 import { LearningService } from './learning.service';
 import { LearningReadModule } from './read/learning-read.module';
 import { SparseOrderingService } from './ordering/sparse-ordering.service';
-import { CommandIdempotencyService } from './idempotency/command-idempotency.service';
+import { CommandIdempotencyService } from '../idempotency/command-idempotency.service';
 
 @Module({
   imports: [
