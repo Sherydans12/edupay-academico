@@ -924,7 +924,10 @@ describe.runIf(testDatabaseUrl)(
 
       await prisma.student.update({
         where: { tenantId_id: { tenantId: 'tenant-a', id: students[4]!.id } },
-        data: { source: 'EDUPAY' },
+        data: {
+          source: 'EDUPAY',
+          externalReference: `annual-advancement-student-${students[4]!.id}`,
+        },
       });
       await prisma.courseEnrollment.update({
         where: {
@@ -933,7 +936,10 @@ describe.runIf(testDatabaseUrl)(
             id: sourceEnrollments[4]!.id,
           },
         },
-        data: { source: 'EDUPAY' },
+        data: {
+          source: 'EDUPAY',
+          externalReference: `annual-advancement-enrollment-${sourceEnrollments[4]!.id}`,
+        },
       });
 
       const rosterSummary = await api(admin)
