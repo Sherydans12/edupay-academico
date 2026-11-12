@@ -4,7 +4,7 @@ import {
   CommandIdempotencyService,
   computePayloadFingerprint,
 } from './command-idempotency.service';
-import type { PrismaService } from '../../persistence/prisma.service';
+import type { PrismaService } from '../persistence/prisma.service';
 
 describe('CommandIdempotencyService', () => {
   let prisma: {

@@ -23,6 +23,35 @@ type EnrollmentForProjection = {
 
 @Injectable()
 export class FinancialProjectionOutboxService {
+  async enqueueEnrollments(
+    tx: TransactionClient,
+    enrollments: readonly EnrollmentForProjection[],
+    correlationId?: string,
+  ): Promise<void> {
+    const batchSize = 500;
+    for (let offset = 0; offset < enrollments.length; offset += batchSize) {
+      const data = enrollments
+        .slice(offset, offset + batchSize)
+        .map((enrollment) => {
+          const payload = this.enrollmentPayload(enrollment);
+          return {
+            tenantId: enrollment.tenantId,
+            eventType:
+              payload.operation === 'TOMBSTONE'
+                ? 'academic.financial-projection.enrollment.tombstoned.v1'
+                : 'academic.financial-projection.enrollment.upserted.v1',
+            schemaVersion: ACADEMIC_FINANCIAL_PROJECTION_SCHEMA_VERSION,
+            aggregateId: enrollment.id,
+            entityVersion: enrollment.financialProjectionVersion,
+            occurredAt: enrollment.updatedAt,
+            correlationId: correlationId ?? null,
+            payload: payload as unknown as Prisma.InputJsonValue,
+          };
+        });
+      await tx.financialProjectionOutboxEvent.createMany({ data });
+    }
+  }
+
   /**
    * This method receives the enrollment returned by the same Prisma
    * transaction that made the academic change. It must never be invoked after

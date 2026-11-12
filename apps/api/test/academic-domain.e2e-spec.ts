@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import {
@@ -835,6 +836,249 @@ describe.runIf(testDatabaseUrl)(
       expect(
         await prisma.courseEnrollment.count({ where: { status: 'ACTIVE' } }),
       ).toBe(1);
+    });
+
+    it('paginates large course rosters and summarizes the full course', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const base = await createStructure(admin, '2026', '4° Básico A', 'Lenguaje');
+      const students = Array.from({ length: 51 }, (_, index) => ({
+        id: randomUUID(),
+        tenantId: 'tenant-a',
+        firstName: `Estudiante ${index + 1}`,
+        lastName: 'Prueba',
+        source: 'MANUAL',
+        status: 'ACTIVE' as const,
+      }));
+      await prisma.student.createMany({ data: students });
+      await prisma.courseEnrollment.createMany({
+        data: students.map((student) => ({
+          tenantId: 'tenant-a',
+          studentId: student.id,
+          courseId: base.course.id,
+          source: 'MANUAL',
+          status: 'ACTIVE' as const,
+        })),
+      });
+
+      const firstPage = await api(admin)
+        .get(`/api/v1/courses/${base.course.id}/roster`)
+        .expect(200);
+      expect(firstPage.body).toMatchObject({
+        totalCount: 51,
+        items: expect.any(Array),
+      });
+      expect(firstPage.body.items).toHaveLength(50);
+      expect(firstPage.body.nextCursor).toEqual(expect.any(String));
+
+      const secondPage = await api(admin)
+        .get(
+          `/api/v1/courses/${base.course.id}/roster?cursor=${encodeURIComponent(firstPage.body.nextCursor)}`,
+        )
+        .expect(200);
+      expect(secondPage.body.items).toHaveLength(1);
+      expect(secondPage.body.nextCursor).toBeNull();
+
+      const summary = await api(admin)
+        .get(`/api/v1/courses/${base.course.id}/roster/summary`)
+        .expect(200);
+      expect(summary.body).toMatchObject({
+        sourceCourseId: base.course.id,
+        totalCount: 51,
+        sourceManagedCount: 0,
+        operationAllowed: true,
+        maxRosterCount: 10_000,
+      });
+      expect(summary.body.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('advances a roster with exceptions, preserves source-managed rows, and replays idempotently', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const source = await createStructure(admin, '2026', '6° Básico A', 'Matemática');
+      const targetYear = await post(admin, '/api/v1/academic-years', {
+        label: '2027',
+        startDate: '2027-03-01',
+        endDate: '2027-12-20',
+      });
+      const destinations = await Promise.all(
+        ['7° Básico A', '6° Básico A', '6° Básico B'].map((label) =>
+          post(admin, '/api/v1/courses', {
+            academicYearId: targetYear.id,
+            label,
+            status: 'DRAFT',
+          }),
+        ),
+      );
+      const students = await Promise.all(
+        ['Ana', 'Berta', 'Camila', 'Daniela', 'Emilia'].map((name) =>
+          createStudent(admin, name, 'Prueba'),
+        ),
+      );
+      const sourceEnrollments = await Promise.all(
+        students.map((student) =>
+          post(admin, '/api/v1/course-enrollments', {
+            studentId: student.id,
+            courseId: source.course.id,
+          }),
+        ),
+      );
+
+      await prisma.student.update({
+        where: { tenantId_id: { tenantId: 'tenant-a', id: students[4]!.id } },
+        data: {
+          source: 'EDUPAY',
+          externalReference: `annual-advancement-student-${students[4]!.id}`,
+        },
+      });
+      await prisma.courseEnrollment.update({
+        where: {
+          tenantId_id: {
+            tenantId: 'tenant-a',
+            id: sourceEnrollments[4]!.id,
+          },
+        },
+        data: {
+          source: 'EDUPAY',
+          externalReference: `annual-advancement-enrollment-${sourceEnrollments[4]!.id}`,
+        },
+      });
+
+      const rosterSummary = await api(admin)
+        .get(`/api/v1/courses/${source.course.id}/roster/summary`)
+        .expect(200);
+      expect(rosterSummary.body).toMatchObject({
+        totalCount: 5,
+        sourceManagedCount: 1,
+        operationAllowed: true,
+      });
+      const command = {
+        sourceCourseId: source.course.id,
+        targetAcademicYearId: targetYear.id,
+        defaultTargetCourseId: destinations[0]!.id,
+        expectedRosterFingerprint: rosterSummary.body.fingerprint,
+        overrides: [
+          {
+            sourceEnrollmentId: sourceEnrollments[1]!.id,
+            targetCourseId: destinations[1]!.id,
+            decision: 'REPEAT',
+          },
+          {
+            sourceEnrollmentId: sourceEnrollments[2]!.id,
+            targetCourseId: destinations[2]!.id,
+            decision: 'TRANSFER',
+          },
+          {
+            sourceEnrollmentId: sourceEnrollments[3]!.id,
+            targetCourseId: null,
+            decision: 'DEFER',
+          },
+        ],
+      };
+      const idempotencyKey = 'academic-promotion-2027-mixed-roster';
+      const firstResult = await api(admin)
+        .post('/api/v1/course-enrollment-promotions')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(command)
+        .expect(201);
+      expect(firstResult.body).toMatchObject({
+        sourceCourseId: source.course.id,
+        targetAcademicYearId: targetYear.id,
+        promotedCount: 1,
+        repeatedCount: 1,
+        transferredCount: 1,
+        deferredCount: 1,
+        sourceManagedCount: 1,
+      });
+
+      const replay = await api(admin)
+        .post('/api/v1/course-enrollment-promotions')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(command)
+        .expect(201);
+      expect(replay.body).toEqual(firstResult.body);
+      expect(await prisma.courseEnrollment.count()).toBe(8);
+
+      const sourceStates = await Promise.all(
+        sourceEnrollments.map((enrollment) =>
+          prisma.courseEnrollment.findUniqueOrThrow({
+            where: {
+              tenantId_id: { tenantId: 'tenant-a', id: enrollment.id },
+            },
+          }),
+        ),
+      );
+      expect(sourceStates.map(({ status }) => status)).toEqual([
+        'INACTIVE',
+        'INACTIVE',
+        'INACTIVE',
+        'ACTIVE',
+        'ACTIVE',
+      ]);
+      expect(sourceStates[4]?.source).toBe('EDUPAY');
+      expect(
+        await prisma.courseEnrollment.count({
+          where: {
+            tenantId: 'tenant-a',
+            courseId: { in: destinations.map(({ id }) => id) },
+            status: 'ACTIVE',
+          },
+        }),
+      ).toBe(3);
+    });
+
+    it('rejects promotion when the roster changes after preview', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const source = await createStructure(admin, '2026', '5° Básico A', 'Historia');
+      const targetYear = await post(admin, '/api/v1/academic-years', {
+        label: '2027',
+        startDate: '2027-03-01',
+        endDate: '2027-12-20',
+      });
+      const destination = await post(admin, '/api/v1/courses', {
+        academicYearId: targetYear.id,
+        label: '6° Básico A',
+        status: 'DRAFT',
+      });
+      const firstStudent = await createStudent(admin, 'Francisca', 'Fuentealba');
+      await post(admin, '/api/v1/course-enrollments', {
+        studentId: firstStudent.id,
+        courseId: source.course.id,
+      });
+      const preview = await api(admin)
+        .get(`/api/v1/courses/${source.course.id}/roster/summary`)
+        .expect(200);
+
+      const laterStudent = await createStudent(admin, 'Gabriel', 'González');
+      await post(admin, '/api/v1/course-enrollments', {
+        studentId: laterStudent.id,
+        courseId: source.course.id,
+      });
+
+      const response = await api(admin)
+        .post('/api/v1/course-enrollment-promotions')
+        .set('Idempotency-Key', 'academic-promotion-stale-roster')
+        .send({
+          sourceCourseId: source.course.id,
+          targetAcademicYearId: targetYear.id,
+          defaultTargetCourseId: destination.id,
+          expectedRosterFingerprint: preview.body.fingerprint,
+          overrides: [],
+        })
+        .expect(409);
+      expect(response.body.error.code).toBe('COURSE_ROSTER_CHANGED');
+      expect(
+        await prisma.courseEnrollment.count({
+          where: { tenantId: 'tenant-a', courseId: destination.id },
+        }),
+      ).toBe(0);
+      expect(
+        await prisma.courseEnrollment.count({
+          where: {
+            tenantId: 'tenant-a',
+            courseId: source.course.id,
+            status: 'ACTIVE',
+          },
+        }),
+      ).toBe(2);
     });
 
     function api(accessToken: string) {

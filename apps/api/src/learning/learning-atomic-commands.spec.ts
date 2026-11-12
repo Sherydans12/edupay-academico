@@ -15,7 +15,7 @@ import {
 import type { LearningStudentWorkPort } from './learning-student-work.port';
 import { LearningService } from './learning.service';
 import { SparseOrderingService } from './ordering/sparse-ordering.service';
-import { CommandIdempotencyService } from './idempotency/command-idempotency.service';
+import { CommandIdempotencyService } from '../idempotency/command-idempotency.service';
 import type { NotificationService } from '../notifications/notification.service';
 import { TrustedTenantContext } from '../tenant/trusted-tenant-context';
 import type { PrismaService } from '../persistence/prisma.service';

@@ -283,6 +283,92 @@ export const createCourseEnrollmentSchema = z
   })
   .strict();
 
+export const courseEnrollmentPromotionDecisionSchema = z.enum([
+  'PROMOTE',
+  'REPEAT',
+  'TRANSFER',
+  'DEFER',
+  'SOURCE_MANAGED',
+]);
+export const courseEnrollmentPromotionOverrideLimit = 400;
+export const courseEnrollmentPromotionRosterLimit = 10_000;
+
+export const promoteCourseEnrollmentsSchema = z
+  .object({
+    sourceCourseId: opaqueIdSchema,
+    targetAcademicYearId: opaqueIdSchema,
+    defaultTargetCourseId: opaqueIdSchema,
+    expectedRosterFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    overrides: z
+      .array(
+        z
+          .object({
+            sourceEnrollmentId: opaqueIdSchema,
+            targetCourseId: opaqueIdSchema.nullable(),
+            decision: z.enum(['REPEAT', 'TRANSFER', 'DEFER']),
+          })
+          .strict(),
+      )
+      .max(courseEnrollmentPromotionOverrideLimit),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const overrideIds = new Set(
+      value.overrides.map((override) => override.sourceEnrollmentId),
+    );
+
+    if (overrideIds.size !== value.overrides.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'overrides must not contain duplicate enrollments',
+        path: ['overrides'],
+      });
+    }
+
+    value.overrides.forEach((override, index) => {
+      const hasTarget = override.targetCourseId !== null;
+      if (override.decision === 'DEFER' && hasTarget) {
+        context.addIssue({
+          code: 'custom',
+          message: 'A deferred enrollment cannot have a target',
+          path: ['overrides', index, 'targetCourseId'],
+        });
+      }
+      if (override.decision !== 'DEFER' && !hasTarget) {
+        context.addIssue({
+          code: 'custom',
+          message: 'A repeat or transfer decision requires a target course',
+          path: ['overrides', index, 'targetCourseId'],
+        });
+      }
+      if (
+        override.decision === 'TRANSFER' &&
+        override.targetCourseId === value.defaultTargetCourseId
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'TRANSFER must use a different target course',
+          path: ['overrides', index, 'targetCourseId'],
+        });
+      }
+    });
+  });
+
+export const courseEnrollmentPromotionResultSchema = z
+  .object({
+    sourceCourseId: opaqueIdSchema,
+    targetAcademicYearId: opaqueIdSchema,
+    defaultTargetCourseId: opaqueIdSchema,
+    sourceRosterCount: z.number().int().nonnegative(),
+    promotedCount: z.number().int().nonnegative(),
+    repeatedCount: z.number().int().nonnegative(),
+    transferredCount: z.number().int().nonnegative(),
+    deferredCount: z.number().int().nonnegative(),
+    sourceManagedCount: z.number().int().nonnegative(),
+    completedAt: timestampSchema,
+  })
+  .strict();
+
 export const studentSubjectEnrollmentSchema = z
   .object({
     id: opaqueIdSchema,
@@ -328,7 +414,28 @@ export const assignCourseSubjectTeachersSchema = z
 export const courseRosterItemSchema = z
   .object({
     enrollmentId: opaqueIdSchema,
+    sourceManaged: z.boolean(),
     student: studentSchema,
+  })
+  .strict();
+export const courseRosterPageSchema = z
+  .object({
+    items: z.array(courseRosterItemSchema),
+    nextCursor: opaqueIdSchema.nullable(),
+    totalCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export const courseRosterSummarySchema = z
+  .object({
+    sourceCourseId: opaqueIdSchema,
+    fingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+    totalCount: z.number().int().nonnegative(),
+    sourceManagedCount: z.number().int().nonnegative(),
+    operationAllowed: z.boolean(),
+    maxRosterCount: z.number().int().positive(),
   })
   .strict();
 export const courseSubjectRosterItemSchema = z
@@ -396,6 +503,15 @@ export type CourseSubject = z.infer<typeof courseSubjectSchema>;
 export type CreateCourseEnrollment = z.infer<
   typeof createCourseEnrollmentSchema
 >;
+export type PromoteCourseEnrollments = z.infer<
+  typeof promoteCourseEnrollmentsSchema
+>;
+export type CourseEnrollmentPromotionResult = z.infer<
+  typeof courseEnrollmentPromotionResultSchema
+>;
+export type CourseRosterItem = z.infer<typeof courseRosterItemSchema>;
+export type CourseRosterPage = z.infer<typeof courseRosterPageSchema>;
+export type CourseRosterSummary = z.infer<typeof courseRosterSummarySchema>;
 export type CreateStudentSubjectEnrollment = z.infer<
   typeof createStudentSubjectEnrollmentSchema
 >;

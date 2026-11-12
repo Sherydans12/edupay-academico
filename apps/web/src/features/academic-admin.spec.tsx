@@ -188,7 +188,19 @@ function adminClient(
       items: [courseSubject1],
       nextCursor: null,
     })),
-    getCourseRoster: vi.fn(async () => []),
+    getCourseRoster: vi.fn(async () => ({
+      items: [],
+      nextCursor: null,
+      totalCount: 0,
+    })),
+    getCourseRosterSummary: vi.fn(async () => ({
+      sourceCourseId: id,
+      fingerprint: 'a'.repeat(64),
+      totalCount: 0,
+      sourceManagedCount: 0,
+      operationAllowed: true,
+      maxRosterCount: 10_000,
+    })),
     getAssignedTeachers: vi.fn(async () => [
       {
         id: 'assign-1',
@@ -507,12 +519,17 @@ describe('Academic admin screens', () => {
       getCourseRoster: vi
         .fn()
         .mockRejectedValueOnce(new Error('Servicio sintético no disponible.'))
-        .mockResolvedValueOnce([
-          {
-            enrollmentId: 'synthetic-enrollment',
-            student: studentEduPay,
-          },
-        ]),
+        .mockResolvedValueOnce({
+          items: [
+            {
+              enrollmentId: 'synthetic-enrollment',
+              sourceManaged: true,
+              student: studentEduPay,
+            },
+          ],
+          nextCursor: null,
+          totalCount: 1,
+        }),
     });
     render(<AcademicAdminScreen api={client} view="structure" />);
 
@@ -1174,6 +1191,6 @@ describe('Academic admin screens', () => {
     expect(screen.getByText('alumnos registrados')).toBeTruthy();
 
     render(<AcademicAdminScreen api={client} view="people" />);
-    expect(await screen.findByText('Mostrando 2 de 229 alumnos')).toBeTruthy();
+    expect(await screen.findByText(/229 alumnos.*Página 1 de 5/)).toBeTruthy();
   });
 });

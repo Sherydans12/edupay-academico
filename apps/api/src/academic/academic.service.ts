@@ -6,6 +6,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash, randomUUID } from 'node:crypto';
+import { courseEnrollmentPromotionRosterLimit } from '@edupay/contracts';
 import type {
   AcademicPreparationStatus,
   AssignCourseSubjectTeachers,
@@ -19,8 +21,13 @@ import type {
   CreateStudentSubjectEnrollment,
   CreateSubject,
   CreateTeacher,
+  CourseRosterItem,
+  CourseEnrollmentPromotionResult,
+  CourseRosterPage,
+  CourseRosterSummary,
   CursorQuery,
   PersonListQuery,
+  PromoteCourseEnrollments,
   SubjectListQuery,
   UpdateAcademicYear,
   UpdateCourse,
@@ -63,6 +70,7 @@ import {
 import { EDUPAY_SOURCE, MANUAL_SOURCE } from '../sync/sync.constants';
 import { FinancialProjectionConfigService } from '../financial-projection/financial-projection-config.service';
 import { FinancialProjectionOutboxService } from '../financial-projection/financial-projection-outbox.service';
+import { CommandIdempotencyService } from '../idempotency/command-idempotency.service';
 import {
   evaluateAcademicPreparation,
   type AcademicPreparationCourseCounts,
@@ -85,6 +93,34 @@ const courseTransitions: Readonly<
   ARCHIVED: ['ARCHIVED'],
 };
 
+type CourseRosterFingerprintRow = {
+  id: string;
+  source: string;
+  student: { source: string };
+};
+
+function isSourceManagedEnrollment(enrollment: {
+  source: string;
+  student: { source: string };
+}): boolean {
+  return (
+    enrollment.source !== MANUAL_SOURCE ||
+    enrollment.student.source === EDUPAY_SOURCE
+  );
+}
+
+function courseRosterFingerprint(
+  courseId: string,
+  enrollments: readonly CourseRosterFingerprintRow[],
+): string {
+  const rows = enrollments.map((enrollment) =>
+    [enrollment.id, enrollment.source, enrollment.student.source].join(':'),
+  );
+  return createHash('sha256')
+    .update(JSON.stringify({ courseId, rows }))
+    .digest('hex');
+}
+
 @Injectable()
 export class AcademicService {
   constructor(
@@ -96,6 +132,7 @@ export class AcademicService {
     private readonly identityLinks: AcademicIdentityLinkVerifier,
     private readonly financialProjectionConfig: FinancialProjectionConfigService,
     private readonly financialProjectionOutbox: FinancialProjectionOutboxService,
+    private readonly commandIdempotency: CommandIdempotencyService,
   ) {}
 
   async currentTenant(context: AcademicRequestContext): Promise<object> {
@@ -861,6 +898,348 @@ export class AcademicService {
     return mapCourseEnrollment(record);
   }
 
+  async promoteCourseEnrollments(
+    context: AcademicRequestContext,
+    input: PromoteCourseEnrollments,
+  ): Promise<CourseEnrollmentPromotionResult> {
+    const scope = this.adminScope(context);
+    const idempotencyKey = context.idempotencyKey?.trim();
+    if (!idempotencyKey) {
+      throw new BadRequestException(
+        'An Idempotency-Key is required to confirm a course advancement.',
+      );
+    }
+
+    let promotion: CourseEnrollmentPromotionResult;
+    let shouldRecordPromotionAudit = true;
+    try {
+      const execution =
+        await this.commandIdempotency.execute<CourseEnrollmentPromotionResult>({
+          tenantId: scope.tenantId,
+          actorIdentityUserId: context.principal.identityUserId,
+          commandName: 'PROMOTE_COURSE_ENROLLMENTS',
+          idempotencyKey,
+          payload: input,
+          isolationLevel: 'Serializable',
+          transactionTimeoutMs: 30_000,
+          returnReplayMetadata: true,
+          action: async (tx) => {
+            const sourceCourse = await tx.course.findFirst({
+              where: { tenantId: scope.tenantId, id: input.sourceCourseId },
+              include: { academicYear: true },
+            });
+            if (!sourceCourse) this.notFound();
+            if (
+              sourceCourse.status !== 'ACTIVE' ||
+              sourceCourse.academicYear.status !== 'ACTIVE'
+            ) {
+              throw new ConflictException(
+                'The source course must be active in an active academic year.',
+              );
+            }
+
+            const targetYear = await tx.academicYear.findFirst({
+              where: {
+                tenantId: scope.tenantId,
+                id: input.targetAcademicYearId,
+              },
+            });
+            if (!targetYear) this.notFound();
+            if (
+              !['DRAFT', 'ACTIVE'].includes(targetYear.status) ||
+              targetYear.startDate <= sourceCourse.academicYear.endDate
+            ) {
+              throw new ConflictException(
+                'The target academic year must be mutable and begin after the source year ends.',
+              );
+            }
+
+            const targetIds = [
+              ...new Set([
+                input.defaultTargetCourseId,
+                ...input.overrides.flatMap((override) =>
+                  override.targetCourseId ? [override.targetCourseId] : [],
+                ),
+              ]),
+            ];
+            const targets = await tx.course.findMany({
+              where: {
+                tenantId: scope.tenantId,
+                id: { in: targetIds },
+              },
+              include: { academicYear: true },
+            });
+            if (targets.length !== targetIds.length) this.notFound();
+            const targetById = new Map(
+              targets.map((course) => [course.id, course]),
+            );
+            for (const target of targets) {
+              if (
+                target.academicYearId !== input.targetAcademicYearId ||
+                target.status === 'ARCHIVED' ||
+                (targetYear.status === 'DRAFT' && target.status !== 'DRAFT')
+              ) {
+                throw new ConflictException(
+                  'Every destination must be a mutable course in the selected academic year.',
+                );
+              }
+            }
+            if (!targetById.has(input.defaultTargetCourseId)) this.notFound();
+
+            const sourceRoster = await tx.courseEnrollment.findMany({
+              where: {
+                tenantId: scope.tenantId,
+                courseId: input.sourceCourseId,
+                status: 'ACTIVE',
+                student: { status: 'ACTIVE' },
+              },
+              select: {
+                id: true,
+                studentId: true,
+                source: true,
+                student: { select: { source: true } },
+              },
+              orderBy: { id: 'asc' },
+              take: courseEnrollmentPromotionRosterLimit + 1,
+            });
+            if (sourceRoster.length > courseEnrollmentPromotionRosterLimit) {
+              throw new ConflictException({
+                code: 'COURSE_ROSTER_LIMIT_EXCEEDED',
+                message: `A course advancement supports up to ${courseEnrollmentPromotionRosterLimit} active enrollments per operation.`,
+              });
+            }
+            if (
+              courseRosterFingerprint(input.sourceCourseId, sourceRoster) !==
+              input.expectedRosterFingerprint
+            ) {
+              throw new ConflictException({
+                code: 'COURSE_ROSTER_CHANGED',
+                message:
+                  'The source roster changed after preview. Refresh it before confirming the advancement.',
+              });
+            }
+
+            const sourceRosterById = new Map(
+              sourceRoster.map((enrollment) => [enrollment.id, enrollment]),
+            );
+            const overrideByEnrollmentId = new Map(
+              input.overrides.map((override) => [
+                override.sourceEnrollmentId,
+                override,
+              ]),
+            );
+            for (const override of input.overrides) {
+              const enrollment = sourceRosterById.get(
+                override.sourceEnrollmentId,
+              );
+              if (!enrollment) {
+                throw new ConflictException({
+                  code: 'COURSE_ROSTER_CHANGED',
+                  message:
+                    'The source roster changed after preview. Refresh it before confirming the advancement.',
+                });
+              }
+              if (isSourceManagedEnrollment(enrollment)) {
+                this.sourceManagedEnrollmentConflict();
+              }
+            }
+
+            const activeDestinationEnrollments =
+              await tx.courseEnrollment.findMany({
+                where: {
+                  tenantId: scope.tenantId,
+                  studentId: {
+                    in: sourceRoster.map((enrollment) => enrollment.studentId),
+                  },
+                  courseId: { in: targetIds },
+                  status: 'ACTIVE',
+                },
+                select: { studentId: true, courseId: true },
+              });
+            const activeDestinationPairs = new Set(
+              activeDestinationEnrollments.map(
+                (enrollment) =>
+                  `${enrollment.studentId}:${enrollment.courseId}`,
+              ),
+            );
+            const plannedDestinationPairs = new Set<string>();
+            const movable = sourceRoster.flatMap((enrollment) => {
+              if (isSourceManagedEnrollment(enrollment)) return [];
+              const override = overrideByEnrollmentId.get(enrollment.id);
+              const targetCourseId = override
+                ? override.targetCourseId
+                : input.defaultTargetCourseId;
+              if (!targetCourseId) return [];
+              if (!targetById.has(targetCourseId)) this.notFound();
+              const destinationPair = `${enrollment.studentId}:${targetCourseId}`;
+              if (
+                activeDestinationPairs.has(destinationPair) ||
+                plannedDestinationPairs.has(destinationPair)
+              ) {
+                throw new ConflictException(
+                  'A student is already enrolled in the selected destination course. Review the roster before continuing.',
+                );
+              }
+              plannedDestinationPairs.add(destinationPair);
+              return [{ enrollment, targetCourseId, override }];
+            });
+
+            if (!movable.length) {
+              throw new BadRequestException(
+                'Assign at least one student to a destination course before confirming.',
+              );
+            }
+
+            const completedAt = new Date();
+            const movableIds = movable.map(({ enrollment }) => enrollment.id);
+            const deactivated = await tx.courseEnrollment.updateMany({
+              where: {
+                tenantId: scope.tenantId,
+                courseId: input.sourceCourseId,
+                id: { in: movableIds },
+                source: MANUAL_SOURCE,
+                status: 'ACTIVE',
+                student: { source: { not: EDUPAY_SOURCE } },
+              },
+              data: {
+                status: 'INACTIVE',
+                financialProjectionVersion: { increment: 1 },
+                financialProjectionEffectiveTo: completedAt,
+              },
+            });
+            if (deactivated.count !== movable.length) {
+              throw new ConflictException({
+                code: 'COURSE_ROSTER_CHANGED',
+                message:
+                  'One or more enrollments changed after preview. Refresh the roster and try again.',
+              });
+            }
+
+            const previousEnrollments = await tx.courseEnrollment.findMany({
+              where: {
+                tenantId: scope.tenantId,
+                id: { in: movableIds },
+                status: 'INACTIVE',
+              },
+              include: { course: { select: { academicYearId: true } } },
+            });
+            let promotedCount = 0;
+            let repeatedCount = 0;
+            let transferredCount = 0;
+            let deferredCount = 0;
+            let sourceManagedCount = 0;
+
+            for (const enrollment of sourceRoster) {
+              if (isSourceManagedEnrollment(enrollment)) {
+                sourceManagedCount += 1;
+                continue;
+              }
+              const override = overrideByEnrollmentId.get(enrollment.id);
+              if (!override) {
+                promotedCount += 1;
+                continue;
+              }
+              if (override.decision === 'REPEAT') repeatedCount += 1;
+              if (override.decision === 'TRANSFER') transferredCount += 1;
+              if (override.decision === 'DEFER') deferredCount += 1;
+            }
+
+            const newEnrollmentIds = movable.map(() => randomUUID());
+            let createdCount = 0;
+            const batchSize = 500;
+            for (let offset = 0; offset < movable.length; offset += batchSize) {
+              const batch = movable.slice(offset, offset + batchSize);
+              const created = await tx.courseEnrollment.createMany({
+                data: batch.map(({ enrollment, targetCourseId }, index) => ({
+                  id: newEnrollmentIds[offset + index]!,
+                  tenantId: scope.tenantId,
+                  studentId: enrollment.studentId,
+                  courseId: targetCourseId,
+                  source: MANUAL_SOURCE,
+                })),
+              });
+              createdCount += created.count;
+            }
+            if (createdCount !== movable.length) {
+              throw new ConflictException({
+                code: 'COURSE_ROSTER_CHANGED',
+                message:
+                  'One or more enrollments changed after preview. Refresh the roster and try again.',
+              });
+            }
+            if (this.financialProjectionConfig.enabled()) {
+              const nextEnrollments = await tx.courseEnrollment.findMany({
+                where: {
+                  tenantId: scope.tenantId,
+                  id: { in: newEnrollmentIds },
+                },
+                include: { course: { select: { academicYearId: true } } },
+              });
+              if (
+                previousEnrollments.length !== movable.length ||
+                nextEnrollments.length !== movable.length
+              ) {
+                throw new ConflictException({
+                  code: 'COURSE_ROSTER_CHANGED',
+                  message:
+                    'One or more enrollments changed after preview. Refresh the roster and try again.',
+                });
+              }
+              await this.financialProjectionOutbox.enqueueEnrollments(
+                tx,
+                [...previousEnrollments, ...nextEnrollments],
+                context.requestId,
+              );
+            }
+
+            return {
+              data: {
+                sourceCourseId: input.sourceCourseId,
+                targetAcademicYearId: input.targetAcademicYearId,
+                defaultTargetCourseId: input.defaultTargetCourseId,
+                sourceRosterCount: sourceRoster.length,
+                promotedCount,
+                repeatedCount,
+                transferredCount,
+                deferredCount,
+                sourceManagedCount,
+                completedAt: completedAt.toISOString(),
+              },
+            };
+          },
+        });
+      promotion = execution.data;
+      shouldRecordPromotionAudit = execution.replayed !== true;
+    } catch (error) {
+      if (['P2002', 'P2034'].includes(this.prismaErrorCode(error) ?? '')) {
+        throw new ConflictException({
+          code: 'COURSE_ROSTER_CHANGED',
+          message:
+            'The source roster changed while confirming. Refresh the preview before trying again.',
+        });
+      }
+      throw error;
+    }
+
+    if (shouldRecordPromotionAudit)
+      await this.audit.record({
+        action: 'COURSE_ENROLLMENT_PROMOTION_COMPLETED',
+        context,
+        resourceId: promotion.sourceCourseId,
+        resourceType: 'Course',
+        summary: {
+          targetAcademicYearId: promotion.targetAcademicYearId,
+          defaultTargetCourseId: promotion.defaultTargetCourseId,
+          promotedCount: promotion.promotedCount,
+          repeatedCount: promotion.repeatedCount,
+          transferredCount: promotion.transferredCount,
+          deferredCount: promotion.deferredCount,
+          sourceManagedCount: promotion.sourceManagedCount,
+        },
+      });
+    return promotion;
+  }
+
   async deactivateCourseEnrollment(
     context: AcademicRequestContext,
     id: string,
@@ -912,26 +1291,106 @@ export class AcademicService {
   async courseRoster(
     context: AcademicRequestContext,
     courseId: string,
-  ): Promise<object[]> {
+    query: CursorQuery,
+  ): Promise<CourseRosterPage> {
     const scope = this.adminScope(context);
     await this.course(scope, courseId);
+    const where: Prisma.CourseEnrollmentWhereInput = {
+      tenantId: scope.tenantId,
+      courseId,
+      status: 'ACTIVE',
+      student: { status: 'ACTIVE' },
+    };
+    if (query.cursor) {
+      await this.requireCursor(
+        this.prisma.courseEnrollment.findFirst({
+          where: { ...where, id: query.cursor },
+          select: { id: true },
+        }),
+      );
+    }
+    const totalCount = await this.prisma.courseEnrollment.count({ where });
     const records = await this.prisma.courseEnrollment.findMany({
-      where: {
-        tenantId: scope.tenantId,
-        courseId,
-        status: 'ACTIVE',
-        student: { status: 'ACTIVE' },
-      },
+      where,
       include: { student: true },
       orderBy: [
         { student: { lastName: 'asc' } },
         { student: { firstName: 'asc' } },
+        { id: 'asc' },
       ],
+      ...(query.cursor
+        ? {
+            cursor: {
+              tenantId_id: { tenantId: scope.tenantId, id: query.cursor },
+            },
+            skip: 1,
+          }
+        : {}),
+      take: query.limit + 1,
     });
-    return records.map((record) => ({
-      enrollmentId: record.id,
-      student: mapStudent(record.student),
-    }));
+    const hasMore = records.length > query.limit;
+    const visible = hasMore ? records.slice(0, query.limit) : records;
+    return {
+      items: visible.map((record) => ({
+        enrollmentId: record.id,
+        sourceManaged: isSourceManagedEnrollment(record),
+        student: mapStudent(record.student) as CourseRosterItem['student'],
+      })),
+      nextCursor: hasMore ? (visible.at(-1)?.id ?? null) : null,
+      totalCount,
+    };
+  }
+
+  async courseRosterSummary(
+    context: AcademicRequestContext,
+    courseId: string,
+  ): Promise<CourseRosterSummary> {
+    const scope = this.adminScope(context);
+    await this.course(scope, courseId);
+    const where = {
+      tenantId: scope.tenantId,
+      courseId,
+      status: 'ACTIVE' as const,
+      student: { status: 'ACTIVE' as const },
+    };
+    const totalCount = await this.prisma.courseEnrollment.count({ where });
+    if (totalCount > courseEnrollmentPromotionRosterLimit) {
+      const sourceManagedCount = await this.prisma.courseEnrollment.count({
+        where: {
+          ...where,
+          OR: [
+            { source: { not: MANUAL_SOURCE } },
+            { student: { source: EDUPAY_SOURCE } },
+          ],
+        },
+      });
+      return {
+        sourceCourseId: courseId,
+        fingerprint: null,
+        totalCount,
+        sourceManagedCount,
+        operationAllowed: false,
+        maxRosterCount: courseEnrollmentPromotionRosterLimit,
+      };
+    }
+
+    const enrollments = await this.prisma.courseEnrollment.findMany({
+      where,
+      select: {
+        id: true,
+        source: true,
+        student: { select: { source: true } },
+      },
+      orderBy: { id: 'asc' },
+    });
+    return {
+      sourceCourseId: courseId,
+      fingerprint: courseRosterFingerprint(courseId, enrollments),
+      totalCount,
+      sourceManagedCount: enrollments.filter(isSourceManagedEnrollment).length,
+      operationAllowed: true,
+      maxRosterCount: courseEnrollmentPromotionRosterLimit,
+    };
   }
 
   async directlyEnrollStudent(

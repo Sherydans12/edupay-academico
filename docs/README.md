@@ -40,6 +40,11 @@ aceptados mantienen autoridad sobre arquitectura y seguridad.
 
 ## Implementation notes
 
+- [Primer corte de avance anual por curso](proposals/academic-course-promotion-first-cut.md)
+  documents the preview, per-student exceptions, bounded roster pages, idempotent
+  confirmation, and the manual-enrollment-only boundary. Admission and student
+  import remain a separate follow-up; merging source code does not imply a
+  production deployment or modify production enrollments.
 - [Primer corte de frontend académico: shell compartido y DIE](design/academic-frontend-first-cut.md)
   records the implemented visual direction, DIE changes, synthetic before
   captures, validation, and prioritized module follow-ups.
