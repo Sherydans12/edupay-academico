@@ -1,5 +1,11 @@
 # Topología productiva EduPay
 
+## Código API actualizado — imagen pendiente de publicar (2026-11-13)
+
+`main` contiene el avance anual de cursos desde `6d15463376d75d9803325427ec388255a9458a70`. El CI de ese commit pasó y se publicó la imagen del FRONT; no se encontró un workflow ni un run de publicación API desde ese código. El último digest API documentado como desplegado sigue siendo `sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d`, desde `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`.
+
+Se agregó `Publish Academic API runtime` como flujo manual en GitHub Actions. Su ejecución publica el runtime de `main`; hasta que el flujo termine y Coolify redepliegue la referencia que entrega, este corte no debe considerarse desplegado. Ver [publicación y redeploy de Académico API](ACADEMICO-API-REDEPLOY.md).
+
 Verificado: **2026-10-09 para el FRONT Académico**. Estado: **release docente/login desplegado en FRONT; API e Identity sin cambios en este corte; piloto DIE sin configurar; BL flags apagados**. El [release docente del FRONT](teacher-frontend-release-2026-10-09.md) registra el artefacto y sus smokes; el [procedimiento de publicación y redeploy](ACADEMICO-WEB-REDEPLOY.md) documenta el flujo vigente. El [release anterior del FRONT](teacher-frontend-release-2026-10-07.md), el [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) conservan la evidencia operativa histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 
 Después de ese inventario se retiró por Coolify el servicio obsoleto `ajf4d2ebozcpauguebm3alh1` (migrador Identity); el contador del proyecto bajó de 28 a 27. La lista posterior mostró el API Académico, Identity y FRONT activo como `Running`. El registro de ese retiro está en el [informe de limpieza](coolify-resource-cleanup-2026-09-28.md); la validación vigente del FRONT está en el [cierre de release 2026-10-09](teacher-frontend-release-2026-10-09.md).

@@ -11,6 +11,7 @@ registra por separado la verificación FRONT del **2026-09-27**.
 2. [Topología y último estado de producción](operations/PRODUCTION.md)
 3. [Runbook de cambio, release y rollback](operations/RUNBOOK.md)
    - [Estado de publicación del primer corte frontend Académico](operations/academic-frontend-first-cut-release-2026-09-24.md)
+   - [Publicación y redeploy de Académico API](operations/ACADEMICO-API-REDEPLOY.md)
 4. [Cierre de release DIE del 24/09](operations/die-release-closeout-2026-09-24.md)
 5. [Cierre de integración y despliegue FRONT de Administración del 27/09](operations/academic-admin-frontend-release-2026-09-27.md)
 6. [Guía de primer uso del piloto DIE](operations/DIE-PILOT-GUIDE.md); configuración y validación por usuario siguen pendientes.
