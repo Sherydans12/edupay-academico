@@ -1,10 +1,10 @@
 # Topología productiva EduPay
 
-## Código API actualizado — imagen pendiente de publicar (2026-11-13)
+## Código API actualizado — imagen publicada, pendiente de redeploy (2026-11-13)
 
-`main` contiene el avance anual de cursos desde `6d15463376d75d9803325427ec388255a9458a70`. El CI de ese commit pasó y se publicó la imagen del FRONT; no se encontró un workflow ni un run de publicación API desde ese código. El último digest API documentado como desplegado sigue siendo `sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d`, desde `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`.
+`main` contiene el avance anual de cursos desde `6d15463376d75d9803325427ec388255a9458a70`. El CI de ese commit pasó y se publicó la imagen del FRONT. La imagen API se construyó y validó desde `main` en `3eca5e71daf49166e3fdf9ccd58fd608368592b1`: `ghcr.io/sherydans12/edupay-academico@sha256:5a6ae5e127797956c5718403fc58d83c28499e8ff7f2743f69751654f7da1056` ([run exitoso](https://github.com/Sherydans12/edupay-academico/actions/runs/43447773531)). El último digest documentado como desplegado sigue siendo `sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d`, desde `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`; el nuevo digest está pendiente de redeploy en Coolify.
 
-Se agregó `Publish Academic API runtime` como flujo manual en GitHub Actions. Su ejecución publica el runtime de `main`; hasta que el flujo termine y Coolify redepliegue la referencia que entrega, este corte no debe considerarse desplegado. Ver [publicación y redeploy de Académico API](ACADEMICO-API-REDEPLOY.md).
+`Publish Academic API runtime` queda disponible como flujo manual en GitHub Actions para los próximos cortes. La imagen de este corte ya está publicada; hasta que Coolify redepliegue el digest indicado, este corte no debe considerarse desplegado. Ver [publicación y redeploy de Académico API](ACADEMICO-API-REDEPLOY.md).
 
 Verificado: **2026-10-09 para el FRONT Académico**. Estado: **release docente/login desplegado en FRONT; API e Identity sin cambios en este corte; piloto DIE sin configurar; BL flags apagados**. El [release docente del FRONT](teacher-frontend-release-2026-10-09.md) registra el artefacto y sus smokes; el [procedimiento de publicación y redeploy](ACADEMICO-WEB-REDEPLOY.md) documenta el flujo vigente. El [release anterior del FRONT](teacher-frontend-release-2026-10-07.md), el [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) conservan la evidencia operativa histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 

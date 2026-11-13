@@ -31,12 +31,16 @@ archivo `.dockerbuild` que aparezca en **Artifacts**.
 4. Comprueba que el servicio quede saludable y que
    `https://academico-api.edupay.baselogic.cl/api/v1/health/ready` responda.
 
-La última imagen API documentada como desplegada es
+La última imagen API documentada como desplegada sigue siendo
 `ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d`, construida desde
-`5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`. El código actual de avance anual
-está en `main` desde `6d15463376d75d9803325427ec388255a9458a70`; se publicó la
-imagen web, pero aún falta ejecutar este flujo manual para generar la nueva
-imagen API.
+`5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`. La nueva imagen del corte actual ya
+fue publicada y verificada desde `main` en `3eca5e71daf49166e3fdf9ccd58fd608368592b1`:
+
+```text
+ghcr.io/sherydans12/edupay-academico@sha256:5a6ae5e127797956c5718403fc58d83c28499e8ff7f2743f69751654f7da1056
+```
+
+El código de avance anual llegó a `main` en `6d15463376d75d9803325427ec388255a9458a70`; el commit `3eca5e7` agrega el publicador y documentación. El [workflow de publicación](https://github.com/Sherydans12/edupay-academico/actions/runs/43447773531) terminó correctamente. Esta imagen está publicada, pero sigue pendiente el redeploy manual en Coolify.
 
 No uses el digest antiguo `sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a` encontrado en el worktree de publicación anterior: corresponde al SHA `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` (2026-08-28), y el job independiente de verificación de esa publicación falló.
 
