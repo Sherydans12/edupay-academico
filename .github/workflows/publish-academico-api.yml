@@ -1,0 +1,93 @@
+name: Publish Academic API runtime
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-academico-api-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      IMAGE: ghcr.io/sherydans12/edupay-academico
+      SOURCE_SHA: ${{ github.sha }}
+      SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+    steps:
+      - name: Check out the exact dispatched revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify source provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$SOURCE_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "SOURCE_SHA=$SOURCE_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Authenticate to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish the immutable API runtime
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/Dockerfile.api
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:commit-${{ env.SOURCE_SHA }}
+          labels: |
+            org.opencontainers.image.source=${{ env.SOURCE_URL }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.title=EduPay Academico API runtime
+          cache-from: type=gha,scope=academico-api
+          cache-to: type=gha,mode=max,scope=academico-api
+          provenance: mode=max
+          sbom: true
+
+      - name: Verify image digest, provenance, and runtime contract
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$IMAGE_DIGEST"
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          IMAGE_REFERENCE="$IMAGE@$IMAGE_DIGEST"
+          docker buildx imagetools inspect "$IMAGE_REFERENCE"
+          docker buildx imagetools inspect --raw "$IMAGE_REFERENCE" > /tmp/academic-api-manifest.json
+          jq -e '[.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest")] | length > 0' /tmp/academic-api-manifest.json > /dev/null
+          docker pull "$IMAGE_REFERENCE"
+          test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "$SOURCE_URL"
+          test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+          test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{json .Config.Cmd}}')" = '["node","dist/main.js"]'
+          healthcheck="$(docker image inspect "$IMAGE_REFERENCE" --format '{{json .Config.Healthcheck.Test}}')"
+          printf '%s' "$healthcheck" | jq -e 'any(.[]; type == "string" and contains("/api/v1/health/ready"))' > /dev/null
+          docker run --rm --entrypoint node "$IMAGE_REFERENCE" -e "const fs = require('node:fs'); if (!fs.existsSync('dist/main.js')) process.exit(1);"
+          {
+            printf '%s\n' '## Academic API runtime publicado' ''
+            printf '%s\n' "- Código fuente: $SOURCE_SHA"
+            printf '%s\n' "- Imagen inmutable: $IMAGE_REFERENCE"
+            printf '%s\n' '- Plataforma: linux/amd64'
+            printf '%s\n' '- Provenance y SBOM: verificados'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "ACADEMICO_API_IMAGE=$IMAGE_REFERENCE"
