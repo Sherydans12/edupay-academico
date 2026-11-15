@@ -33,6 +33,20 @@ const enrollment = (
     version: 1,
     updatedAt: timestamp,
     operation: 'UPSERT',
+    student: {
+      firstName: 'Alumno',
+      lastName: 'Sintético',
+      nationalIdType: 'RUN',
+      nationalId: '111111111',
+      legacyIntegrationId: null,
+    },
+    course: { label: '1° Básico A', legacyIntegrationId: null },
+    academicYear: {
+      label: '2026',
+      startDate: '2026-03-01',
+      endDate: '2026-12-15',
+      status: 'ACTIVE',
+    },
     ...overrides,
   });
 
@@ -69,16 +83,39 @@ describe('Academic Financial Projection contract', () => {
     }),
   ];
 
-  it('makes a student without Identity valid and rejects PII outside the projection', () => {
+  it('makes a student without Identity valid and rejects data outside the v2 descriptors', () => {
     const parsed = enrollment();
     expect(parsed).not.toHaveProperty('identityUserId');
     expect(parsed).not.toHaveProperty('firstName');
+    expect(parsed.student.firstName).toBe('Alumno');
     expect(() =>
       academicFinancialProjectionEnrollmentSchema.parse({
         ...parsed,
         firstName: 'No permitido',
       }),
     ).toThrow();
+    expect(() =>
+      academicFinancialProjectionEnrollmentSchema.parse({
+        ...parsed,
+        student: { ...parsed.student, email: 'no@permitido.test' },
+      }),
+    ).toThrow();
+    expect(() =>
+      academicFinancialProjectionEnrollmentSchema.parse({
+        ...parsed,
+        student: { ...parsed.student, nationalIdType: null },
+      }),
+    ).toThrow();
+    expect(
+      enrollment({
+        student: {
+          ...parsed.student,
+          nationalIdType: null,
+          nationalId: null,
+          legacyIntegrationId: 'legacy-integration-1',
+        },
+      }).student.legacyIntegrationId,
+    ).toBe('legacy-integration-1');
     expect(() =>
       academicFinancialProjectionSnapshotQuerySchema.parse({
         canonicalTenantId: tenantB,
@@ -167,8 +204,8 @@ describe('Academic Financial Projection contract', () => {
     const fixture = new FinancialProjectionContractFixture(records);
     const versionEight = academicFinancialProjectionEventSchema.parse({
       eventId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc8',
-      eventType: 'academic.financial-projection.enrollment.upserted.v1',
-      schemaVersion: '1',
+      eventType: 'academic.financial-projection.enrollment.upserted.v2',
+      schemaVersion: '2',
       canonicalTenantId: tenantA,
       aggregateType: 'ACADEMIC_ENROLLMENT',
       aggregateId: records[0]!.academicEnrollmentId,

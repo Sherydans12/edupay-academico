@@ -1,10 +1,16 @@
 import { z } from 'zod';
 
 /**
- * Academic Financial Projection v1 is a new, outbound contract. It is not the
- * legacy EduPay -> Academic sync feed and it carries no identity or person PII.
+ * Academic Financial Projection v2 is the outbound Académico -> Payments
+ * contract (ADR-0021, ADR-0025). It is not the legacy EduPay -> Academic sync
+ * feed. v2 replaces v1 before any production activation: besides identifiers it
+ * carries the minimum Payments needs to create and update its own records
+ * without double entry: student names and RUN/IPE, course label and the
+ * academic year. It never carries credentials, guardians, grades, submissions,
+ * DIE records or pedagogical data. RUN/IPE is sensitive in every service: it
+ * must not be logged, audited or echoed outside the records that need it.
  */
-export const ACADEMIC_FINANCIAL_PROJECTION_SCHEMA_VERSION = '1' as const;
+export const ACADEMIC_FINANCIAL_PROJECTION_SCHEMA_VERSION = '2' as const;
 
 const canonicalTenantIdSchema = z.string().uuid();
 const academicEntityIdSchema = z.string().uuid();
@@ -21,6 +27,50 @@ export const academicFinancialProjectionOperationSchema = z.enum([
   'UPSERT',
   'TOMBSTONE',
 ]);
+
+const personNameSchema = z.string().trim().min(1).max(120);
+/**
+ * Reference of a record that originated in the legacy EduPay/BL feed (its BL
+ * integrationId, kept as Académico externalReference). Payments links its
+ * existing records by this value, never by name, course or email.
+ */
+const legacyIntegrationIdSchema = z.string().min(1).max(200).nullable();
+
+export const academicFinancialProjectionStudentSchema = z
+  .object({
+    firstName: personNameSchema,
+    lastName: personNameSchema,
+    nationalIdType: z.enum(['RUN', 'IPE']).nullable(),
+    nationalId: z.string().min(1).max(20).nullable(),
+    legacyIntegrationId: legacyIntegrationIdSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.nationalIdType === null) !== (value.nationalId === null)) {
+      context.addIssue({
+        code: 'custom',
+        message:
+          'nationalIdType and nationalId must be both present or both null.',
+        path: ['nationalId'],
+      });
+    }
+  });
+
+export const academicFinancialProjectionCourseSchema = z
+  .object({
+    label: z.string().trim().min(1).max(160),
+    legacyIntegrationId: legacyIntegrationIdSchema,
+  })
+  .strict();
+
+export const academicFinancialProjectionAcademicYearSchema = z
+  .object({
+    label: z.string().trim().min(1).max(160),
+    startDate: z.iso.date(),
+    endDate: z.iso.date(),
+    status: z.enum(['DRAFT', 'ACTIVE', 'CLOSED', 'ARCHIVED']),
+  })
+  .strict();
 
 /**
  * A financial read model of one academic CourseEnrollment. The current
@@ -40,6 +90,9 @@ export const academicFinancialProjectionEnrollmentSchema = z
     version: positiveVersionSchema,
     updatedAt: timestampSchema,
     operation: academicFinancialProjectionOperationSchema,
+    student: academicFinancialProjectionStudentSchema,
+    course: academicFinancialProjectionCourseSchema,
+    academicYear: academicFinancialProjectionAcademicYearSchema,
   })
   .strict()
   .superRefine((value, context) => {
@@ -170,9 +223,14 @@ export const academicFinancialProjectionSnapshotCompleteSchema = z
   })
   .strict();
 
+export const ACADEMIC_FINANCIAL_PROJECTION_UPSERTED_EVENT =
+  'academic.financial-projection.enrollment.upserted.v2' as const;
+export const ACADEMIC_FINANCIAL_PROJECTION_TOMBSTONED_EVENT =
+  'academic.financial-projection.enrollment.tombstoned.v2' as const;
+
 export const academicFinancialProjectionEventTypeSchema = z.enum([
-  'academic.financial-projection.enrollment.upserted.v1',
-  'academic.financial-projection.enrollment.tombstoned.v1',
+  ACADEMIC_FINANCIAL_PROJECTION_UPSERTED_EVENT,
+  ACADEMIC_FINANCIAL_PROJECTION_TOMBSTONED_EVENT,
 ]);
 
 export const academicFinancialProjectionEventSchema = z
@@ -212,8 +270,7 @@ export const academicFinancialProjectionEventSchema = z
       });
     }
     const expectedOperation =
-      value.eventType ===
-      'academic.financial-projection.enrollment.tombstoned.v1'
+      value.eventType === ACADEMIC_FINANCIAL_PROJECTION_TOMBSTONED_EVENT
         ? 'TOMBSTONE'
         : 'UPSERT';
     if (value.payload.operation !== expectedOperation) {
@@ -227,6 +284,15 @@ export const academicFinancialProjectionEventSchema = z
 
 export type AcademicFinancialProjectionEnrollment = z.infer<
   typeof academicFinancialProjectionEnrollmentSchema
+>;
+export type AcademicFinancialProjectionStudent = z.infer<
+  typeof academicFinancialProjectionStudentSchema
+>;
+export type AcademicFinancialProjectionCourse = z.infer<
+  typeof academicFinancialProjectionCourseSchema
+>;
+export type AcademicFinancialProjectionAcademicYear = z.infer<
+  typeof academicFinancialProjectionAcademicYearSchema
 >;
 export type AcademicFinancialProjectionSnapshotQuery = z.infer<
   typeof academicFinancialProjectionSnapshotQuerySchema

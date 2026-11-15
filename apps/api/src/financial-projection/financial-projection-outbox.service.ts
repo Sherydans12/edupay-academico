@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
   ACADEMIC_FINANCIAL_PROJECTION_SCHEMA_VERSION,
+  ACADEMIC_FINANCIAL_PROJECTION_TOMBSTONED_EVENT,
+  ACADEMIC_FINANCIAL_PROJECTION_UPSERTED_EVENT,
   academicFinancialProjectionEnrollmentSchema,
   type AcademicFinancialProjectionEnrollment,
 } from '@edupay/contracts';
@@ -8,7 +10,37 @@ import type { Prisma } from '../generated/prisma/client';
 
 type TransactionClient = Prisma.TransactionClient;
 
-type EnrollmentForProjection = {
+const EDUPAY_SOURCE = 'EDUPAY';
+
+/**
+ * Relations every projected enrollment must load. Use it in the same Prisma
+ * transaction that changes the enrollment, student, course or year.
+ */
+export const financialProjectionEnrollmentInclude = {
+  student: {
+    select: {
+      firstName: true,
+      lastName: true,
+      nationalIdType: true,
+      nationalId: true,
+      source: true,
+      externalReference: true,
+    },
+  },
+  course: {
+    select: {
+      academicYearId: true,
+      label: true,
+      source: true,
+      externalReference: true,
+      academicYear: {
+        select: { label: true, startDate: true, endDate: true, status: true },
+      },
+    },
+  },
+} as const satisfies Prisma.CourseEnrollmentInclude;
+
+export type EnrollmentForProjection = {
   readonly id: string;
   readonly tenantId: string;
   readonly studentId: string;
@@ -18,7 +50,26 @@ type EnrollmentForProjection = {
   readonly financialProjectionEffectiveFrom: Date;
   readonly financialProjectionEffectiveTo: Date | null;
   readonly updatedAt: Date;
-  readonly course: { readonly academicYearId: string };
+  readonly student: {
+    readonly firstName: string;
+    readonly lastName: string;
+    readonly nationalIdType: string | null;
+    readonly nationalId: string | null;
+    readonly source: string;
+    readonly externalReference: string | null;
+  };
+  readonly course: {
+    readonly academicYearId: string;
+    readonly label: string;
+    readonly source: string;
+    readonly externalReference: string | null;
+    readonly academicYear: {
+      readonly label: string;
+      readonly startDate: Date;
+      readonly endDate: Date;
+      readonly status: 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
+    };
+  };
 };
 
 @Injectable()
@@ -32,22 +83,7 @@ export class FinancialProjectionOutboxService {
     for (let offset = 0; offset < enrollments.length; offset += batchSize) {
       const data = enrollments
         .slice(offset, offset + batchSize)
-        .map((enrollment) => {
-          const payload = this.enrollmentPayload(enrollment);
-          return {
-            tenantId: enrollment.tenantId,
-            eventType:
-              payload.operation === 'TOMBSTONE'
-                ? 'academic.financial-projection.enrollment.tombstoned.v1'
-                : 'academic.financial-projection.enrollment.upserted.v1',
-            schemaVersion: ACADEMIC_FINANCIAL_PROJECTION_SCHEMA_VERSION,
-            aggregateId: enrollment.id,
-            entityVersion: enrollment.financialProjectionVersion,
-            occurredAt: enrollment.updatedAt,
-            correlationId: correlationId ?? null,
-            payload: payload as unknown as Prisma.InputJsonValue,
-          };
-        });
+        .map((enrollment) => this.outboxRow(enrollment, correlationId));
       await tx.financialProjectionOutboxEvent.createMany({ data });
     }
   }
@@ -62,22 +98,32 @@ export class FinancialProjectionOutboxService {
     enrollment: EnrollmentForProjection,
     correlationId?: string,
   ): Promise<void> {
-    const payload = this.enrollmentPayload(enrollment);
     await tx.financialProjectionOutboxEvent.create({
-      data: {
-        tenantId: enrollment.tenantId,
-        eventType:
-          payload.operation === 'TOMBSTONE'
-            ? 'academic.financial-projection.enrollment.tombstoned.v1'
-            : 'academic.financial-projection.enrollment.upserted.v1',
-        schemaVersion: ACADEMIC_FINANCIAL_PROJECTION_SCHEMA_VERSION,
-        aggregateId: enrollment.id,
-        entityVersion: enrollment.financialProjectionVersion,
-        occurredAt: enrollment.updatedAt,
-        correlationId: correlationId ?? null,
-        payload: payload as unknown as Prisma.InputJsonValue,
-      },
+      data: this.outboxRow(enrollment, correlationId),
     });
+  }
+
+  /**
+   * Re-projects every enrollment selected by `where` after a change to data
+   * the projection carries (student names or RUN/IPE, course label, academic
+   * year). Each enrollment gets a new version so Payments applies it as newer.
+   */
+  async reprojectEnrollments(
+    tx: TransactionClient,
+    where: Prisma.CourseEnrollmentWhereInput,
+    correlationId?: string,
+  ): Promise<number> {
+    await tx.courseEnrollment.updateMany({
+      where,
+      data: { financialProjectionVersion: { increment: 1 } },
+    });
+    const enrollments = await tx.courseEnrollment.findMany({
+      where,
+      include: financialProjectionEnrollmentInclude,
+      orderBy: { id: 'asc' },
+    });
+    await this.enqueueEnrollments(tx, enrollments, correlationId);
+    return enrollments.length;
   }
 
   enrollmentPayload(
@@ -90,9 +136,10 @@ export class FinancialProjectionOutboxService {
       );
     }
     const tombstone = enrollment.status === 'INACTIVE';
+    const { student, course } = enrollment;
     return academicFinancialProjectionEnrollmentSchema.parse({
       canonicalTenantId: enrollment.tenantId,
-      academicYearId: enrollment.course.academicYearId,
+      academicYearId: course.academicYearId,
       academicStudentId: enrollment.studentId,
       academicCourseId: enrollment.courseId,
       academicEnrollmentId: enrollment.id,
@@ -103,6 +150,45 @@ export class FinancialProjectionOutboxService {
       version,
       updatedAt: enrollment.updatedAt.toISOString(),
       operation: tombstone ? 'TOMBSTONE' : 'UPSERT',
+      student: {
+        firstName: student.firstName,
+        lastName: student.lastName,
+        nationalIdType: student.nationalIdType,
+        nationalId: student.nationalId,
+        legacyIntegrationId:
+          student.source === EDUPAY_SOURCE ? student.externalReference : null,
+      },
+      course: {
+        label: course.label,
+        legacyIntegrationId:
+          course.source === EDUPAY_SOURCE ? course.externalReference : null,
+      },
+      academicYear: {
+        label: course.academicYear.label,
+        startDate: course.academicYear.startDate.toISOString().slice(0, 10),
+        endDate: course.academicYear.endDate.toISOString().slice(0, 10),
+        status: course.academicYear.status,
+      },
     });
+  }
+
+  private outboxRow(
+    enrollment: EnrollmentForProjection,
+    correlationId?: string,
+  ) {
+    const payload = this.enrollmentPayload(enrollment);
+    return {
+      tenantId: enrollment.tenantId,
+      eventType:
+        payload.operation === 'TOMBSTONE'
+          ? ACADEMIC_FINANCIAL_PROJECTION_TOMBSTONED_EVENT
+          : ACADEMIC_FINANCIAL_PROJECTION_UPSERTED_EVENT,
+      schemaVersion: ACADEMIC_FINANCIAL_PROJECTION_SCHEMA_VERSION,
+      aggregateId: enrollment.id,
+      entityVersion: enrollment.financialProjectionVersion,
+      occurredAt: enrollment.updatedAt,
+      correlationId: correlationId ?? null,
+      payload: payload as unknown as Prisma.InputJsonValue,
+    };
   }
 }

@@ -366,8 +366,11 @@ Academic Student / Academic Teacher ──< Academic Enrollment >── Academic
 
 Académico debe convertirse en el productor de una proyección financiera
 deliberadamente escasa: tenant canónico, alumno académico, año, oferta/curso,
-matrícula, estado/decisión y cambios de elegibilidad. No incluirá credenciales,
-notas, entregas, apoderados, RUT ni información pedagógica innecesaria.
+matrícula, estado/decisión y cambios de elegibilidad. Desde ADR-0025 (contrato
+v2) incluye además nombre y RUN/IPE del alumno, etiqueta del curso, datos del
+año y la referencia `integrationId` heredada, para que Pagos no requiera doble
+digitación. No incluye credenciales, email, notas, entregas, apoderados ni
+información pedagógica.
 
 Usar ambos mecanismos. Su diseño inicial, aún no implementado, está en
 [Academic → Financial Projection](../integration/academic-financial-projection.md):
