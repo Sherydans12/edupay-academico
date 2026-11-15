@@ -19,7 +19,10 @@ import type { Prisma } from '../generated/prisma/client';
 
 import { PrismaService } from '../persistence/prisma.service';
 import { FinancialProjectionConfigService } from './financial-projection-config.service';
-import { FinancialProjectionOutboxService } from './financial-projection-outbox.service';
+import {
+  FinancialProjectionOutboxService,
+  financialProjectionEnrollmentInclude,
+} from './financial-projection-outbox.service';
 
 type SnapshotCursor = {
   readonly snapshotToken: string;
@@ -53,7 +56,7 @@ export class FinancialProjectionProducerService {
 
       const enrollments = await tx.courseEnrollment.findMany({
         where: { tenantId: canonicalTenantId },
-        include: { course: { select: { academicYearId: true } } },
+        include: financialProjectionEnrollmentInclude,
         orderBy: { id: 'asc' },
       });
       const lastEvent = await tx.financialProjectionOutboxEvent.findFirst({

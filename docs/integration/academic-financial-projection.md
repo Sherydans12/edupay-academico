@@ -11,6 +11,57 @@ Académico será el productor de la proyección mínima que EduPay Pagos/BL-002
 necesita para operar finanzas. No modifica ni sustituye los feeds de
 compatibilidad BL → Académico v1/v2.
 
+> **Contrato vigente: v2 (ADR-0025, 2026-11-15).** v2 reemplaza a v1 antes de
+> cualquier activación productiva; ningún consumidor v1 está activo. Las
+> secciones históricas de este documento que mencionan v1 o la exclusión de
+> nombre/RUN describen la fase 1B/1C y quedan sustituidas por la sección
+> [Contrato v2](#contrato-v2-adr-0025).
+
+## Contrato v2 (ADR-0025)
+
+ADR-0025 fija a Académico como autoridad de años, cursos, alumnos y
+matrículas, y a Pagos como autoridad de apoderados y cobranza. Para que Pagos
+cree y actualice sus registros sin doble digitación, cada matrícula proyectada
+agrega tres descriptores estrictos:
+
+| Campo                                                  | Origen en Académico         | Regla                                                             |
+| ------------------------------------------------------ | --------------------------- | ----------------------------------------------------------------- |
+| `student.firstName`, `student.lastName`                | `Student`                   | 1–120 caracteres.                                                 |
+| `student.nationalIdType`, `student.nationalId`         | `Student` (ADR-0024)        | `RUN`/`IPE` y valor normalizado; ambos presentes o ambos `null`.  |
+| `student.legacyIntegrationId`                          | `Student.externalReference` | Sólo si `source = EDUPAY`; si no, `null`.                         |
+| `course.label`                                         | `Course.label`              | 1–160 caracteres.                                                 |
+| `course.legacyIntegrationId`                           | `Course.externalReference`  | Sólo si `source = EDUPAY`; si no, `null`.                         |
+| `academicYear.label`, `startDate`, `endDate`, `status` | `AcademicYear` del curso    | Fechas `YYYY-MM-DD`; estado `DRAFT`/`ACTIVE`/`CLOSED`/`ARCHIVED`. |
+
+Los eventos son `academic.financial-projection.enrollment.upserted.v2` y
+`academic.financial-projection.enrollment.tombstoned.v2`, con
+`schemaVersion: "2"` en envelope, snapshot y páginas.
+
+**Vinculación.** Pagos enlaza sus alumnos y cursos existentes sólo por
+`legacyIntegrationId` (su `integrationId`), nunca por nombre, curso ni email.
+Un registro sin vínculo y sin RUN/IPE no se deduplica por inferencia.
+
+**Reproyección.** Además de altas, bajas y cambios de curso, un cambio de
+nombre del alumno, de etiqueta de curso o de datos del año incrementa
+`financialProjectionVersion` de las matrículas `ACTIVE` afectadas y encola un
+evento nuevo **en la misma transacción** (`reprojectEnrollments`). El cambio de
+email no se proyecta. Con el producer desactivado no se escribe outbox.
+
+**Privacidad.** v2 enmienda la minimización anterior: nombre y RUN/IPE viajan
+a Pagos. Quedan almacenados en el payload de
+`financial_projection_outbox_events` y en `financial_projection_snapshot_items`
+de la base de Académico, y en los registros de Pagos que los necesitan. No se
+registran en logs, auditoría, métricas ni mensajes de error; el publisher sólo
+loguea `eventId`, intento y código. Siguen excluidos credenciales, email,
+dirección, teléfono, apoderados, notas, evaluaciones, entregas, hoja de vida,
+DIE y datos clínicos o financieros.
+
+**Compatibilidad del gate cruzado.** El consumidor shadow actual de BL valida
+`schemaVersion '1'`. Hasta que BL publique el consumidor v2, el gate
+`financial-projection.integrated-http.e2e-spec.ts` contra un backend BL
+anterior debe fallar en la entrega; no se activa el producer en ningún entorno
+antes de ese cambio.
+
 ## Modelo y minimización
 
 El modelo físico existente de Académico se reutiliza sin crear un
@@ -120,9 +171,9 @@ La fuente de contrato es `packages/contracts/src/academic-financial-projection.t
 
 El contrato declara `POST /api/v1/integrations/financial-projection/snapshots`, `GET /api/v1/integrations/financial-projection/snapshots/{snapshotToken}/enrollments` y `GET /api/v1/integrations/financial-projection/snapshots/{snapshotToken}/complete`. En 1B los tres endpoints fallan cerrados para principals de usuario y no leen Prisma ni devuelven datos. Sus páginas limitan 1–100, asocian cursor/snapshot/watermark a tenant y sólo exponen watermark terminal.
 
-Los eventos futuros concretos son `academic.financial-projection.enrollment.upserted.v1` y `academic.financial-projection.enrollment.tombstoned.v1`. El envelope incluye `eventId`, `eventType`, `schemaVersion`, tenant, aggregate, versión, fecha y `correlationId`; la schema exige coherencia con el payload. El consumidor futuro deduplica `(producer, canonicalTenantId, eventId)`, sólo aplica versión mayor y repara replay o reordenamiento mediante snapshot completo.
+En 1B los eventos eran `...enrollment.upserted.v1` y `...enrollment.tombstoned.v1`; v2 los reemplaza (ver [Contrato v2](#contrato-v2-adr-0025)). El envelope incluye `eventId`, `eventType`, `schemaVersion`, tenant, aggregate, versión, fecha y `correlationId`; la schema exige coherencia con el payload. El consumidor futuro deduplica `(producer, canonicalTenantId, eventId)`, sólo aplica versión mayor y repara replay o reordenamiento mediante snapshot completo.
 
-La proyección excluye password, hashes, tokens, sesiones, RUT, nombre, email, dirección, teléfono, apoderados, notas, evaluaciones, entregas, hoja de vida, datos clínicos y financieros. Profesores no aparecen. Una necesidad de nombre para UI/reportes de BL requiere una decisión futura de minimización, no se incorporó silenciosamente.
+En 1B la proyección excluía password, hashes, tokens, sesiones, RUT, nombre, email, dirección, teléfono, apoderados, notas, evaluaciones, entregas, hoja de vida, datos clínicos y financieros. ADR-0025 tomó la decisión de minimización pendiente: v2 agrega nombre y RUN/IPE; el resto de las exclusiones se mantiene. Profesores no aparecen.
 
 ## Fase 1C-A implementada y no activada
 

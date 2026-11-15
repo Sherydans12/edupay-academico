@@ -4,7 +4,7 @@ import { FinancialProjectionPublisherService } from './financial-projection-publ
 
 const event = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  eventType: 'academic.financial-projection.enrollment.upserted.v1',
+  eventType: 'academic.financial-projection.enrollment.upserted.v2',
   tenantId: '11111111-1111-4111-8111-111111111111',
   aggregateId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   entityVersion: 7n,
@@ -23,6 +23,20 @@ const event = {
     version: 7,
     updatedAt: '2026-09-03T12:00:00.000Z',
     operation: 'UPSERT',
+    student: {
+      firstName: 'Alumno',
+      lastName: 'Sintético',
+      nationalIdType: null,
+      nationalId: null,
+      legacyIntegrationId: null,
+    },
+    course: { label: '1° Básico A', legacyIntegrationId: null },
+    academicYear: {
+      label: '2026',
+      startDate: '2026-03-01',
+      endDate: '2026-12-15',
+      status: 'ACTIVE',
+    },
   },
 };
 
@@ -84,7 +98,10 @@ describe('FinancialProjectionPublisherService', () => {
         findUniqueOrThrow: vi.fn().mockResolvedValue(event),
       },
     };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 503 }),
+    );
 
     const result = await new FinancialProjectionPublisherService(
       prisma as never,
@@ -111,7 +128,8 @@ describe('FinancialProjectionPublisherService', () => {
   });
 
   it('fails closed for a tenant without a credential without making an HTTP request', async () => {
-    const updateMany = vi.fn()
+    const updateMany = vi
+      .fn()
       .mockResolvedValueOnce({ count: 0 })
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 1 });
@@ -119,14 +137,44 @@ describe('FinancialProjectionPublisherService', () => {
     vi.stubGlobal('fetch', fetch);
     const config = {
       publisherEnabled: () => true,
-      publisherConfiguration: vi.fn()
-        .mockReturnValueOnce({ baseUrl: 'https://bl.invalid', token: 'legacy-token', keyId: 'legacy', timeoutMs: 1_000, maxAttempts: 3, retryScheduleSeconds: [1] })
-        .mockImplementation(() => { throw new Error('credential missing: synthetic-secret-must-not-leak'); }),
+      publisherConfiguration: vi
+        .fn()
+        .mockReturnValueOnce({
+          baseUrl: 'https://bl.invalid',
+          token: 'legacy-token',
+          keyId: 'legacy',
+          timeoutMs: 1_000,
+          maxAttempts: 3,
+          retryScheduleSeconds: [1],
+        })
+        .mockImplementation(() => {
+          throw new Error('credential missing: synthetic-secret-must-not-leak');
+        }),
     };
-    const prisma = { financialProjectionOutboxEvent: { updateMany, findMany: vi.fn().mockResolvedValue([{ id: event.id }]), findUniqueOrThrow: vi.fn().mockResolvedValue(event) } };
-    await expect(new FinancialProjectionPublisherService(prisma as never, config as never).publishPending()).resolves.toEqual({ attempted: 1, published: 0 });
+    const prisma = {
+      financialProjectionOutboxEvent: {
+        updateMany,
+        findMany: vi.fn().mockResolvedValue([{ id: event.id }]),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(event),
+      },
+    };
+    await expect(
+      new FinancialProjectionPublisherService(
+        prisma as never,
+        config as never,
+      ).publishPending(),
+    ).resolves.toEqual({ attempted: 1, published: 0 });
     expect(fetch).not.toHaveBeenCalled();
-    expect(updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'RETRY', lastErrorCode: expect.not.stringContaining('synthetic-secret') }) }));
-    expect(config.publisherConfiguration).toHaveBeenLastCalledWith(event.tenantId);
+    expect(updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'RETRY',
+          lastErrorCode: expect.not.stringContaining('synthetic-secret'),
+        }),
+      }),
+    );
+    expect(config.publisherConfiguration).toHaveBeenLastCalledWith(
+      event.tenantId,
+    );
   });
 });

@@ -79,7 +79,10 @@ import {
 } from './identity-link.port';
 import { EDUPAY_SOURCE, MANUAL_SOURCE } from '../sync/sync.constants';
 import { FinancialProjectionConfigService } from '../financial-projection/financial-projection-config.service';
-import { FinancialProjectionOutboxService } from '../financial-projection/financial-projection-outbox.service';
+import {
+  FinancialProjectionOutboxService,
+  financialProjectionEnrollmentInclude,
+} from '../financial-projection/financial-projection-outbox.service';
 import { CommandIdempotencyService } from '../idempotency/command-idempotency.service';
 import {
   evaluateAcademicPreparation,
@@ -284,19 +287,36 @@ export class AcademicService {
       input.startDate ?? current.startDate.toISOString().slice(0, 10);
     const endDate = input.endDate ?? current.endDate.toISOString().slice(0, 10);
     this.requireDateRange(startDate, endDate);
+    // Label, dates and lifecycle status of the year travel in the projection.
+    const reproject =
+      this.financialProjectionConfig.enabled() && Object.keys(input).length > 0;
     const record = await this.write(() =>
-      this.prisma.academicYear.update({
-        where: { tenantId_id: { tenantId: scope.tenantId, id } },
-        data: {
-          ...(input.label !== undefined ? { label: input.label } : {}),
-          ...(input.startDate !== undefined
-            ? { startDate: this.date(input.startDate) }
-            : {}),
-          ...(input.endDate !== undefined
-            ? { endDate: this.date(input.endDate) }
-            : {}),
-          ...(input.status !== undefined ? { status: input.status } : {}),
-        },
+      this.prisma.$transaction(async (tx) => {
+        const updated = await tx.academicYear.update({
+          where: { tenantId_id: { tenantId: scope.tenantId, id } },
+          data: {
+            ...(input.label !== undefined ? { label: input.label } : {}),
+            ...(input.startDate !== undefined
+              ? { startDate: this.date(input.startDate) }
+              : {}),
+            ...(input.endDate !== undefined
+              ? { endDate: this.date(input.endDate) }
+              : {}),
+            ...(input.status !== undefined ? { status: input.status } : {}),
+          },
+        });
+        if (reproject) {
+          await this.financialProjectionOutbox.reprojectEnrollments(
+            tx,
+            {
+              tenantId: scope.tenantId,
+              status: 'ACTIVE',
+              course: { academicYearId: id },
+            },
+            context.requestId,
+          );
+        }
+        return updated;
       }),
     );
     await this.recordAudit(
@@ -399,13 +419,28 @@ export class AcademicService {
         'A course can be activated only in an active academic year.',
       );
     }
+    // The course label travels in the financial projection.
+    const reproject =
+      this.financialProjectionConfig.enabled() &&
+      input.label !== undefined &&
+      input.label !== current.label;
     const record = await this.write(() =>
-      this.prisma.course.update({
-        where: { tenantId_id: { tenantId: scope.tenantId, id } },
-        data: {
-          ...(input.label !== undefined ? { label: input.label } : {}),
-          ...(input.status !== undefined ? { status: input.status } : {}),
-        },
+      this.prisma.$transaction(async (tx) => {
+        const updated = await tx.course.update({
+          where: { tenantId_id: { tenantId: scope.tenantId, id } },
+          data: {
+            ...(input.label !== undefined ? { label: input.label } : {}),
+            ...(input.status !== undefined ? { status: input.status } : {}),
+          },
+        });
+        if (reproject) {
+          await this.financialProjectionOutbox.reprojectEnrollments(
+            tx,
+            { tenantId: scope.tenantId, courseId: id, status: 'ACTIVE' },
+            context.requestId,
+          );
+        }
+        return updated;
       }),
     );
     await this.recordAudit(context, 'COURSE_UPDATED', 'Course', id);
@@ -503,16 +538,32 @@ export class AcademicService {
     ) {
       this.sourceManagedConflict();
     }
+    // Names travel in the financial projection; email does not.
+    const reproject =
+      this.financialProjectionConfig.enabled() &&
+      (input.firstName !== undefined || input.lastName !== undefined);
     const record = await this.write(() =>
-      this.prisma.student.update({
-        where: { tenantId_id: { tenantId: scope.tenantId, id } },
-        data: {
-          ...(input.firstName !== undefined
-            ? { firstName: input.firstName }
-            : {}),
-          ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
-          ...(input.email !== undefined ? { email: input.email } : {}),
-        },
+      this.prisma.$transaction(async (tx) => {
+        const updated = await tx.student.update({
+          where: { tenantId_id: { tenantId: scope.tenantId, id } },
+          data: {
+            ...(input.firstName !== undefined
+              ? { firstName: input.firstName }
+              : {}),
+            ...(input.lastName !== undefined
+              ? { lastName: input.lastName }
+              : {}),
+            ...(input.email !== undefined ? { email: input.email } : {}),
+          },
+        });
+        if (reproject) {
+          await this.financialProjectionOutbox.reprojectEnrollments(
+            tx,
+            { tenantId: scope.tenantId, studentId: id, status: 'ACTIVE' },
+            context.requestId,
+          );
+        }
+        return updated;
       }),
     );
     await this.recordAudit(context, 'STUDENT_UPDATED', 'Student', id);
@@ -899,7 +950,7 @@ export class AcademicService {
       this.prisma.$transaction(async (tx) => {
         const enrollment = await tx.courseEnrollment.create({
           data: { tenantId: scope.tenantId, source: MANUAL_SOURCE, ...input },
-          include: { course: { select: { academicYearId: true } } },
+          include: financialProjectionEnrollmentInclude,
         });
         if (this.financialProjectionConfig.enabled()) {
           await this.financialProjectionOutbox.enqueueEnrollment(
@@ -993,7 +1044,7 @@ export class AcademicService {
                 studentId: student.id,
                 courseId: input.courseId,
               },
-              include: { course: { select: { academicYearId: true } } },
+              include: financialProjectionEnrollmentInclude,
             });
             if (this.financialProjectionConfig.enabled()) {
               await this.financialProjectionOutbox.enqueueEnrollment(
@@ -1308,7 +1359,7 @@ export class AcademicService {
                 id: { in: movableIds },
                 status: 'INACTIVE',
               },
-              include: { course: { select: { academicYearId: true } } },
+              include: financialProjectionEnrollmentInclude,
             });
             let promotedCount = 0;
             let repeatedCount = 0;
@@ -1360,7 +1411,7 @@ export class AcademicService {
                   tenantId: scope.tenantId,
                   id: { in: newEnrollmentIds },
                 },
-                include: { course: { select: { academicYearId: true } } },
+                include: financialProjectionEnrollmentInclude,
               });
               if (
                 previousEnrollments.length !== movable.length ||
@@ -1454,7 +1505,7 @@ export class AcademicService {
             financialProjectionVersion: { increment: 1 },
             financialProjectionEffectiveTo: new Date(),
           },
-          include: { course: { select: { academicYearId: true } } },
+          include: financialProjectionEnrollmentInclude,
         });
         if (this.financialProjectionConfig.enabled()) {
           await this.financialProjectionOutbox.enqueueEnrollment(
