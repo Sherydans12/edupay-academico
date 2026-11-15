@@ -30,6 +30,7 @@ These records capture major architectural choices from the brief and architectur
 | [0022](ADR-0022-academic-onboarding-governance-proposal.md)    | Audited governance for academic onboarding                                                                                | Proposed; review gate only, no new API, state or activation                                              |
 | [0023](ADR-0023-die-sensitive-record-boundary.md)              | DIE sensitive-record boundary and authorization                                                                            | Sensitive boundary accepted (2026-09-22); coordination/withdrawal/re-entry rules pending                |
 | [0024](ADR-0024-academic-admission-and-student-identifier-proposal.md) | Academic admission and stable student identifier                                                              | Accepted (2026-11-15); amends ADR-0015 for RUN/IPE; migrations, reconciliation and projection need separate authorization |
+| [0025](ADR-0025-data-authority-and-annual-cycle.md) | Data authority and annual cycle between Académico and Payments | Accepted (2026-11-15); Académico owns years, courses, students and enrollment; BL owns guardians and billing per academic year; projection v2 pending |
 
 ## ADR workflow
 
