@@ -145,6 +145,10 @@ Comprobar el contenedor y la conectividad privada antes de cambiarlo.
 
 ## Backups y cambios de esquema
 
+Para ejecutar una migración aditiva de Académico con el runner publicado,
+usa [ACADEMICO-MIGRATION-RUNNER.md](ACADEMICO-MIGRATION-RUNNER.md): ensayo
+local, preparación sin escrituras, ventana, verificación y redeploy.
+
 - Timer `edupay-backup.timer`, servicio `edupay-backup.service`, cada seis horas.
   Launcher protegido `/root/run-edupay-native-backup.sh`; uploader existente
   `/opt/edupay-pilot/academico/ops/backup/upload-to-r2.sh`.
