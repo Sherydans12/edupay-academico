@@ -31,9 +31,10 @@ archivo `.dockerbuild` que aparezca en **Artifacts**.
 4. Comprueba que el servicio quede saludable y que
    `https://academico-api.edupay.baselogic.cl/api/v1/health/ready` responda.
 
-La última imagen API documentada como desplegada sigue siendo
-`ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d`, construida desde
-`5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`.
+Imagen API desplegada y verificada el 2026-11-15 (ver
+[admission-release-2026-11-15.md](admission-release-2026-11-15.md)):
+`ghcr.io/sherydans12/edupay-academico@sha256:c988b07a80a5e43363472045d06c795bbe329514b7d1ca9272152d5f49b7a4f8`,
+desde `3a06df42783e470262bfa8179149b0a12d5a2d12`. Rollback: `sha256:5a6ae5e1…`.
 
 La imagen del corte actual (avance anual, padrón a escala y admisión RUN/IPE de
 ADR-0024) se publicó y verificó desde `main` en

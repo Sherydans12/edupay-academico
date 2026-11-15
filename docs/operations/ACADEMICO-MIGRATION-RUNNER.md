@@ -193,6 +193,7 @@ ventana, compara con el conteo tomado al pausar el API). El `CREATE UNIQUE
 INDEX` no es `CONCURRENTLY`; con 253 filas el bloqueo esperado es breve y el
 API está detenido durante la ventana.
 
-Pendiente: recovery point, ejecución, verificación y redeploys no se han hecho.
-Al completarlos, registra en [PRODUCTION.md](PRODUCTION.md) y en el inventario
-lo observado (deployment, digests, ledger y health).
+**Ejecutado el 2026-11-15:** recovery point `20261115T162559Z`, migración
+aplicada (ledger 14/14, conteos sin cambio) y redeploy de API y FRONT
+verificados. Evidencia en
+[admission-release-2026-11-15.md](admission-release-2026-11-15.md).

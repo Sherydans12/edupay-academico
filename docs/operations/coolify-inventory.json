@@ -96,7 +96,7 @@
       "uuid": "cct0rtf5iku6fkd3t9hldnv4",
       "name": "edupay-academico-web-die-20260924",
       "type": "application",
-      "image": "ghcr.io/sherydans12/edupay-academico-web@sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2",
+      "image": "ghcr.io/sherydans12/edupay-academico-web@sha256:bea5d1bb1b92483d509b9176e5c2068484f5f2a7f95ad51ef95de231963d1094",
       "domain": "academico.edupay.baselogic.cl",
       "port": 3000,
       "health": "/login",
@@ -109,18 +109,19 @@
         "iobfkpujjoa2kj5urbpnjvzi",
         "0vrvqepcukwcubxga0narorf"
       ],
-      "observedState": "running:healthy",
-      "buildSourceSha": "56ea2ae770f48d9b6ad6bdc0f3d184fcbe315fe6",
-      "artifactDigest": "sha256:ce07f61d1f5fa066828b501e333b6c7e7668577f0d8b9d6b3f5cea400d566aa2",
-      "repository": "Sherydans12/edupay-academico"
+      "observedState": "running:healthy (2026-11-15)",
+      "buildSourceSha": "3a06df42783e470262bfa8179149b0a12d5a2d12",
+      "artifactDigest": "sha256:bea5d1bb1b92483d509b9176e5c2068484f5f2a7f95ad51ef95de231963d1094",
+      "repository": "Sherydans12/edupay-academico",
+      "configuredImageTag": "main"
     },
     {
       "uuid": "iobfkpujjoa2kj5urbpnjvzi",
       "name": "edupay-academico-pinned",
       "type": "service",
       "repository": "Sherydans12/edupay-academico",
-      "image": "ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d",
-      "migrationCount": 13,
+      "image": "ghcr.io/sherydans12/edupay-academico@sha256:c988b07a80a5e43363472045d06c795bbe329514b7d1ca9272152d5f49b7a4f8",
+      "migrationCount": 14,
       "identityInternalBaseUrl": "http://identity-0vrvqepcukwcubxga0narorf:3000",
       "domain": "academico-api.edupay.baselogic.cl",
       "port": 3001,
@@ -133,9 +134,10 @@
         "0vrvqepcukwcubxga0narorf",
         "ttrrmrkod9hmqo68er6q2ghs"
       ],
-      "observedState": "running:healthy",
-      "buildSourceSha": "5e3e6079baf4b8f6732a3d4f270f27c67ffa812b",
-      "artifactDigest": "sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d"
+      "observedState": "running:healthy (2026-11-15)",
+      "buildSourceSha": "3a06df42783e470262bfa8179149b0a12d5a2d12",
+      "artifactDigest": "sha256:c988b07a80a5e43363472045d06c795bbe329514b7d1ca9272152d5f49b7a4f8",
+      "rollbackArtifactDigest": "sha256:5a6ae5e127797956c5718403fc58d83c28499e8ff7f2743f69751654f7da1056"
     },
     {
       "uuid": "0vrvqepcukwcubxga0narorf",
@@ -285,9 +287,18 @@
     },
     "bl002RecoveryVerified": true,
     "bl002RecoveryVerifiedDate": "2026-09-14",
-    "bl002RecoveryScope": "Protected real backup restore verified; live database consistency and uploads coverage remain limited"
+    "bl002RecoveryScope": "Protected real backup restore verified; live database consistency and uploads coverage remain limited",
+    "latestAcademicReleaseRecoveryPoint": {
+      "id": "20261115T162559Z",
+      "capturedBeforeMigrations": true,
+      "academicLedgerRowsBefore": 13,
+      "remoteR2Verified": true,
+      "helperImage": "ghcr.io/sherydans12/edupay-pg15-backup-helper@sha256:78016dcfcec425b1649c23cc60fcca01abd4dc63e97f79d33425d339fde39b6f",
+      "note": "Automatic backups failed from at least 2026-11-14 because the helper image was missing on the host; restored by digest pull on 2026-11-15."
+    }
   },
   "nextSchemaChangeRequiresReconciliation": true,
   "currentSnapshot": "docs/operations/coolify-resource-cleanup-2026-09-28.md",
-  "verificationSource": "Read-only Coolify UI and server-side container/Traefik-label inventory on 2026-09-28; see docs/operations/coolify-resource-cleanup-2026-09-28.md for the complete 28-resource snapshot, route/health/storage checks, PR #28 merge and cleanup disposition. Historical baselines retain their original dates."
+  "verificationSource": "Read-only Coolify UI and server-side container/Traefik-label inventory on 2026-09-28; see docs/operations/coolify-resource-cleanup-2026-09-28.md for the complete 28-resource snapshot, route/health/storage checks, PR #28 merge and cleanup disposition. Historical baselines retain their original dates.",
+  "academicReleaseVerifiedDate": "2026-11-15"
 }
