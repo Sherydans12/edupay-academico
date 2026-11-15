@@ -848,9 +848,13 @@ export class AcademicApiClient {
     );
   }
 
-  listStudents(search?: string, cursor?: string) {
+  listStudents(
+    search?: string,
+    cursor?: string,
+    status?: 'ACTIVE' | 'INACTIVE',
+  ) {
     return this.request(
-      addQuery('students', { search, cursor, limit: 50 }),
+      addQuery('students', { search, cursor, status, limit: 50 }),
       studentPageSchema,
     );
   }

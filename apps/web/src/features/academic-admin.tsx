@@ -52,8 +52,8 @@ interface AdminData {
   studentsNextCursor?: string | null;
   teachersNextCursor?: string | null;
   subjectsNextCursor?: string | null;
-  studentsTotalCount?: number;
-  teachersTotalCount?: number;
+  studentsTotalCount?: number | undefined;
+  teachersTotalCount?: number | undefined;
   academicPreparation: Awaited<
     ReturnType<AcademicApiClient['getAcademicPreparationStatus']>
   > | null;
@@ -157,73 +157,111 @@ function errorMessage(error: unknown): { title: string; message: string } {
   };
 }
 
+/**
+ * Returns a total only when it is known: either reported by the API or
+ * implied by a single complete page. Never presents a page size as a total.
+ */
+function knownTotalCount(page: {
+  items: unknown[];
+  nextCursor: string | null;
+  totalCount?: number | undefined;
+}): number | undefined {
+  if (page.totalCount !== undefined) return page.totalCount;
+  return page.nextCursor === null ? page.items.length : undefined;
+}
+
+/** Display label for a person count that may be unknown beyond one page. */
+function personCountLabel(
+  totalCount: number | undefined,
+  loadedCount: number,
+): string {
+  return totalCount !== undefined
+    ? totalCount.toLocaleString('es-CL')
+    : `${loadedCount.toLocaleString('es-CL')}+`;
+}
+
+const studentPageSize = 50;
+const personSearchDebounceMs = 300;
+
 function useAdminData(api: AcademicApiClient, contextKey: string) {
   const [data, setData] = useState<AdminData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const requestSequence = useRef(0);
 
-  const reload = useCallback(async () => {
-    const sequence = ++requestSequence.current;
-    setLoading(true);
-    setError(null);
-    setData((current) => ({
-      ...current,
-      academicPreparation: null,
-      academicPreparationError: null,
-    }));
+  const reload = useCallback(
+    async (options?: { background?: boolean }) => {
+      const background = options?.background === true;
+      const sequence = ++requestSequence.current;
+      // A background refresh keeps the current screen mounted, so subviews
+      // preserve their tab, filters and page while summary counts update.
+      if (!background) {
+        setLoading(true);
+        setError(null);
+        setData((current) => ({
+          ...current,
+          academicPreparation: null,
+          academicPreparationError: null,
+        }));
+      }
 
-    const [coreResult, preparationResult] = await Promise.allSettled([
-      Promise.all([
-        loadAllPages((cursor) => api.listAcademicYears(cursor)),
-        loadAllPages((cursor) => api.listCourses(undefined, cursor)),
-        api.listStudents(),
-        api.listTeachers(),
-        loadAllPages((cursor) => api.listSubjects(cursor)),
-        loadAllPages((cursor) => api.listCourseSubjects(undefined, cursor)),
-      ]),
-      api.getAcademicPreparationStatus(),
-    ]);
+      const [coreResult, preparationResult] = await Promise.allSettled([
+        Promise.all([
+          loadAllPages((cursor) => api.listAcademicYears(cursor)),
+          loadAllPages((cursor) => api.listCourses(undefined, cursor)),
+          api.listStudents(),
+          api.listTeachers(),
+          loadAllPages((cursor) => api.listSubjects(cursor)),
+          loadAllPages((cursor) => api.listCourseSubjects(undefined, cursor)),
+        ]),
+        api.getAcademicPreparationStatus(),
+      ]);
 
-    if (sequence !== requestSequence.current) return;
+      if (sequence !== requestSequence.current) return;
 
-    if (coreResult.status === 'rejected') {
-      setError(coreResult.reason);
+      if (coreResult.status === 'rejected') {
+        // A failed background refresh keeps the last loaded data visible; the
+        // subview that triggered it reports its own page errors.
+        if (!background) {
+          setError(coreResult.reason);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const [
+        academicYears,
+        courses,
+        students,
+        teachers,
+        subjects,
+        courseSubjects,
+      ] = coreResult.value;
+      setData({
+        academicYears: academicYears.items,
+        courses: courses.items,
+        students: students.items,
+        teachers: teachers.items,
+        subjects: subjects.items,
+        courseSubjects: courseSubjects.items,
+        studentsNextCursor: students.nextCursor,
+        teachersNextCursor: teachers.nextCursor,
+        subjectsNextCursor: subjects.nextCursor,
+        studentsTotalCount: knownTotalCount(students),
+        teachersTotalCount: knownTotalCount(teachers),
+        academicPreparation:
+          preparationResult.status === 'fulfilled'
+            ? preparationResult.value
+            : null,
+        academicPreparationError:
+          preparationResult.status === 'rejected'
+            ? preparationResult.reason
+            : null,
+      });
       setLoading(false);
-      return;
-    }
-
-    const [
-      academicYears,
-      courses,
-      students,
-      teachers,
-      subjects,
-      courseSubjects,
-    ] = coreResult.value;
-    setData({
-      academicYears: academicYears.items,
-      courses: courses.items,
-      students: students.items,
-      teachers: teachers.items,
-      subjects: subjects.items,
-      courseSubjects: courseSubjects.items,
-      studentsNextCursor: students.nextCursor,
-      teachersNextCursor: teachers.nextCursor,
-      subjectsNextCursor: subjects.nextCursor,
-      studentsTotalCount: students.totalCount ?? students.items.length,
-      teachersTotalCount: teachers.totalCount ?? teachers.items.length,
-      academicPreparation:
-        preparationResult.status === 'fulfilled'
-          ? preparationResult.value
-          : null,
-      academicPreparationError:
-        preparationResult.status === 'rejected'
-          ? preparationResult.reason
-          : null,
-    });
-    setLoading(false);
-  }, [api]);
+    },
+    [api],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void reload(), 0);
@@ -706,8 +744,10 @@ function AdminOverview({
           <span className="admin-module-link__copy">
             <strong>Personas y accesos</strong>
             <small>
-              {data.studentsTotalCount ?? data.students.length} alumnos ·{' '}
-              {data.teachersTotalCount ?? data.teachers.length} profesores
+              {personCountLabel(data.studentsTotalCount, data.students.length)}{' '}
+              alumnos ·{' '}
+              {personCountLabel(data.teachersTotalCount, data.teachers.length)}{' '}
+              profesores
             </small>
           </span>
           <Icon className="admin-module-link__arrow" name="chevron-right" />
@@ -732,7 +772,9 @@ function AdminOverview({
             <Icon name="people" />
           </span>
           <div>
-            <strong>{data.studentsTotalCount ?? data.students.length}</strong>
+            <strong>
+              {personCountLabel(data.studentsTotalCount, data.students.length)}
+            </strong>
             <small>alumnos registrados</small>
           </div>
         </Card>
@@ -2653,6 +2695,23 @@ function PersonForm({
   );
 }
 
+type StudentStatusFilter = '' | 'ACTIVE' | 'INACTIVE';
+
+interface StudentListPage {
+  items: AdminData['students'];
+  nextCursor: string | null;
+  totalCount?: number | undefined;
+}
+
+function studentListRequestKey(
+  query: string,
+  status: StudentStatusFilter,
+  cursor: string | undefined,
+  refreshToken: number,
+): string {
+  return JSON.stringify([query, status, cursor ?? null, refreshToken]);
+}
+
 function StudentsView({
   api,
   initialStudents,
@@ -2668,25 +2727,25 @@ function StudentsView({
   identityActions?: AccountProvisioningActions | undefined;
   onSaved: () => void;
 }) {
-  const [pageStudents, setPageStudents] = useState<
-    AdminData['students'] | null
-  >(null);
-  const [nextCursor, setNextCursor] = useState<string | null | undefined>(
-    initialCursor,
-  );
-  const [totalCount, setTotalCount] = useState<number | undefined>(
-    initialTotalCount,
-  );
+  const [searchInput, setSearchInput] = useState('');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<StudentStatusFilter>('');
   const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([
     undefined,
   ]);
   const [pageIndex, setPageIndex] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState('');
-  const [paginationError, setPaginationError] = useState('');
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [page, setPage] = useState<StudentListPage>({
+    items: initialStudents,
+    nextCursor: initialCursor ?? null,
+    totalCount: initialTotalCount,
+  });
   const [loadingPage, setLoadingPage] = useState(false);
-  const searchSequence = useRef(0);
+  const [loadError, setLoadError] = useState('');
+  const requestSequence = useRef(0);
+  // The parent already loaded the first unfiltered page; only request again
+  // when the query, filter, page or refresh token changes.
+  const lastRequestKey = useRef(studentListRequestKey('', '', undefined, 0));
   const [editStudent, setEditStudent] = useState<
     AdminData['students'][number] | null
   >(null);
@@ -2696,76 +2755,89 @@ function StudentsView({
   const [editError, setEditError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const displayedStudents = pageStudents ?? initialStudents;
-  const totalPages = Math.max(1, Math.ceil((totalCount ?? 0) / 50));
+  const cursor = pageCursors[pageIndex];
+  const filtered = Boolean(query) || Boolean(status);
+  const searchPending = searchInput.trim() !== query;
+  const totalCount = page.totalCount;
+  const totalPages =
+    totalCount === undefined
+      ? undefined
+      : Math.max(1, Math.ceil(totalCount / studentPageSize));
 
-  const handleSearch = useCallback(
-    async (query: string) => {
-      const sequence = ++searchSequence.current;
-      const normalizedQuery = query.trim();
-      setSearchError('');
-      setPaginationError('');
-      setLoadingPage(false);
-      if (!normalizedQuery) {
-        setPageStudents(null);
-        setNextCursor(initialCursor);
-        setTotalCount(initialTotalCount);
-        setPageCursors([undefined]);
-        setPageIndex(0);
-        setSearching(false);
-        return;
-      }
+  useEffect(() => {
+    const normalized = searchInput.trim();
+    if (normalized === query) return;
+    const timer = window.setTimeout(() => {
+      setQuery(normalized);
+      setPageCursors([undefined]);
+      setPageIndex(0);
+    }, personSearchDebounceMs);
+    return () => window.clearTimeout(timer);
+  }, [query, searchInput]);
 
-      setSearching(true);
-      try {
-        const res = await api.listStudents(normalizedQuery);
-        if (sequence === searchSequence.current) {
-          setPageStudents(res.items);
-          setNextCursor(res.nextCursor);
-          setTotalCount(res.totalCount);
-          setPageCursors([undefined]);
-          setPageIndex(0);
-        }
-      } catch (error) {
-        if (sequence === searchSequence.current)
-          setSearchError(errorMessage(error).message);
-      } finally {
-        if (sequence === searchSequence.current) setSearching(false);
-      }
-    },
-    [api, initialCursor, initialTotalCount],
-  );
+  useEffect(() => {
+    const requestKey = studentListRequestKey(
+      query,
+      status,
+      cursor,
+      refreshToken,
+    );
+    if (requestKey === lastRequestKey.current) return;
+    lastRequestKey.current = requestKey;
+    const sequence = ++requestSequence.current;
+    const timer = window.setTimeout(() => {
+      setLoadingPage(true);
+      setLoadError('');
+      void api
+        .listStudents(query || undefined, cursor, status || undefined)
+        .then((result) => {
+          if (sequence !== requestSequence.current) return;
+          setPage({
+            items: result.items,
+            nextCursor: result.nextCursor,
+            totalCount: knownTotalCount(result),
+          });
+        })
+        .catch((error: unknown) => {
+          if (sequence === requestSequence.current)
+            setLoadError(errorMessage(error).message);
+        })
+        .finally(() => {
+          if (sequence === requestSequence.current) setLoadingPage(false);
+        });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [api, cursor, query, refreshToken, status]);
 
-  async function handlePageChange(direction: 'previous' | 'next') {
-    const cursor =
-      direction === 'next'
-        ? (nextCursor ?? undefined)
-        : pageCursors[pageIndex - 1];
-    if (direction === 'next' && !cursor) return;
-    if (direction === 'previous' && pageIndex === 0) return;
-    const targetPageIndex = pageIndex + (direction === 'next' ? 1 : -1);
-    const sequence = ++searchSequence.current;
-    const query = searchTerm.trim();
-    setLoadingPage(true);
-    setPaginationError('');
-    try {
-      const res = await api.listStudents(query || undefined, cursor);
-      if (sequence === searchSequence.current) {
-        setPageStudents(res.items);
-        setNextCursor(res.nextCursor);
-        setTotalCount(res.totalCount);
-        setPageCursors((current) => [
-          ...current.slice(0, targetPageIndex),
-          cursor,
-        ]);
-        setPageIndex(targetPageIndex);
-      }
-    } catch (error) {
-      if (sequence === searchSequence.current)
-        setPaginationError(errorMessage(error).message);
-    } finally {
-      if (sequence === searchSequence.current) setLoadingPage(false);
-    }
+  function changeStatus(nextStatus: StudentStatusFilter) {
+    setStatus(nextStatus);
+    setPageCursors([undefined]);
+    setPageIndex(0);
+  }
+
+  function goToNextPage() {
+    if (!page.nextCursor || loadingPage) return;
+    const nextCursor = page.nextCursor;
+    setPageCursors((current) => [
+      ...current.slice(0, pageIndex + 1),
+      nextCursor,
+    ]);
+    setPageIndex((current) => current + 1);
+  }
+
+  function goToPreviousPage() {
+    if (pageIndex === 0 || loadingPage) return;
+    setPageIndex((current) => current - 1);
+  }
+
+  function retryPage() {
+    setRefreshToken((current) => current + 1);
+  }
+
+  /** Reloads the visible page and summary counts while keeping filters. */
+  function refreshAfterSave() {
+    setRefreshToken((current) => current + 1);
+    onSaved();
   }
 
   async function handleUpdateStudent(e: FormEvent) {
@@ -2787,13 +2859,23 @@ function StudentsView({
         });
       }
       setEditStudent(null);
-      onSaved();
+      refreshAfterSave();
     } catch (err) {
       setEditError(errorMessage(err).message);
     } finally {
       setSavingEdit(false);
     }
   }
+
+  const resultNoun = filtered ? 'resultados' : 'alumnos';
+  const pageLabel =
+    totalPages !== undefined && pageIndex + 1 <= totalPages
+      ? `Página ${pageIndex + 1} de ${totalPages}`
+      : `Página ${pageIndex + 1}`;
+  const paginationSummary =
+    totalCount !== undefined
+      ? `${totalCount.toLocaleString('es-CL')} ${resultNoun} · ${pageLabel}`
+      : pageLabel;
 
   return (
     <div className="people-subview">
@@ -2815,7 +2897,7 @@ function StudentsView({
           </span>
           <span className="admin-create-disclosure__action">Nuevo alumno</span>
         </summary>
-        <StudentAdmissionForm api={api} onSaved={onSaved} />
+        <StudentAdmissionForm api={api} onSaved={refreshAfterSave} />
       </details>
 
       <div className="search-filter-toolbar">
@@ -2824,37 +2906,47 @@ function StudentsView({
             id="student-search-input"
             label="Buscar alumno"
             placeholder="Buscar por nombre, apellido, correo o identificador..."
-            aria-busy={searching}
-            value={searchTerm}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSearchTerm(val);
-              void handleSearch(val);
-            }}
+            aria-busy={searchPending || loadingPage}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
-        {searching ? (
+        <Select
+          id="student-status-filter"
+          label="Estado"
+          value={status}
+          onChange={(e) => changeStatus(e.target.value as StudentStatusFilter)}
+        >
+          <option value="">Todos</option>
+          <option value="ACTIVE">Activos</option>
+          <option value="INACTIVE">Inactivos</option>
+        </Select>
+        {searchPending || loadingPage ? (
           <span
             aria-live="polite"
             className="searching-indicator"
             role="status"
           >
-            Buscando alumnos…
+            {searchPending ? 'Buscando alumnos…' : 'Cargando alumnos…'}
           </span>
         ) : null}
       </div>
-      {searchError ? (
-        <Alert title="No pudimos buscar alumnos" tone="error">
-          {searchError}
-        </Alert>
-      ) : null}
-      {paginationError ? (
-        <Alert title="No pudimos cambiar de página" tone="error">
-          {paginationError}
+      {loadError ? (
+        <Alert
+          action={
+            <Button onClick={retryPage} variant="secondary">
+              Reintentar
+            </Button>
+          }
+          title="No pudimos cargar alumnos"
+          tone="error"
+        >
+          {loadError} La lista de abajo corresponde a la última consulta
+          completada.
         </Alert>
       ) : null}
 
-      <div className="responsive-table">
+      <div aria-busy={loadingPage} className="responsive-table">
         <table>
           <caption className="sr-only">Listado de alumnos</caption>
           <thead>
@@ -2868,7 +2960,7 @@ function StudentsView({
             </tr>
           </thead>
           <tbody>
-            {displayedStudents.map((student) => (
+            {page.items.map((student) => (
               <tr key={student.id}>
                 <td data-label="Alumno">
                   <strong>
@@ -2896,7 +2988,7 @@ function StudentsView({
                     identityActions={identityActions}
                     kind="student"
                     person={student}
-                    onLinked={onSaved}
+                    onLinked={refreshAfterSave}
                   />
                 </td>
                 <td data-label="Acciones">
@@ -2918,11 +3010,11 @@ function StudentsView({
             ))}
           </tbody>
         </table>
-        {displayedStudents.length === 0 ? (
+        {page.items.length === 0 && !loadingPage && !loadError ? (
           <EmptyState
             description={
-              searchTerm
-                ? 'No se encontraron alumnos que coincidan con la búsqueda.'
+              filtered
+                ? 'No se encontraron alumnos con esta búsqueda o filtro.'
                 : 'Aún no hay alumnos registrados.'
             }
             title="Sin alumnos"
@@ -2930,28 +3022,23 @@ function StudentsView({
         ) : null}
       </div>
 
-      {displayedStudents.length > 0 ? (
+      {page.items.length > 0 || pageIndex > 0 ? (
         <div className="pagination-bar">
-          <span className="pagination-info">
-            {totalCount !== undefined
-              ? `${totalCount} ${searchTerm.trim() ? 'resultados' : 'alumnos'} · `
-              : ''}
-            Página {pageIndex + 1} de {totalPages}
+          <span aria-live="polite" className="pagination-info">
+            {loadError ? 'Última consulta completada' : paginationSummary}
           </span>
           <div className="provisioning-actions">
             <Button
-              disabled={pageIndex === 0 || loadingPage || searching}
-              loading={loadingPage && pageIndex > 0}
+              disabled={pageIndex === 0 || loadingPage}
               variant="secondary"
-              onClick={() => void handlePageChange('previous')}
+              onClick={goToPreviousPage}
             >
               Anterior
             </Button>
             <Button
-              disabled={!nextCursor || loadingPage || searching}
-              loading={loadingPage && Boolean(nextCursor)}
+              disabled={!page.nextCursor || loadingPage}
               variant="secondary"
-              onClick={() => void handlePageChange('next')}
+              onClick={goToNextPage}
             >
               Siguiente
             </Button>
@@ -3131,6 +3218,20 @@ function TeachersView({
     }
   }
 
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => void handleSearch(searchTerm),
+      personSearchDebounceMs,
+    );
+    return () => window.clearTimeout(timer);
+  }, [handleSearch, searchTerm]);
+
+  /** Refreshes counts and, when searching, the visible search results. */
+  function refreshAfterSave() {
+    onSaved();
+    if (searchTerm.trim()) void handleSearch(searchTerm);
+  }
+
   async function handleUpdateTeacher(e: FormEvent) {
     e.preventDefault();
     if (!editTeacher) return;
@@ -3143,7 +3244,7 @@ function TeachersView({
         email: editEmail.trim() || null,
       });
       setEditTeacher(null);
-      onSaved();
+      refreshAfterSave();
     } catch (err) {
       setEditError(errorMessage(err).message);
     } finally {
@@ -3173,7 +3274,7 @@ function TeachersView({
             Nuevo profesor
           </span>
         </summary>
-        <PersonForm api={api} kind="teacher" onSaved={onSaved} />
+        <PersonForm api={api} kind="teacher" onSaved={refreshAfterSave} />
       </details>
 
       <div className="search-filter-toolbar">
@@ -3184,11 +3285,7 @@ function TeachersView({
             placeholder="Buscar por nombre, apellido o correo..."
             aria-busy={searching}
             value={searchTerm}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSearchTerm(val);
-              void handleSearch(val);
-            }}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         {searching ? (
@@ -3246,7 +3343,7 @@ function TeachersView({
                     identityActions={identityActions}
                     kind="teacher"
                     person={teacher}
-                    onLinked={onSaved}
+                    onLinked={refreshAfterSave}
                   />
                 </td>
                 <td data-label="Acciones">
@@ -3283,8 +3380,14 @@ function TeachersView({
       {displayedTeachers.length > 0 ? (
         <div className="pagination-bar">
           <span className="pagination-info">
-            Mostrando {displayedTeachers.length} de{' '}
-            {currentTotalCount ?? displayedTeachers.length} profesores
+            Mostrando {displayedTeachers.length.toLocaleString('es-CL')} de{' '}
+            {personCountLabel(
+              currentCursor
+                ? currentTotalCount
+                : (currentTotalCount ?? displayedTeachers.length),
+              displayedTeachers.length,
+            )}{' '}
+            profesores
           </span>
           {currentCursor ? (
             <Button
@@ -4518,11 +4621,14 @@ function PeopleView({
   api,
   data,
   identityActions,
+  onPeopleSaved,
   onSaved,
 }: {
   api: AcademicApiClient;
   data: AdminData;
   identityActions?: AccountProvisioningActions | undefined;
+  /** Refreshes summary counts without remounting the people subviews. */
+  onPeopleSaved: () => void;
   onSaved: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<
@@ -4538,11 +4644,11 @@ function PeopleView({
         options={[
           {
             value: 'students',
-            label: `Alumnos (${data.studentsTotalCount ?? data.students.length})`,
+            label: `Alumnos (${personCountLabel(data.studentsTotalCount, data.students.length)})`,
           },
           {
             value: 'teachers',
-            label: `Profesores (${data.teachersTotalCount ?? data.teachers.length})`,
+            label: `Profesores (${personCountLabel(data.teachersTotalCount, data.teachers.length)})`,
           },
           { value: 'assignments', label: 'Inscripciones y Asignaciones' },
         ]}
@@ -4563,7 +4669,7 @@ function PeopleView({
             initialCursor={data.studentsNextCursor}
             initialStudents={data.students}
             initialTotalCount={data.studentsTotalCount}
-            onSaved={onSaved}
+            onSaved={onPeopleSaved}
           />
         </div>
       ) : null}
@@ -4582,7 +4688,7 @@ function PeopleView({
             initialCursor={data.teachersNextCursor}
             initialTeachers={data.teachers}
             initialTotalCount={data.teachersTotalCount}
-            onSaved={onSaved}
+            onSaved={onPeopleSaved}
           />
         </div>
       ) : null}
@@ -4663,6 +4769,7 @@ export function AcademicAdminScreen({
             api={client}
             data={data}
             identityActions={identityActions}
+            onPeopleSaved={() => void reload({ background: true })}
             onSaved={() => void reload()}
           />
         )}

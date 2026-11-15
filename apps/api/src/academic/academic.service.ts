@@ -465,15 +465,21 @@ export class AcademicService {
           }
         : {}),
     };
-    const records = await this.prisma.student.findMany({
-      where,
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      ...(query.cursor
-        ? { cursor: { paginationToken: query.cursor }, skip: 1 }
-        : {}),
-      take: query.limit + 1,
-    });
-    return this.page(records, query.limit, mapStudent);
+    const [records, totalCount] = await Promise.all([
+      this.prisma.student.findMany({
+        where,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        ...(query.cursor
+          ? { cursor: { paginationToken: query.cursor }, skip: 1 }
+          : {}),
+        take: query.limit + 1,
+      }),
+      this.prisma.student.count({ where }),
+    ]);
+    return {
+      ...this.page(records, query.limit, mapStudent),
+      totalCount,
+    };
   }
 
   async getStudent(
@@ -605,15 +611,21 @@ export class AcademicService {
           }
         : {}),
     };
-    const records = await this.prisma.teacher.findMany({
-      where,
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      ...(query.cursor
-        ? { cursor: { paginationToken: query.cursor }, skip: 1 }
-        : {}),
-      take: query.limit + 1,
-    });
-    return this.page(records, query.limit, mapTeacher);
+    const [records, totalCount] = await Promise.all([
+      this.prisma.teacher.findMany({
+        where,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        ...(query.cursor
+          ? { cursor: { paginationToken: query.cursor }, skip: 1 }
+          : {}),
+        take: query.limit + 1,
+      }),
+      this.prisma.teacher.count({ where }),
+    ]);
+    return {
+      ...this.page(records, query.limit, mapTeacher),
+      totalCount,
+    };
   }
 
   async getTeacher(
