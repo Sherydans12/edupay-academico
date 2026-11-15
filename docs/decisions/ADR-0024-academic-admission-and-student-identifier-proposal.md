@@ -160,9 +160,10 @@ de proyección y autorización de BL-002; esta ADR no activa nada.
 
 ## Siguientes pasos
 
-1. Corte de alta manual (punto 4): implementado en la rama
-   `codex/academic-manual-admission`, pendiente de revisión e integración. Ver
-   «Implementación del primer corte» más abajo.
+1. Corte de alta manual (punto 4): integrado en `main` (PR #32, merge
+   `bac7b3b`; `main` `3a06df4` incluye además PR #31). Imágenes publicadas;
+   migración y redeploy productivos pendientes. Ver «Implementación del primer
+   corte» más abajo.
 2. Diseño de importación de archivo (formato, columnas, límites y retención).
 3. Diseño de la conciliación de identificadores de fichas `EDUPAY` (punto 5).
 4. Revisión del contrato de proyección financiera con BL-002 (punto 6).
@@ -175,8 +176,13 @@ de proyección y autorización de BL-002; esta ADR no activa nada.
 
 ## Implementación del primer corte (alta manual)
 
-Estado: implementado en rama, sin integrar en `main`, sin publicar y sin
-migración aplicada fuera de bases desechables.
+Estado al 2026-11-15: integrado en `main` (`3a06df4`). Imágenes publicadas
+desde ese SHA: API `sha256:c988b07a…`, runner de migración `sha256:1712e056…` y
+FRONT `sha256:bea5d1bb…`. La migración no se ha aplicado en producción y el API
+y FRONT con este corte no están redeployados; el procedimiento, el gate de
+destino observado y el ensayo están en
+[ACADEMICO-MIGRATION-RUNNER.md](../operations/ACADEMICO-MIGRATION-RUNNER.md).
+Estar en `main` no autoriza la migración productiva.
 
 - **Esquema:** migración aditiva `20261115120000_student_national_identifier`
   con `national_id_type` y `national_id` en `students`, ambos nulos o ambos

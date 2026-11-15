@@ -33,18 +33,28 @@ archivo `.dockerbuild` que aparezca en **Artifacts**.
 
 La última imagen API documentada como desplegada sigue siendo
 `ghcr.io/sherydans12/edupay-academico@sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d`, construida desde
-`5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`. La nueva imagen del corte actual ya
-fue publicada y verificada desde `main` en `3eca5e71daf49166e3fdf9ccd58fd608368592b1`:
+`5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`.
+
+La imagen del corte actual (avance anual, padrón a escala y admisión RUN/IPE de
+ADR-0024) se publicó y verificó desde `main` en
+`3a06df42783e470262bfa8179149b0a12d5a2d12` ([run 43731449591](https://github.com/Sherydans12/edupay-academico/actions/runs/43731449591)):
 
 ```text
-ghcr.io/sherydans12/edupay-academico@sha256:5a6ae5e127797956c5718403fc58d83c28499e8ff7f2743f69751654f7da1056
+ghcr.io/sherydans12/edupay-academico@sha256:c988b07a80a5e43363472045d06c795bbe329514b7d1ca9272152d5f49b7a4f8
 ```
 
-El código de avance anual llegó a `main` en `6d15463376d75d9803325427ec388255a9458a70`; el commit `3eca5e7` agrega el publicador y documentación. El [workflow de publicación](https://github.com/Sherydans12/edupay-academico/actions/runs/43447773531) terminó correctamente. Esta imagen está publicada, pero sigue pendiente el redeploy manual en Coolify.
+**Esta imagen requiere aplicar antes la migración
+`20261115120000_student_national_identifier`**: el API nuevo lee las columnas
+`national_id_type` y `national_id`. Sigue
+[ACADEMICO-MIGRATION-RUNNER.md](ACADEMICO-MIGRATION-RUNNER.md) y redeploya el API
+solo después de verificar el ledger. La imagen `sha256:5a6ae5e1…` publicada
+desde `3eca5e7` quedó superada: no incluye PR #31 ni #32 y no debe usarse para
+este corte.
 
 No uses el digest antiguo `sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a` encontrado en el worktree de publicación anterior: corresponde al SHA `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` (2026-08-28), y el job independiente de verificación de esa publicación falló.
 
-El cambio de avance anual no agregó una migración Prisma. Para cualquier cambio
-futuro de esquema, seguir el gate de base de datos y la autorización descritos
-en [PRODUCTION.md](PRODUCTION.md) y [RUNBOOK.md](RUNBOOK.md); no ejecutar el
-migrador como parte de este redeploy.
+El avance anual no agregó migraciones; la admisión RUN/IPE sí. Para cualquier
+cambio de esquema, seguir el gate de base de datos, el recovery point y la
+autorización descritos en [RUNBOOK.md](RUNBOOK.md) y ejecutar el runner según
+[ACADEMICO-MIGRATION-RUNNER.md](ACADEMICO-MIGRATION-RUNNER.md). El redeploy del
+API nunca ejecuta migraciones por sí mismo.
