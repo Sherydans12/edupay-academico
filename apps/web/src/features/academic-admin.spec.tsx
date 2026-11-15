@@ -959,7 +959,11 @@ describe('Academic admin screens', () => {
     fireEvent.change(searchInput, { target: { value: 'Claudio' } });
 
     await waitFor(() => {
-      expect(client.listStudents).toHaveBeenCalledWith('Claudio');
+      expect(client.listStudents).toHaveBeenCalledWith(
+        'Claudio',
+        undefined,
+        undefined,
+      );
     });
   });
 
@@ -1192,5 +1196,193 @@ describe('Academic admin screens', () => {
 
     render(<AcademicAdminScreen api={client} view="people" />);
     expect(await screen.findByText(/229 alumnos.*Página 1 de 5/)).toBeTruthy();
+  });
+
+  it('does not present a page size as the student total when the API omits it', async () => {
+    const client = adminClient({
+      listStudents: vi.fn(async () => ({
+        items: [studentEduPay, studentManual],
+        nextCursor: 'opaque-next',
+      })),
+    });
+    render(<AcademicAdminScreen api={client} view="people" />);
+
+    expect(
+      await screen.findByRole('tab', { name: 'Alumnos (2+)' }),
+    ).toBeTruthy();
+    const summary = screen.getByText(/^Página 1$/);
+    expect(summary.textContent).not.toMatch(/de 1/);
+    expect(screen.queryByText(/2 alumnos/)).toBeNull();
+  });
+
+  it('pages students with server cursors and keeps the page after saving', async () => {
+    const secondPageStudent = {
+      ...studentManual,
+      id: id3,
+      identityUserId: null,
+      firstName: 'Matilde',
+      lastName: 'Ladrón',
+      email: null,
+    };
+    const listStudents = vi.fn(
+      async (_search?: string, cursor?: string): Promise<StudentsPage> =>
+        cursor === 'cursor-page-2'
+          ? { items: [secondPageStudent], nextCursor: null, totalCount: 51 }
+          : {
+              items: [studentEduPay, studentManual],
+              nextCursor: 'cursor-page-2',
+              totalCount: 51,
+            },
+    );
+    const client = adminClient({ listStudents });
+    render(<AcademicAdminScreen api={client} view="people" />);
+
+    expect(await screen.findByText('51 alumnos · Página 1 de 2')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    expect(await screen.findByText('Matilde Ladrón')).toBeTruthy();
+    expect(screen.getByText('51 alumnos · Página 2 de 2')).toBeTruthy();
+    expect(listStudents).toHaveBeenLastCalledWith(
+      undefined,
+      'cursor-page-2',
+      undefined,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Guardar cambios' }),
+    );
+    await waitFor(() => {
+      expect(client.updateStudent).toHaveBeenCalledWith(id3, {
+        firstName: 'Matilde',
+        lastName: 'Ladrón',
+        email: null,
+      });
+    });
+    await waitFor(() => {
+      expect(
+        listStudents.mock.calls.filter(
+          ([, cursor]) => cursor === 'cursor-page-2',
+        ),
+      ).toHaveLength(2);
+    });
+    expect(screen.getByText('Matilde Ladrón')).toBeTruthy();
+    expect(screen.getByText('51 alumnos · Página 2 de 2')).toBeTruthy();
+    expect(
+      screen.queryByLabelText('Cargando información académica'),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }));
+    expect(await screen.findByText('Claudio Arrau')).toBeTruthy();
+    expect(screen.getByText('51 alumnos · Página 1 de 2')).toBeTruthy();
+  });
+
+  it('waits for typing to settle before searching students', async () => {
+    const client = adminClient();
+    render(<AcademicAdminScreen api={client} view="people" />);
+    const search = await screen.findByLabelText(/buscar alumno/i);
+
+    fireEvent.change(search, { target: { value: 'Cl' } });
+    fireEvent.change(search, { target: { value: 'Cla' } });
+    fireEvent.change(search, { target: { value: 'Claudio' } });
+
+    await waitFor(() => {
+      expect(client.listStudents).toHaveBeenCalledWith(
+        'Claudio',
+        undefined,
+        undefined,
+      );
+    });
+    expect(client.listStudents).not.toHaveBeenCalledWith(
+      'Cl',
+      undefined,
+      undefined,
+    );
+    expect(client.listStudents).not.toHaveBeenCalledWith(
+      'Cla',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('filters students by status on the server and restarts at the first page', async () => {
+    const inactive = {
+      ...studentManual,
+      id: id5,
+      identityUserId: null,
+      firstName: 'Inés',
+      lastName: 'Retirada',
+      status: 'INACTIVE' as const,
+    };
+    const listStudents = vi.fn(
+      async (
+        _search?: string,
+        cursor?: string,
+        status?: 'ACTIVE' | 'INACTIVE',
+      ): Promise<StudentsPage> => {
+        if (status === 'INACTIVE')
+          return { items: [inactive], nextCursor: null, totalCount: 1 };
+        return cursor
+          ? { items: [studentManual], nextCursor: null, totalCount: 51 }
+          : {
+              items: [studentEduPay],
+              nextCursor: 'cursor-page-2',
+              totalCount: 51,
+            };
+      },
+    );
+    render(
+      <AcademicAdminScreen api={adminClient({ listStudents })} view="people" />,
+    );
+    await screen.findByText('51 alumnos · Página 1 de 2');
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    await screen.findByText('51 alumnos · Página 2 de 2');
+
+    fireEvent.change(screen.getByLabelText('Estado'), {
+      target: { value: 'INACTIVE' },
+    });
+    expect(await screen.findByText('Inés Retirada')).toBeTruthy();
+    expect(screen.getByText('1 resultados · Página 1 de 1')).toBeTruthy();
+    expect(listStudents).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'INACTIVE',
+    );
+  });
+
+  it('shows a recoverable error when a student page cannot load', async () => {
+    let failNextPage = true;
+    const listStudents = vi.fn(
+      async (_search?: string, cursor?: string): Promise<StudentsPage> => {
+        if (cursor && failNextPage) {
+          failNextPage = false;
+          throw new AcademicApiError({
+            code: 'REQUEST_FAILED',
+            details: [],
+            message: 'El servicio no respondió.',
+            requestId: 'req-student-page',
+            status: 503,
+          });
+        }
+        return cursor
+          ? { items: [studentManual], nextCursor: null, totalCount: 51 }
+          : {
+              items: [studentEduPay],
+              nextCursor: 'cursor-page-2',
+              totalCount: 51,
+            };
+      },
+    );
+    render(
+      <AcademicAdminScreen api={adminClient({ listStudents })} view="people" />,
+    );
+    await screen.findByText('51 alumnos · Página 1 de 2');
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    expect(await screen.findByText(/El servicio no respondió\./)).toBeTruthy();
+    expect(screen.getByText('Última consulta completada')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByText('Violeta Parra')).toBeTruthy();
+    expect(screen.getByText('51 alumnos · Página 2 de 2')).toBeTruthy();
+    expect(screen.queryByText(/El servicio no respondió\./)).toBeNull();
   });
 });

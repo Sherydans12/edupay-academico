@@ -891,6 +891,73 @@ describe.runIf(testDatabaseUrl)(
       expect(summary.body.fingerprint).toMatch(/^[a-f0-9]{64}$/);
     });
 
+    it('reports tenant-scoped student and teacher totals that follow search and status filters', async () => {
+      const adminA = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      await createStudent(adminA, 'Ana', 'Registro');
+      await createStudent(adminB, 'Berta', 'Registro');
+      await createTeacher(adminA, 'Tomás', 'Docente');
+      await prisma.student.createMany({
+        data: Array.from({ length: 52 }, (_, index) => ({
+          tenantId: 'tenant-a',
+          firstName: `Sintético ${index + 1}`,
+          lastName: index < 3 ? 'Inactivo' : 'Prueba',
+          source: 'MANUAL',
+          status: index < 3 ? ('INACTIVE' as const) : ('ACTIVE' as const),
+        })),
+      });
+      await prisma.student.createMany({
+        data: Array.from({ length: 4 }, (_, index) => ({
+          tenantId: 'tenant-b',
+          firstName: `Otro ${index + 1}`,
+          lastName: 'Prueba',
+          source: 'MANUAL',
+          status: 'ACTIVE' as const,
+        })),
+      });
+
+      const firstPage = await api(adminA).get('/api/v1/students').expect(200);
+      expect(firstPage.body.totalCount).toBe(53);
+      expect(firstPage.body.items).toHaveLength(50);
+      expect(firstPage.body.nextCursor).toEqual(expect.any(String));
+
+      const secondPage = await api(adminA)
+        .get(
+          `/api/v1/students?cursor=${encodeURIComponent(firstPage.body.nextCursor)}`,
+        )
+        .expect(200);
+      expect(secondPage.body.totalCount).toBe(53);
+      expect(secondPage.body.items).toHaveLength(3);
+      expect(secondPage.body.nextCursor).toBeNull();
+
+      const inactive = await api(adminA)
+        .get('/api/v1/students?status=INACTIVE')
+        .expect(200);
+      expect(inactive.body.totalCount).toBe(3);
+      expect(inactive.body.items).toHaveLength(3);
+
+      const searched = await api(adminA)
+        .get('/api/v1/students?search=inactivo&status=ACTIVE')
+        .expect(200);
+      expect(searched.body).toMatchObject({ items: [], totalCount: 0 });
+
+      const otherTenant = await api(adminB)
+        .get('/api/v1/students')
+        .expect(200);
+      expect(otherTenant.body.totalCount).toBe(5);
+      expect(
+        otherTenant.body.items.every(
+          (student: { firstName: string }) =>
+            !student.firstName.startsWith('Sintético'),
+        ),
+      ).toBe(true);
+
+      const teachersA = await api(adminA).get('/api/v1/teachers').expect(200);
+      expect(teachersA.body).toMatchObject({ totalCount: 1, nextCursor: null });
+      const teachersB = await api(adminB).get('/api/v1/teachers').expect(200);
+      expect(teachersB.body).toMatchObject({ items: [], totalCount: 0 });
+    });
+
     it('advances a roster with exceptions, preserves source-managed rows, and replays idempotently', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
       const source = await createStructure(admin, '2026', '6° Básico A', 'Matemática');

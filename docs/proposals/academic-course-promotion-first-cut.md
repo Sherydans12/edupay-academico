@@ -1,7 +1,9 @@
 # Primer corte: avance anual de matrícula por curso
 
-**Estado:** implementado en `codex/academic-year-2027-workflow`; requiere
-revisión antes de integrarse. No autoriza aplicar cambios de datos ni publicar.
+**Estado:** integrado en `main` mediante el commit
+`6d15463376d75d9803325427ec388255a9458a70` (desarrollado en
+`codex/academic-year-2027-workflow`). Estar en `main` no prueba un despliegue y
+no autoriza aplicar cambios de datos ni publicar.
 
 **Base de dominio:** [ADR-0021](../decisions/ADR-0021-ecosystem-domain-ownership-transition.md)
 y contratos REST/idempotencia de [ADR-0011](../decisions/ADR-0011-api-and-shared-contract-strategy.md).
@@ -75,6 +77,25 @@ proyección por esta operación.
   disponibles.
 - El avance representa al curso completo con conteos y huella; solo las
   excepciones viajan en el comando.
+
+### Padrón de alumnos y profesores
+
+- `GET /api/v1/students` y `GET /api/v1/teachers` informan `totalCount` con los
+  mismos filtros de búsqueda y estado, calculado sólo dentro del tenant de
+  confianza. El campo ya era opcional en `studentPageSchema` y
+  `teacherPageSchema`; el contrato no cambia de forma.
+- La pantalla de alumnos busca en el servidor después de 300 ms sin escribir,
+  filtra por estado (`ACTIVE`/`INACTIVE`) y pagina por cursor de 50. Muestra
+  «N alumnos · Página X de Y» sólo con un total informado por el API; si no lo
+  recibe, muestra la página y una cuenta mínima («50+») en vez de presentar el
+  tamaño de página como total.
+- Crear, editar o vincular una ficha recarga la página visible y conserva la
+  pestaña, la búsqueda, el filtro y la página; los conteos del resumen se
+  actualizan sin desmontar la vista.
+- Un error al cargar una página se informa con «Reintentar» y aclara que la
+  lista visible corresponde a la última consulta completada.
+- No se agregó orden alfabético: el cursor sigue el orden de creación, y
+  cambiarlo requiere revisar el contrato de paginación.
 
 ## Revisión antes de integrar
 
