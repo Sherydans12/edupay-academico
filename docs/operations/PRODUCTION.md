@@ -1,16 +1,33 @@
 # Topología productiva EduPay
 
-## Código API actualizado — imagen publicada, pendiente de redeploy (2026-11-13)
+## Estado operativo vigente — 2026-11-15 (admisión RUN/IPE)
 
-`main` contiene el avance anual de cursos desde `6d15463376d75d9803325427ec388255a9458a70`. El CI de ese commit pasó y se publicó la imagen del FRONT. La imagen API se construyó y validó desde `main` en `3eca5e71daf49166e3fdf9ccd58fd608368592b1`: `ghcr.io/sherydans12/edupay-academico@sha256:5a6ae5e127797956c5718403fc58d83c28499e8ff7f2743f69751654f7da1056` ([run exitoso](https://github.com/Sherydans12/edupay-academico/actions/runs/43447773531)). El último digest documentado como desplegado sigue siendo `sha256:50ef3a589234179a27c332adcd8a6b52b6be59532586688354056cc9089fe42d`, desde `5e3e6079baf4b8f6732a3d4f270f27c67ffa812b`; el nuevo digest está pendiente de redeploy en Coolify.
+Release ejecutado y verificado el 2026-11-15; evidencia completa en
+[admission-release-2026-11-15.md](admission-release-2026-11-15.md).
 
-`Publish Academic API runtime` queda disponible como flujo manual en GitHub Actions para los próximos cortes. La imagen de este corte ya está publicada; hasta que Coolify redepliegue el digest indicado, este corte no debe considerarse desplegado. Ver [publicación y redeploy de Académico API](ACADEMICO-API-REDEPLOY.md).
+| Componente | Commit integrado | Imagen activa | Recurso |
+|---|---|---|---|
+| Académico API | `3a06df42783e470262bfa8179149b0a12d5a2d12` | `ghcr.io/sherydans12/edupay-academico@sha256:c988b07a80a5e43363472045d06c795bbe329514b7d1ca9272152d5f49b7a4f8` | `iobfkpujjoa2kj5urbpnjvzi` |
+| Académico FRONT | `3a06df42783e470262bfa8179149b0a12d5a2d12` | `ghcr.io/sherydans12/edupay-academico-web@sha256:bea5d1bb1b92483d509b9176e5c2068484f5f2a7f95ad51ef95de231963d1094` (tag `main`) | `cct0rtf5iku6fkd3t9hldnv4` |
+| Académico DB | — | ledger 14/14; última `20261115120000_student_national_identifier` | `v5w9hacwtftulf4m46l1rn2g` |
+
+La migración se aplicó con el runner
+`ghcr.io/sherydans12/edupay-academico-migrate@sha256:1712e056574a92269c72cd5df3ce7cda2ae020c44d79f1d0c3769b7e7e74f4d6`
+después del recovery point `20261115T162559Z`. Rollback del API: digest previo
+`sha256:5a6ae5e127797956c5718403fc58d83c28499e8ff7f2743f69751654f7da1056`
+(compatible con la migración aditiva). Los backups automáticos fallaban desde al
+menos el 2026-11-14 por falta del helper PG15 en el host; se restauró por digest
+y el recovery point de la ventana terminó correctamente. Identity, BL, workers,
+ClamAV, redes, dominios y flags no cambiaron. La proyección financiera sigue
+apagada.
+
+## Historial — release docente del FRONT (2026-10-09)
 
 Verificado: **2026-10-09 para el FRONT Académico**. Estado: **release docente/login desplegado en FRONT; API e Identity sin cambios en este corte; piloto DIE sin configurar; BL flags apagados**. El [release docente del FRONT](teacher-frontend-release-2026-10-09.md) registra el artefacto y sus smokes; el [procedimiento de publicación y redeploy](ACADEMICO-WEB-REDEPLOY.md) documenta el flujo vigente. El [release anterior del FRONT](teacher-frontend-release-2026-10-07.md), el [snapshot Coolify del 2026-09-28](coolify-resource-cleanup-2026-09-28.md), el inventario estructurado y [el cierre del corte estudiantil](student-experience-release-2026-09-28.md) conservan la evidencia operativa histórica. Los ADR aceptados conservan autoridad sobre arquitectura y contratos.
 
 Después de ese inventario se retiró por Coolify el servicio obsoleto `ajf4d2ebozcpauguebm3alh1` (migrador Identity); el contador del proyecto bajó de 28 a 27. La lista posterior mostró el API Académico, Identity y FRONT activo como `Running`. El registro de ese retiro está en el [informe de limpieza](coolify-resource-cleanup-2026-09-28.md); la validación vigente del FRONT está en el [cierre de release 2026-10-09](teacher-frontend-release-2026-10-09.md).
 
-## Estado operativo vigente — 2026-10-09
+### Estado operativo — 2026-10-09
 
 | Componente | Commit integrado | Imagen activa | Recurso |
 |---|---|---|---|

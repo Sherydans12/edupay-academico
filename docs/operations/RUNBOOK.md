@@ -145,6 +145,13 @@ Comprobar el contenedor y la conectividad privada antes de cambiarlo.
 
 ## Backups y cambios de esquema
 
+Antes de cualquier ventana, comprueba `systemctl show edupay-backup.service -p Result`
+y el journal del timer: el 2026-11-15 se detectó que todos los backups
+fallaban desde al menos el 14/11 porque faltaba en el host el helper PG15
+fijado por digest en `/root/run-edupay-native-backup.sh`. Al detener o
+redeployar recursos en Coolify, **desmarca "Run Docker Cleanup"**: borra
+imágenes no usadas, incluidos ese helper, runners y digests de rollback.
+
 Para ejecutar una migración aditiva de Académico con el runner publicado,
 usa [ACADEMICO-MIGRATION-RUNNER.md](ACADEMICO-MIGRATION-RUNNER.md): ensayo
 local, preparación sin escrituras, ventana, verificación y redeploy.
