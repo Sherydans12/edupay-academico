@@ -43,9 +43,12 @@ aceptados mantienen autoridad sobre arquitectura y seguridad.
 
 - [Primer corte de avance anual por curso](proposals/academic-course-promotion-first-cut.md)
   documents the preview, per-student exceptions, bounded roster pages, idempotent
-  confirmation, and the manual-enrollment-only boundary. Admission and student
-  import remain a separate follow-up; merging source code does not imply a
-  production deployment or modify production enrollments.
+  confirmation, and the manual-enrollment-only boundary. Merging source code
+  does not imply a production deployment or modify production enrollments.
+- [ADR-0024: admisión e identificador del alumno](decisions/ADR-0024-academic-admission-and-student-identifier-proposal.md)
+  records the accepted admission rules (RUN, or IPE without RUN) and the first
+  manual-admission cut: one idempotent command creates the record and its
+  enrollment. File import remains a separate follow-up.
 - [Primer corte de frontend académico: shell compartido y DIE](design/academic-frontend-first-cut.md)
   records the implemented visual direction, DIE changes, synthetic before
   captures, validation, and prioritized module follow-ups.

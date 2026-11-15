@@ -33,6 +33,7 @@ import {
   type AccountProvisioningActions,
 } from '@/components/account-provisioning';
 import { PageHeading } from '@/components/page-primitives';
+import { StudentAdmissionForm } from '@/features/student-admission-form';
 import { demoSessions } from '@/demo/demo-data';
 
 type AdminView = 'overview' | 'structure' | 'people';
@@ -2892,11 +2893,11 @@ function StudentsView({
         <summary>
           <span>
             <strong>Incorporar alumno</strong>
-            <small>Crear una ficha manual; el correo es opcional.</small>
+            <small>Ficha con RUN o IPE y matrícula en un curso.</small>
           </span>
           <span className="admin-create-disclosure__action">Nuevo alumno</span>
         </summary>
-        <PersonForm api={api} kind="student" onSaved={refreshAfterSave} />
+        <StudentAdmissionForm api={api} onSaved={refreshAfterSave} />
       </details>
 
       <div className="search-filter-toolbar">

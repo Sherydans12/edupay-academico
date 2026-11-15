@@ -7,6 +7,7 @@ export * from './learning.js';
 export * from './learning-read.js';
 export * from './notifications.js';
 export * from './storage.js';
+export * from './student-admission.js';
 export * from './submissions.js';
 export * from './sync.js';
 export * from './tenant-operational-profile.js';
