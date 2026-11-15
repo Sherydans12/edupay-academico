@@ -975,14 +975,20 @@ describe('Academic admin screens', () => {
     fireEvent.click(screen.getByText('Incorporar alumno'));
     expect(disclosure.open).toBe(true);
 
+    // ADR-0024: the student form admits with RUN/IPE and a course.
+    const run = (await screen.findByLabelText('RUN')) as HTMLInputElement;
     const firstName = screen.getByLabelText('Nombres') as HTMLInputElement;
     const lastName = screen.getByLabelText('Apellidos') as HTMLInputElement;
     const email = screen.getByLabelText(
       'Correo electrónico (opcional)',
     ) as HTMLInputElement;
+    expect(run.required).toBe(true);
     expect(firstName.required).toBe(true);
     expect(lastName.required).toBe(true);
     expect(email.required).toBe(false);
+    expect((screen.getByLabelText('Curso') as HTMLSelectElement).required).toBe(
+      true,
+    );
     expect(client.createStudent).not.toHaveBeenCalled();
   });
 

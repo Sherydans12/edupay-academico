@@ -1,4 +1,12 @@
 import {
+  admitStudentSchema,
+  studentAdmissionResultSchema,
+  studentNationalIdLookupResultSchema,
+  studentNationalIdLookupSchema,
+  type AdmitStudent,
+  type StudentNationalIdLookup,
+} from '@edupay/contracts';
+import {
   academicYearPageSchema,
   academicYearSchema,
   academicPreparationStatusSchema,
@@ -990,6 +998,25 @@ export class AcademicApiClient {
       method: 'POST',
       body: JSON.stringify(createCourseEnrollmentSchema.parse(input)),
     });
+  }
+  /** ADR-0024: creates the record with RUN/IPE and its enrollment at once. */
+  admitStudent(input: AdmitStudent, options: { idempotencyKey: string }) {
+    return this.request('student-admissions', studentAdmissionResultSchema, {
+      method: 'POST',
+      body: JSON.stringify(admitStudentSchema.parse(input)),
+      headers: { 'Idempotency-Key': options.idempotencyKey },
+    });
+  }
+  /** The identifier travels in the body so it never appears in a URL. */
+  lookupStudentByNationalId(input: StudentNationalIdLookup) {
+    return this.request(
+      'student-admissions/lookup',
+      studentNationalIdLookupResultSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(studentNationalIdLookupSchema.parse(input)),
+      },
+    );
   }
   deactivateEnrollment(id: string) {
     return this.request(

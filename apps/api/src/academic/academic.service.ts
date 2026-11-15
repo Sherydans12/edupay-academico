@@ -7,7 +7,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { courseEnrollmentPromotionRosterLimit } from '@edupay/contracts';
+import {
+  canonicalStudentNationalId,
+  courseEnrollmentPromotionRosterLimit,
+  STUDENT_NATIONAL_ID_EXISTS,
+} from '@edupay/contracts';
+import type {
+  AdmitStudent,
+  StudentAdmissionResult,
+  StudentNationalIdLookup,
+  StudentNationalIdLookupResult,
+} from '@edupay/contracts';
 import type {
   AcademicPreparationStatus,
   AssignCourseSubjectTeachers,
@@ -896,6 +906,171 @@ export class AcademicService {
       record.id,
     );
     return mapCourseEnrollment(record);
+  }
+
+  /**
+   * ADR-0024 manual admission: creates the student record with its RUN/IPE
+   * and a MANUAL enrollment in one idempotent command. An identifier that
+   * already belongs to a record in the tenant is a conflict; records are
+   * never matched by name, course or email.
+   */
+  async admitStudent(
+    context: AcademicRequestContext,
+    input: AdmitStudent,
+  ): Promise<StudentAdmissionResult> {
+    const scope = this.adminScope(context);
+    const idempotencyKey = context.idempotencyKey?.trim();
+    if (!idempotencyKey) {
+      throw new BadRequestException(
+        'An Idempotency-Key is required to admit a student.',
+      );
+    }
+    const nationalId = this.requireNationalId(input);
+    const course = await this.courseWithYear(scope, input.courseId);
+    this.requireStructuralMutation(course.status, course.academicYear.status);
+    await this.ensureTenant(scope);
+
+    const payload = {
+      nationalIdType: input.nationalIdType,
+      nationalId,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email ?? null,
+      courseId: input.courseId,
+    };
+
+    let admission: StudentAdmissionResult;
+    let shouldRecordAudit = true;
+    try {
+      const execution =
+        await this.commandIdempotency.execute<StudentAdmissionResult>({
+          tenantId: scope.tenantId,
+          actorIdentityUserId: context.principal.identityUserId,
+          commandName: 'ADMIT_STUDENT',
+          idempotencyKey,
+          payload,
+          returnReplayMetadata: true,
+          action: async (tx) => {
+            const existing = await tx.student.findUnique({
+              where: {
+                tenantId_nationalIdType_nationalId: {
+                  tenantId: scope.tenantId,
+                  nationalIdType: input.nationalIdType,
+                  nationalId,
+                },
+              },
+              select: { id: true },
+            });
+            if (existing) this.nationalIdConflict();
+
+            const student = await tx.student.create({
+              data: {
+                tenantId: scope.tenantId,
+                source: MANUAL_SOURCE,
+                nationalIdType: input.nationalIdType,
+                nationalId,
+                firstName: input.firstName,
+                lastName: input.lastName,
+                ...(input.email !== undefined ? { email: input.email } : {}),
+              },
+            });
+            const enrollment = await tx.courseEnrollment.create({
+              data: {
+                tenantId: scope.tenantId,
+                source: MANUAL_SOURCE,
+                studentId: student.id,
+                courseId: input.courseId,
+              },
+              include: { course: { select: { academicYearId: true } } },
+            });
+            if (this.financialProjectionConfig.enabled()) {
+              await this.financialProjectionOutbox.enqueueEnrollment(
+                tx,
+                enrollment,
+                context.requestId,
+              );
+            }
+            return {
+              data: {
+                student: mapStudent(
+                  student,
+                ) as StudentAdmissionResult['student'],
+                enrollment: mapCourseEnrollment(
+                  enrollment,
+                ) as StudentAdmissionResult['enrollment'],
+                nationalIdType: input.nationalIdType,
+              },
+            };
+          },
+        });
+      admission = execution.data;
+      shouldRecordAudit = execution.replayed !== true;
+    } catch (error) {
+      if (this.prismaErrorCode(error) === 'P2002') this.nationalIdConflict();
+      throw error;
+    }
+
+    if (shouldRecordAudit) {
+      // Audit records ids only; the RUN/IPE and names are never logged.
+      await this.recordAudit(
+        context,
+        'STUDENT_ADMITTED',
+        'Student',
+        admission.student.id,
+      );
+      await this.recordAudit(
+        context,
+        'COURSE_ENROLLMENT_CREATED',
+        'CourseEnrollment',
+        admission.enrollment.id,
+      );
+    }
+    return admission;
+  }
+
+  /** Finds the record that owns an identifier, sent in the body (never a URL). */
+  async lookupStudentByNationalId(
+    context: AcademicRequestContext,
+    input: StudentNationalIdLookup,
+  ): Promise<StudentNationalIdLookupResult> {
+    const scope = this.adminScope(context);
+    const nationalId = this.requireNationalId(input);
+    const record = await this.prisma.student.findUnique({
+      where: {
+        tenantId_nationalIdType_nationalId: {
+          tenantId: scope.tenantId,
+          nationalIdType: input.nationalIdType,
+          nationalId,
+        },
+      },
+    });
+    return {
+      student: record
+        ? (mapStudent(record) as StudentNationalIdLookupResult['student'])
+        : null,
+    };
+  }
+
+  private requireNationalId(input: {
+    nationalIdType: AdmitStudent['nationalIdType'];
+    nationalId: string;
+  }): string {
+    const nationalId = canonicalStudentNationalId(
+      input.nationalIdType,
+      input.nationalId,
+    );
+    if (nationalId === null) {
+      throw new BadRequestException('The student identifier is not valid.');
+    }
+    return nationalId;
+  }
+
+  private nationalIdConflict(): never {
+    throw new ConflictException({
+      code: STUDENT_NATIONAL_ID_EXISTS,
+      message:
+        'A student record with this identifier already exists in this tenant.',
+    });
   }
 
   async promoteCourseEnrollments(

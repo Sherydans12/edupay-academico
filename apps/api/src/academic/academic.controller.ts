@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -78,6 +79,13 @@ import {
   type UpdateTeacher,
   type VerifiedIdentityLink,
 } from '@edupay/contracts';
+import {
+  admitStudentSchema,
+  studentAdmissionResultSchema,
+  studentNationalIdLookupResultSchema,
+  studentNationalIdLookupSchema,
+} from '@edupay/contracts';
+import type { AdmitStudent, StudentNationalIdLookup } from '@edupay/contracts';
 
 import { RequireCapabilities } from '../authorization/require-capabilities.decorator';
 import { TenantCapability } from '../authorization/authorization.types';
@@ -373,6 +381,29 @@ export class AcademicAdminController {
     input: UpdateCourseSubject,
   ): Promise<object> {
     return this.academics.updateCourseSubject(this.context(), id, input);
+  }
+
+  @Post('student-admissions')
+  @RequireCurrentIdentityStatus()
+  @ContractBody(admitStudentSchema)
+  @ContractResponse(studentAdmissionResultSchema)
+  admitStudent(
+    @Body(new ZodValidationPipe(admitStudentSchema)) input: AdmitStudent,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<object> {
+    return this.academics.admitStudent(this.context(idempotencyKey), input);
+  }
+
+  @Post('student-admissions/lookup')
+  @HttpCode(200)
+  @RequireCurrentIdentityStatus()
+  @ContractBody(studentNationalIdLookupSchema)
+  @ContractResponse(studentNationalIdLookupResultSchema)
+  lookupStudentByNationalId(
+    @Body(new ZodValidationPipe(studentNationalIdLookupSchema))
+    input: StudentNationalIdLookup,
+  ): Promise<object> {
+    return this.academics.lookupStudentByNationalId(this.context(), input);
   }
 
   @Post('course-enrollments')
