@@ -2,6 +2,13 @@
 
 Status: **Accepted**; D-05 resolved 2026-08-11
 
+Amendment 2026-11-15: [ADR-0024](ADR-0024-academic-admission-and-student-identifier-proposal.md)
+makes the student's RUN a stable Académico attribute for admission and
+controlled reconciliation. The v1 sync still never uses RUT as an identity or
+writes it; `Student.rut` stays `NOT_SYNCED` until a reconciliation is
+separately approved (ADR-0024, point 5). ADR-0021 already limits this ADR's
+EduPay roster authority to temporary coexistence.
+
 Date: 2026-08-11
 
 Approved by: EduPay integration owner, Académico product/domain owner, security/privacy owner
