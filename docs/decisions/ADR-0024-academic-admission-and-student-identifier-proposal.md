@@ -160,11 +160,9 @@ de proyección y autorización de BL-002; esta ADR no activa nada.
 
 ## Siguientes pasos
 
-1. Corte de alta manual (punto 4): esquema `nationalIdType`/`nationalId`,
-   contrato en `packages/contracts`, comando idempotente de ficha + matrícula,
-   UI y pruebas de autorización, aislamiento entre tenants y duplicados. Su
-   migración se ensaya según el runbook antes de cualquier aplicación
-   productiva.
+1. Corte de alta manual (punto 4): implementado en la rama
+   `codex/academic-manual-admission`, pendiente de revisión e integración. Ver
+   «Implementación del primer corte» más abajo.
 2. Diseño de importación de archivo (formato, columnas, límites y retención).
 3. Diseño de la conciliación de identificadores de fichas `EDUPAY` (punto 5).
 4. Revisión del contrato de proyección financiera con BL-002 (punto 6).
@@ -174,3 +172,40 @@ de proyección y autorización de BL-002; esta ADR no activa nada.
 - Lectura en producción de la distribución `MANUAL`/`EDUPAY` de matrículas, sin
   extraer datos personales.
 - Toda migración, conciliación o activación sobre datos reales.
+
+## Implementación del primer corte (alta manual)
+
+Estado: implementado en rama, sin integrar en `main`, sin publicar y sin
+migración aplicada fuera de bases desechables.
+
+- **Esquema:** migración aditiva `20261115120000_student_national_identifier`
+  con `national_id_type` y `national_id` en `students`, ambos nulos o ambos
+  presentes, tipo `RUN` o `IPE`, y unicidad por tenant y tipo. No lee, copia ni
+  rellena datos existentes.
+- **Contrato:** `packages/contracts/src/student-admission.ts`. Normaliza el
+  identificador y valida el dígito verificador del RUN. Para el IPE sólo exige
+  letras y números, hasta 20 caracteres, mientras no se confirme su formato
+  oficial.
+- **API:** `POST /api/v1/student-admissions` crea ficha `MANUAL` y matrícula
+  `MANUAL` en una transacción, exige `Idempotency-Key`, la capacidad
+  `academic-structure:administer` y el estado vigente de la sesión en Identity.
+  Responde `409 STUDENT_NATIONAL_ID_EXISTS` si el identificador ya existe en el
+  tenant. `POST /api/v1/student-admissions/lookup` devuelve la ficha dueña del
+  identificador; el valor viaja en el cuerpo, nunca en la URL.
+- **Privacidad:** el identificador no se devuelve en la respuesta de admisión,
+  ni en listados de alumnos, recibos de idempotencia, auditoría, rosters
+  docentes ni contexto del alumno.
+- **Web:** «Incorporar alumno» en Personas usa el formulario de admisión: tipo e
+  identificador, nombres, apellidos, correo opcional, año abierto y curso. Ante
+  un duplicado muestra la ficha existente y ofrece matricularla de forma
+  explícita.
+
+Límites conocidos de este corte:
+
+- `POST /api/v1/students` sigue disponible sin identificador por
+  compatibilidad; la interfaz ya no lo usa para alumnos. Retirarlo o exigir el
+  identificador ahí es un cambio de contrato aparte.
+- Aún no se puede editar el identificador (por ejemplo, pasar de IPE a RUN) ni
+  verlo en el listado de administración.
+- Las fichas `EDUPAY` y las `MANUAL` anteriores no tienen identificador y no se
+  detectan como duplicadas hasta la conciliación del punto 5.

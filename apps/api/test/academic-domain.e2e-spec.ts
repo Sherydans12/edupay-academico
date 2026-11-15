@@ -1025,6 +1025,189 @@ describe.runIf(testDatabaseUrl)(
       ).toBe(3);
     });
 
+    it('admits a student with RUN and enrollment idempotently without leaking the identifier', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const { course } = await createStructure(
+        admin,
+        '2026',
+        '1° Básico A',
+        'Lenguaje',
+      );
+      // Synthetic sequential RUN, never a real person.
+      const command = {
+        nationalIdType: 'RUN',
+        nationalId: '11.111.111-1',
+        firstName: 'Alumna',
+        lastName: 'Sintética',
+        courseId: course.id,
+      };
+      const admitted = await api(admin)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-synthetic-1')
+        .send(command)
+        .expect(201);
+      expect(admitted.body).toMatchObject({
+        nationalIdType: 'RUN',
+        student: { source: 'MANUAL', status: 'ACTIVE', firstName: 'Alumna' },
+        enrollment: { courseId: course.id, source: 'MANUAL', status: 'ACTIVE' },
+      });
+      expect(admitted.body.enrollment.studentId).toBe(admitted.body.student.id);
+      expect(JSON.stringify(admitted.body)).not.toContain('111111111');
+
+      const stored = await prisma.student.findUniqueOrThrow({
+        where: {
+          tenantId_id: { tenantId: 'tenant-a', id: admitted.body.student.id },
+        },
+      });
+      expect(stored).toMatchObject({
+        nationalIdType: 'RUN',
+        nationalId: '111111111',
+      });
+
+      const replay = await api(admin)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-synthetic-1')
+        .send(command)
+        .expect(201);
+      expect(replay.body).toEqual(admitted.body);
+      expect(await prisma.student.count()).toBe(1);
+      expect(await prisma.courseEnrollment.count()).toBe(1);
+
+      await api(admin)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-synthetic-1')
+        .send({ ...command, lastName: 'Distinta' })
+        .expect(409);
+
+      const duplicate = await api(admin)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-synthetic-2')
+        .send({ ...command, nationalId: '0111111111', firstName: 'Otra' })
+        .expect(409);
+      expect(duplicate.body.error.code).toBe('STUDENT_NATIONAL_ID_EXISTS');
+      expect(JSON.stringify(duplicate.body)).not.toContain('111111111');
+      expect(await prisma.student.count()).toBe(1);
+
+      const lookup = await api(admin)
+        .post('/api/v1/student-admissions/lookup')
+        .send({ nationalIdType: 'RUN', nationalId: '11111111-1' })
+        .expect(200);
+      expect(lookup.body.student.id).toBe(admitted.body.student.id);
+      const missing = await api(admin)
+        .post('/api/v1/student-admissions/lookup')
+        .send({ nationalIdType: 'RUN', nationalId: '22.222.222-2' })
+        .expect(200);
+      expect(missing.body).toEqual({ student: null });
+
+      const listed = await api(admin).get('/api/v1/students').expect(200);
+      expect(JSON.stringify(listed.body)).not.toContain('111111111');
+      expect(listed.body.items[0]).not.toHaveProperty('nationalId');
+
+      const receipts = await prisma.commandReceipt.findMany({
+        where: { tenantId: 'tenant-a', commandName: 'ADMIT_STUDENT' },
+      });
+      expect(receipts).toHaveLength(1);
+      expect(JSON.stringify(receipts)).not.toContain('111111111');
+      expect(
+        audit.events.filter((event) => event.action === 'STUDENT_ADMITTED'),
+      ).toHaveLength(1);
+      expect(JSON.stringify(audit.events)).not.toContain('111111111');
+    });
+
+    it('scopes admission identifiers, courses and permissions to the trusted tenant', async () => {
+      const adminA = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      const teacher = await token('tenant-a', 'teacher-user', ['TEACHER']);
+      const systemAdmin = await token('tenant-a', 'platform-user', [
+        'SYSTEM_ADMIN',
+      ]);
+      const a = await createStructure(adminA, '2026', '3° Básico A', 'Arte');
+      const b = await createStructure(adminB, '2026', '3° Básico A', 'Arte');
+      const command = {
+        nationalIdType: 'IPE',
+        nationalId: 'ab-1234',
+        firstName: 'Alumno',
+        lastName: 'Provisorio',
+      };
+
+      await api(adminA)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-tenant-a')
+        .send({ ...command, courseId: a.course.id })
+        .expect(201);
+      // The same identifier is independent in another tenant.
+      await api(adminB)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-tenant-b')
+        .send({ ...command, courseId: b.course.id })
+        .expect(201);
+      // A course of another tenant is indistinguishable from not found.
+      await api(adminA)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-cross-tenant')
+        .send({ ...command, nationalId: 'CD5678', courseId: b.course.id })
+        .expect(404);
+      const lookupB = await api(adminB)
+        .post('/api/v1/student-admissions/lookup')
+        .send({ nationalIdType: 'IPE', nationalId: 'AB1234' })
+        .expect(200);
+      expect(lookupB.body.student.firstName).toBe('Alumno');
+      expect(
+        await prisma.student.count({ where: { tenantId: 'tenant-b' } }),
+      ).toBe(1);
+
+      for (const accessToken of [teacher, systemAdmin]) {
+        await api(accessToken)
+          .post('/api/v1/student-admissions')
+          .set('Idempotency-Key', 'admission-forbidden')
+          .send({ ...command, nationalId: 'EF9012', courseId: a.course.id })
+          .expect(403);
+        await api(accessToken)
+          .post('/api/v1/student-admissions/lookup')
+          .send({ nationalIdType: 'IPE', nationalId: 'AB1234' })
+          .expect(403);
+      }
+
+      await api(adminA)
+        .post('/api/v1/student-admissions')
+        .send({ ...command, nationalId: 'GH3456', courseId: a.course.id })
+        .expect(400);
+      await api(adminA)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-invalid-run')
+        .send({
+          ...command,
+          nationalIdType: 'RUN',
+          nationalId: '11.111.111-2',
+          courseId: a.course.id,
+        })
+        .expect(400);
+      await api(adminA)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-client-tenant')
+        .send({
+          ...command,
+          nationalId: 'IJ7890',
+          courseId: a.course.id,
+          tenantId: 'tenant-b',
+        })
+        // Client-provided tenant fields are rejected before validation.
+        .expect(403);
+
+      await api(adminA)
+        .patch(`/api/v1/courses/${a.course.id}`)
+        .send({ status: 'ARCHIVED' })
+        .expect(200);
+      await api(adminA)
+        .post('/api/v1/student-admissions')
+        .set('Idempotency-Key', 'admission-archived-course')
+        .send({ ...command, nationalId: 'KL1234', courseId: a.course.id })
+        .expect(409);
+      expect(
+        await prisma.student.count({ where: { tenantId: 'tenant-a' } }),
+      ).toBe(1);
+    });
+
     it('rejects promotion when the roster changes after preview', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
       const source = await createStructure(admin, '2026', '5° Básico A', 'Historia');
