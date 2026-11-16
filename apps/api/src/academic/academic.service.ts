@@ -36,6 +36,8 @@ import type {
   CourseRosterPage,
   CourseRosterSummary,
   CursorQuery,
+  InconsistentCourseEnrollmentPage,
+  InconsistentCourseEnrollmentReason,
   PersonListQuery,
   PromoteCourseEnrollments,
   SubjectListQuery,
@@ -1491,10 +1493,10 @@ export class AcademicService {
     if (current.source === EDUPAY_SOURCE) {
       this.sourceManagedEnrollmentConflict();
     }
-    this.requireStructuralMutation(
-      current.course.status,
-      current.course.academicYear.status,
-    );
+    // Closing an enrollment only reduces state, so it remains possible in an
+    // archived course: it is how enrollments left active there are cleaned up.
+    // The academic year must still be open.
+    this.requireYearMutable(current.course.academicYear.status);
     if (current.status === 'INACTIVE') return mapCourseEnrollment(current);
     const record = await this.write(() =>
       this.prisma.$transaction(async (tx) => {
@@ -1574,6 +1576,98 @@ export class AcademicService {
         sourceManaged: isSourceManagedEnrollment(record),
         student: mapStudent(record.student) as CourseRosterItem['student'],
       })),
+      nextCursor: hasMore ? (visible.at(-1)?.id ?? null) : null,
+      totalCount,
+    };
+  }
+
+  /**
+   * Active enrollments whose student is inactive or whose course is archived.
+   * Read-only: closing each one is an explicit administrator action.
+   */
+  async inconsistentCourseEnrollments(
+    context: AcademicRequestContext,
+    query: CursorQuery,
+  ): Promise<InconsistentCourseEnrollmentPage> {
+    const scope = this.adminScope(context);
+    const where: Prisma.CourseEnrollmentWhereInput = {
+      tenantId: scope.tenantId,
+      status: 'ACTIVE',
+      OR: [
+        { student: { status: 'INACTIVE' } },
+        { course: { status: 'ARCHIVED' } },
+      ],
+    };
+    if (query.cursor) {
+      await this.requireCursor(
+        this.prisma.courseEnrollment.findFirst({
+          where: { ...where, id: query.cursor },
+          select: { id: true },
+        }),
+      );
+    }
+    const totalCount = await this.prisma.courseEnrollment.count({ where });
+    const records = await this.prisma.courseEnrollment.findMany({
+      where,
+      include: {
+        student: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            source: true,
+          },
+        },
+        course: {
+          select: {
+            id: true,
+            label: true,
+            status: true,
+            academicYear: { select: { id: true, label: true, status: true } },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+      ...(query.cursor
+        ? {
+            cursor: {
+              tenantId_id: { tenantId: scope.tenantId, id: query.cursor },
+            },
+            skip: 1,
+          }
+        : {}),
+      take: query.limit + 1,
+    });
+    const hasMore = records.length > query.limit;
+    const visible = hasMore ? records.slice(0, query.limit) : records;
+    return {
+      items: visible.map((record) => {
+        const reasons: InconsistentCourseEnrollmentReason[] = [];
+        if (record.student.status === 'INACTIVE') {
+          reasons.push('STUDENT_INACTIVE');
+        }
+        if (record.course.status === 'ARCHIVED') {
+          reasons.push('COURSE_ARCHIVED');
+        }
+        return {
+          enrollmentId: record.id,
+          sourceManaged: isSourceManagedEnrollment(record),
+          reasons,
+          student: {
+            id: record.student.id,
+            firstName: record.student.firstName,
+            lastName: record.student.lastName,
+            status: record.student.status,
+          },
+          course: {
+            id: record.course.id,
+            label: record.course.label,
+            status: record.course.status,
+          },
+          academicYear: record.course.academicYear,
+        };
+      }),
       nextCursor: hasMore ? (visible.at(-1)?.id ?? null) : null,
       totalCount,
     };

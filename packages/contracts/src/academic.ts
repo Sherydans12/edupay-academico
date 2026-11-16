@@ -425,6 +425,51 @@ export const courseRosterPageSchema = z
     totalCount: z.number().int().nonnegative(),
   })
   .strict();
+/**
+ * Active course enrollments whose student is inactive or whose course is
+ * archived. They stay active until an administrator closes them, so they would
+ * otherwise keep counting in rosters and in the financial projection.
+ */
+export const inconsistentCourseEnrollmentReasonSchema = z.enum([
+  'STUDENT_INACTIVE',
+  'COURSE_ARCHIVED',
+]);
+export const inconsistentCourseEnrollmentItemSchema = z
+  .object({
+    enrollmentId: opaqueIdSchema,
+    sourceManaged: z.boolean(),
+    reasons: z.array(inconsistentCourseEnrollmentReasonSchema).min(1),
+    student: z
+      .object({
+        id: opaqueIdSchema,
+        firstName: personNameSchema,
+        lastName: personNameSchema,
+        status: personStatusSchema,
+      })
+      .strict(),
+    course: z
+      .object({
+        id: opaqueIdSchema,
+        label: labelSchema,
+        status: courseStatusSchema,
+      })
+      .strict(),
+    academicYear: z
+      .object({
+        id: opaqueIdSchema,
+        label: labelSchema,
+        status: academicYearStatusSchema,
+      })
+      .strict(),
+  })
+  .strict();
+export const inconsistentCourseEnrollmentPageSchema = z
+  .object({
+    items: z.array(inconsistentCourseEnrollmentItemSchema),
+    nextCursor: opaqueIdSchema.nullable(),
+    totalCount: z.number().int().nonnegative(),
+  })
+  .strict();
 export const courseRosterSummarySchema = z
   .object({
     sourceCourseId: opaqueIdSchema,
@@ -511,6 +556,15 @@ export type CourseEnrollmentPromotionResult = z.infer<
 >;
 export type CourseRosterItem = z.infer<typeof courseRosterItemSchema>;
 export type CourseRosterPage = z.infer<typeof courseRosterPageSchema>;
+export type InconsistentCourseEnrollmentReason = z.infer<
+  typeof inconsistentCourseEnrollmentReasonSchema
+>;
+export type InconsistentCourseEnrollmentItem = z.infer<
+  typeof inconsistentCourseEnrollmentItemSchema
+>;
+export type InconsistentCourseEnrollmentPage = z.infer<
+  typeof inconsistentCourseEnrollmentPageSchema
+>;
 export type CourseRosterSummary = z.infer<typeof courseRosterSummarySchema>;
 export type CreateStudentSubjectEnrollment = z.infer<
   typeof createStudentSubjectEnrollmentSchema

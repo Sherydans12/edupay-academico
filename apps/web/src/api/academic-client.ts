@@ -16,6 +16,7 @@ import {
   courseRosterPageSchema,
   courseRosterSummarySchema,
   courseSchema,
+  inconsistentCourseEnrollmentPageSchema,
   courseSubjectPageSchema,
   courseSubjectRosterItemSchema,
   courseSubjectSchema,
@@ -825,6 +826,12 @@ export class AcademicApiClient {
     return this.request(
       addQuery(`courses/${id}/roster`, { cursor, limit: 50 }),
       courseRosterPageSchema,
+    );
+  }
+  listInconsistentEnrollments(cursor?: string) {
+    return this.request(
+      addQuery('course-enrollments/inconsistent', { cursor, limit: 50 }),
+      inconsistentCourseEnrollmentPageSchema,
     );
   }
   getCourseRosterSummary(id: string) {

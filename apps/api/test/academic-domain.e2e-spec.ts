@@ -838,6 +838,134 @@ describe.runIf(testDatabaseUrl)(
       ).toBe(1);
     });
 
+    it('lists inconsistent active enrollments and lets an admin close them, even in an archived course', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      const teacher = await token('tenant-a', 'teacher-a', ['TEACHER']);
+      const base = await createStructure(admin, '2026', '7° A', 'Historia');
+      const testCourse = await post(admin, '/api/v1/courses', {
+        academicYearId: base.year.id,
+        label: 'TEST-ONLY 7° B',
+        status: 'ACTIVE',
+      });
+      const healthy = await createStudent(admin, 'Sara', 'Sana');
+      const leaving = await createStudent(admin, 'Ivo', 'Inactivo');
+      const archivedOnly = await createStudent(admin, 'Ana', 'Archivada');
+      const healthyEnrollment = await post(
+        admin,
+        '/api/v1/course-enrollments',
+        {
+          studentId: healthy.id,
+          courseId: base.course.id,
+        },
+      );
+      const leavingEnrollment = await post(
+        admin,
+        '/api/v1/course-enrollments',
+        {
+          studentId: leaving.id,
+          courseId: testCourse.id,
+        },
+      );
+      const archivedEnrollment = await post(
+        admin,
+        '/api/v1/course-enrollments',
+        { studentId: archivedOnly.id, courseId: testCourse.id },
+      );
+      await post(admin, `/api/v1/students/${leaving.id}/inactivate`, {});
+      await patch(admin, `/api/v1/courses/${testCourse.id}`, {
+        status: 'ARCHIVED',
+      });
+
+      const first = await api(admin)
+        .get('/api/v1/course-enrollments/inconsistent?limit=1')
+        .expect(200);
+      expect(first.body.totalCount).toBe(2);
+      expect(first.body.items).toHaveLength(1);
+      expect(first.body.nextCursor).not.toBeNull();
+      const second = await api(admin)
+        .get(
+          `/api/v1/course-enrollments/inconsistent?limit=1&cursor=${first.body.nextCursor}`,
+        )
+        .expect(200);
+      const listed = [...first.body.items, ...second.body.items];
+      expect(
+        listed
+          .map((item: { enrollmentId: string }) => item.enrollmentId)
+          .sort(),
+      ).toEqual([leavingEnrollment.id, archivedEnrollment.id].sort());
+      expect(
+        listed.find(
+          (item: { enrollmentId: string }) =>
+            item.enrollmentId === leavingEnrollment.id,
+        ),
+      ).toMatchObject({
+        sourceManaged: false,
+        reasons: ['STUDENT_INACTIVE', 'COURSE_ARCHIVED'],
+        course: { label: 'TEST-ONLY 7° B', status: 'ARCHIVED' },
+        academicYear: { label: '2026', status: 'ACTIVE' },
+      });
+      expect(JSON.stringify(listed)).not.toMatch(/nationalId|email/);
+
+      await api(adminB)
+        .get('/api/v1/course-enrollments/inconsistent')
+        .expect(200)
+        .expect(({ body }) => expect(body.totalCount).toBe(0));
+      await api(adminB)
+        .post(`/api/v1/course-enrollments/${archivedEnrollment.id}/deactivate`)
+        .send({})
+        .expect(404);
+      await api(teacher)
+        .get('/api/v1/course-enrollments/inconsistent')
+        .expect(403);
+
+      const closed = await post(
+        admin,
+        `/api/v1/course-enrollments/${archivedEnrollment.id}/deactivate`,
+        {},
+      );
+      expect(closed).toMatchObject({ status: 'INACTIVE' });
+      await post(
+        admin,
+        `/api/v1/course-enrollments/${archivedEnrollment.id}/deactivate`,
+        {},
+      );
+      expect(
+        audit.events.filter(
+          (event) =>
+            event.action === 'COURSE_ENROLLMENT_DEACTIVATED' &&
+            event.resourceId === archivedEnrollment.id,
+        ),
+      ).toHaveLength(1);
+      await api(admin)
+        .post('/api/v1/course-enrollments')
+        .send({ studentId: archivedOnly.id, courseId: testCourse.id })
+        .expect(409);
+
+      await patch(admin, `/api/v1/academic-years/${base.year.id}`, {
+        status: 'CLOSED',
+      });
+      await api(admin)
+        .post(`/api/v1/course-enrollments/${leavingEnrollment.id}/deactivate`)
+        .send({})
+        .expect(409);
+      expect(
+        (
+          await api(admin)
+            .get('/api/v1/course-enrollments/inconsistent')
+            .expect(200)
+        ).body.totalCount,
+      ).toBe(1);
+      expect(
+        await prisma.courseEnrollment.findUniqueOrThrow({
+          where: {
+            tenantId_id: { tenantId: 'tenant-a', id: healthyEnrollment.id },
+          },
+          select: { status: true },
+        }),
+      ).toEqual({ status: 'ACTIVE' });
+    });
+
     it('paginates large course rosters and summarizes the full course', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
       const base = await createStructure(admin, '2026', '4° Básico A', 'Lenguaje');

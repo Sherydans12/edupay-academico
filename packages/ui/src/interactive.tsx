@@ -25,6 +25,8 @@ export function Dialog({
   const open = controlledOpen ?? uncontrolledOpen;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  const descriptionId = useId();
   const setOpen = (next: boolean) => {
     if (!next && openerRef.current) {
       const opener = openerRef.current;
@@ -71,6 +73,8 @@ export function Dialog({
       ) : null}
       <dialog
         className="ui-dialog"
+        aria-describedby={description ? descriptionId : undefined}
+        aria-labelledby={titleId}
         aria-modal="true"
         onCancel={() => setOpen(false)}
         onClose={() => setOpen(false)}
@@ -78,8 +82,8 @@ export function Dialog({
       >
         <div className="ui-dialog__header">
           <div>
-            <h2>{title}</h2>
-            {description ? <p>{description}</p> : null}
+            <h2 id={titleId}>{title}</h2>
+            {description ? <p id={descriptionId}>{description}</p> : null}
           </div>
           <Button
             aria-label="Cerrar diálogo"

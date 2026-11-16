@@ -70,6 +70,27 @@ correction workflow exists. `ARCHIVED` retains historical data and is normally
 read-only. Historical academic years are not destructively deleted. No complex
 school-year promotion logic is introduced by this decision.
 
+### Closing an enrollment (authorized correction workflow)
+
+Closing a `MANUAL` CourseEnrollment (`POST /api/v1/course-enrollments/{id}/deactivate`)
+is the explicitly authorized correction for an archived Course: it only
+reduces state, keeps history (the enrollment becomes `INACTIVE`, nothing is
+deleted), records the `COURSE_ENROLLMENT_DEACTIVATED` audit event and, when the
+financial projection is enabled, enqueues its tombstone in the same
+transaction. It requires an open AcademicYear (`DRAFT` or `ACTIVE`); a
+`CLOSED` or `ARCHIVED` year stays read-only. EduPay-owned enrollments keep
+returning `SOURCE_MANAGED_ENROLLMENT_CONFLICT`. Creating enrollments in an
+archived Course remains forbidden.
+
+Archiving a Course or inactivating a Student does not close its `MANUAL`
+enrollments. `GET /api/v1/course-enrollments/inconsistent` (tenant
+administrators, cursor pagination, 50 per page by default) lists active
+enrollments whose Student is `INACTIVE` or whose Course is `ARCHIVED`, with
+their reasons and source. The administration console shows them under
+**Estructura → Matrículas por revisar** and offers the same confirmed closure;
+the course roster offers it per manual row. Neither surface exposes email or
+RUN/IPE.
+
 ## Invariants
 
 - All academic records belong to one tenant.
