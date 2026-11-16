@@ -201,6 +201,21 @@ function adminClient(
       operationAllowed: true,
       maxRosterCount: 10_000,
     })),
+    listInconsistentEnrollments: vi.fn(async () => ({
+      items: [],
+      nextCursor: null,
+      totalCount: 0,
+    })),
+    deactivateEnrollment: vi.fn(async (enrollmentId: string) => ({
+      id: enrollmentId,
+      studentId: id2,
+      courseId: id,
+      source: 'MANUAL',
+      externalReference: null,
+      status: 'INACTIVE' as const,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })),
     getAssignedTeachers: vi.fn(async () => [
       {
         id: 'assign-1',
@@ -512,6 +527,205 @@ describe('Academic admin screens', () => {
       await screen.findByText('Sin cursos en este año.', { exact: true }),
     ).toBeTruthy();
     expect(screen.queryByText('Sin pendientes en este corte')).toBeNull();
+  });
+
+  it('lets an administrator close a manual enrollment from the roster after confirming', async () => {
+    const getCourseRoster = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [
+          {
+            enrollmentId: 'synthetic-edupay-enrollment',
+            sourceManaged: true,
+            student: studentEduPay,
+          },
+          {
+            enrollmentId: 'synthetic-manual-enrollment',
+            sourceManaged: false,
+            student: studentManual,
+          },
+        ],
+        nextCursor: null,
+        totalCount: 2,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            enrollmentId: 'synthetic-edupay-enrollment',
+            sourceManaged: true,
+            student: studentEduPay,
+          },
+        ],
+        nextCursor: null,
+        totalCount: 1,
+      });
+    const client = adminClient({ getCourseRoster });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    const roster = await screen.findByRole('table', {
+      name: 'Roster de 7º Básico A',
+    });
+    expect(within(roster).getByText('Se gestiona en EduPay')).toBeTruthy();
+    expect(
+      within(roster).queryByRole('button', {
+        name: 'Dar de baja a Claudio Arrau',
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      within(roster).getByRole('button', {
+        name: 'Dar de baja a Violeta Parra',
+      }),
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Dar de baja matrícula',
+    });
+    expect(client.deactivateEnrollment).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Confirmar baja' }),
+    );
+
+    expect(
+      await screen.findByText(
+        'Violeta Parra quedó dado de baja de 7º Básico A.',
+      ),
+    ).toBeTruthy();
+    expect(client.deactivateEnrollment).toHaveBeenCalledWith(
+      'synthetic-manual-enrollment',
+    );
+    await waitFor(() => expect(getCourseRoster).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps the dialog open with the reason when the API rejects the closure', async () => {
+    const client = adminClient({
+      getCourseRoster: vi.fn(async () => ({
+        items: [
+          {
+            enrollmentId: 'synthetic-manual-enrollment',
+            sourceManaged: false,
+            student: studentManual,
+          },
+        ],
+        nextCursor: null,
+        totalCount: 1,
+      })),
+      deactivateEnrollment: vi.fn(async () => {
+        throw new Error('El año académico es de solo lectura.');
+      }),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Dar de baja a Violeta Parra',
+      }),
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Dar de baja matrícula',
+    });
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Confirmar baja' }),
+    );
+    expect(
+      await within(dialog).findByText('No pudimos dar de baja la matrícula'),
+    ).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('lists inconsistent enrollments with their reasons and closes only manual ones', async () => {
+    const inconsistent = {
+      items: [
+        {
+          enrollmentId: 'synthetic-orphan',
+          sourceManaged: false,
+          reasons: ['STUDENT_INACTIVE', 'COURSE_ARCHIVED'] as const,
+          student: {
+            id: id2,
+            firstName: 'Prueba',
+            lastName: 'Sintética',
+            status: 'INACTIVE' as const,
+          },
+          course: {
+            id,
+            label: 'TEST-ONLY 1° Medio A',
+            status: 'ARCHIVED' as const,
+          },
+          academicYear: { id, label: '2026', status: 'ACTIVE' as const },
+        },
+        {
+          enrollmentId: 'synthetic-source-orphan',
+          sourceManaged: true,
+          reasons: ['COURSE_ARCHIVED'] as const,
+          student: {
+            id,
+            firstName: 'Claudio',
+            lastName: 'Arrau',
+            status: 'ACTIVE' as const,
+          },
+          course: { id, label: '6º Básico B', status: 'ARCHIVED' as const },
+          academicYear: { id, label: '2026', status: 'ACTIVE' as const },
+        },
+      ],
+      nextCursor: null,
+      totalCount: 2,
+    };
+    const listInconsistentEnrollments = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...inconsistent,
+        items: inconsistent.items.map((item) => ({
+          ...item,
+          reasons: [...item.reasons],
+        })),
+      })
+      .mockResolvedValueOnce({ items: [], nextCursor: null, totalCount: 0 });
+    const client = adminClient({ listInconsistentEnrollments });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    const table = await screen.findByRole('table', {
+      name: 'Matrículas por revisar',
+    });
+    expect(within(table).getByText('Alumno inactivo')).toBeTruthy();
+    expect(within(table).getAllByText('Curso archivado')).toHaveLength(2);
+    expect(within(table).getByText('Se gestiona en EduPay')).toBeTruthy();
+    expect(screen.getByText('2 por revisar')).toBeTruthy();
+
+    fireEvent.click(
+      within(table).getByRole('button', {
+        name: 'Dar de baja a Prueba Sintética de TEST-ONLY 1° Medio A',
+      }),
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Dar de baja matrícula',
+    });
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Confirmar baja' }),
+    );
+
+    expect(await screen.findByText('Sin matrículas por revisar')).toBeTruthy();
+    expect(client.deactivateEnrollment).toHaveBeenCalledWith(
+      'synthetic-orphan',
+    );
+    expect(client.deactivateEnrollment).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a recoverable error for the inconsistent enrollment review', async () => {
+    const client = adminClient({
+      listInconsistentEnrollments: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Servicio sintético no disponible.'))
+        .mockResolvedValueOnce({ items: [], nextCursor: null, totalCount: 0 }),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    const alert = await screen.findByText(
+      'No pudimos cargar las matrículas por revisar',
+    );
+    const section = alert.closest('section') as HTMLElement;
+    fireEvent.click(
+      within(section).getByRole('button', { name: 'Reintentar' }),
+    );
+    expect(await screen.findByText('Sin matrículas por revisar')).toBeTruthy();
   });
 
   it('shows a roster load error and lets the administrator retry', async () => {

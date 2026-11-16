@@ -23,6 +23,7 @@ import {
   coursePageSchema,
   courseRosterPageSchema,
   courseRosterSummarySchema,
+  inconsistentCourseEnrollmentPageSchema,
   courseSchema,
   courseSubjectListQuerySchema,
   courseSubjectPageSchema,
@@ -428,6 +429,14 @@ export class AcademicAdminController {
       this.context(idempotencyKey),
       input,
     );
+  }
+
+  @Get('course-enrollments/inconsistent')
+  @ContractResponse(inconsistentCourseEnrollmentPageSchema)
+  inconsistentCourseEnrollments(
+    @Query(new ZodValidationPipe(cursorQuerySchema)) query: CursorQuery,
+  ): Promise<object> {
+    return this.academics.inconsistentCourseEnrollments(this.context(), query);
   }
 
   @Post('course-enrollments/:id/deactivate')
