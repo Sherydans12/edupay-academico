@@ -1,6 +1,26 @@
 # Topología productiva EduPay
 
-## Estado operativo vigente — 2026-11-15 (admisión RUN/IPE)
+## Estado operativo vigente — 2026-11-16 (proyección financiera v2 en sombra)
+
+Ventana ejecutada y verificada el 2026-11-15/16; evidencia completa en
+[financial-projection-shadow-activation-2026-11-15.md](financial-projection-shadow-activation-2026-11-15.md).
+
+| Componente | Commit integrado | Imagen activa | Recurso |
+|---|---|---|---|
+| Académico API | `bce26361d145da21bf4f259a82032075e556ed71` | `ghcr.io/sherydans12/edupay-academico@sha256:23dff3c8c61051b5bb55236f109292c5e10d946aaae634248d86a6ff126880f7` | `iobfkpujjoa2kj5urbpnjvzi` |
+| Académico FRONT | `bce26361d145da21bf4f259a82032075e556ed71` | `ghcr.io/sherydans12/edupay-academico-web@sha256:0e6051236de6222d821be2e4dcf9045366c54b489388c2e04a60beba02b28d94` (tag `main`) | `cct0rtf5iku6fkd3t9hldnv4` |
+| Académico DB | — | ledger 14/14, sin migraciones en esta ventana | `v5w9hacwtftulf4m46l1rn2g` |
+
+Flags del API: `ACADEMIC_FINANCIAL_PROJECTION_ENABLED=true` con credencial S2S y
+secreto de cursor; `ACADEMIC_FINANCIAL_PROJECTION_PUBLISHER_ENABLED` **sin
+activar**. El outbox acumula eventos `PENDING`. BL-002 tiene el mapping
+`colegio-conquistadores` ↔ `6dc797a8-2012-4c28-b212-c1449109a12f` y la sombra
+v2 encendida; su modo escritura no existe todavía. Worker del sync heredado:
+detenido (una corrida incremental manual en esta ventana). Recovery point
+Académico previo a escrituras: `20261115T234253Z`. Rollback del API:
+`sha256:c988b07a80a5e43363472045d06c795bbe329514b7d1ca9272152d5f49b7a4f8`.
+
+## Historial — admisión RUN/IPE (2026-11-15)
 
 Release ejecutado y verificado el 2026-11-15; evidencia completa en
 [admission-release-2026-11-15.md](admission-release-2026-11-15.md).

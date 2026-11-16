@@ -68,6 +68,9 @@ ni se normalizaron o alteraron checksums aplicados.
   reconstruir y sobrescribir tags, por lo que no basta el historial.
 - Identificar hooks y entrypoints. BL BACK debe conservar RUN_MIGRATIONS
   desactivado. No lanzar migration runners como efecto lateral de un redeploy.
+- En la terminal web de Coolify, confirmar en pantalla `localhost · Server` y
+  el prompt `root@srv1524006` antes de escribir: tras una reconexión puede
+  quedar conectada a otro contenedor del host (2026-11-15).
 - Revisar automatismos antes de publicar en main: desde el release 2026-09-14,
   auto deploy está desactivado en BL FRONT y BACK (`Manual deployments only`) y
   Academic FRONT también permanece desactivado. Los SHAs están fijados, pero
@@ -151,6 +154,14 @@ fallaban desde al menos el 14/11 porque faltaba en el host el helper PG15
 fijado por digest en `/root/run-edupay-native-backup.sh`. Al detener o
 redeployar recursos en Coolify, **desmarca "Run Docker Cleanup"**: borra
 imágenes no usadas, incluidos ese helper, runners y digests de rollback.
+
+Proyección financiera (desde 2026-11-16 en sombra): el snapshot y la
+conciliación se ejecutan desde BL-002 con una sesión `SUPER_ADMIN`
+(`POST .../shadow/tenants/{tenantId}/snapshots` y `GET .../legacy-comparison`).
+El sync heredado no encola eventos de proyección; una corrida manual
+(`node dist/sync/sync-run-main.js --tenant-id <uuid> --mode incremental` dentro
+del API) exige recovery point previo y medir antes los cambios pendientes en BL.
+Nunca correr `--mode full` sin autorización: aplica la lógica de ausencias.
 
 Para ejecutar una migración aditiva de Académico con el runner publicado,
 usa [ACADEMICO-MIGRATION-RUNNER.md](ACADEMICO-MIGRATION-RUNNER.md): ensayo
