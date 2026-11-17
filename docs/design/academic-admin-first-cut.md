@@ -1,5 +1,8 @@
 # Administración académica: primer corte
 
+> Registro histórico. La organización vigente está en
+> [Administración académica por tarea](academic-admin-by-task.md) (2026-11-16).
+
 ## Revisión breve
 
 La Administración ya reunía el resumen de preparación, la estructura académica, personas y relaciones; sin embargo, la navegación entre áreas no llevaba directamente a sus tareas. En Estructura, la guía de preparación y el avance de asignaturas ocupaban el espacio anterior a los formularios y tablas. En Personas, los formularios de incorporación competían con la búsqueda y el listado. Configuración institucional era un placeholder, aunque la API ya expone un perfil operativo acotado.

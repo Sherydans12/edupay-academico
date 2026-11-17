@@ -71,9 +71,12 @@ function newIdempotencyKey(): string {
  */
 export function StudentAdmissionForm({
   api,
+  initialYearId,
   onSaved,
 }: {
   api: AcademicApiClient;
+  /** Year to preselect when it is open (draft or active). */
+  initialYearId?: string;
   onSaved: () => void;
 }) {
   const [years, setYears] = useState<AcademicYear[]>([]);
@@ -114,9 +117,12 @@ export function StudentAdmissionForm({
           setYearId((current) =>
             mutable.some((year) => year.id === current)
               ? current
-              : (mutable.find((year) => year.status === 'DRAFT')?.id ??
-                mutable[0]?.id ??
-                ''),
+              : initialYearId &&
+                  mutable.some((year) => year.id === initialYearId)
+                ? initialYearId
+                : (mutable.find((year) => year.status === 'DRAFT')?.id ??
+                  mutable[0]?.id ??
+                  ''),
           );
         })
         .catch((nextError: unknown) => {
@@ -130,7 +136,7 @@ export function StudentAdmissionForm({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [api, reloadToken]);
+  }, [api, initialYearId, reloadToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -385,7 +391,7 @@ export function StudentAdmissionForm({
             coursesLoading
               ? 'Cargando cursos…'
               : courses.length === 0
-                ? 'Este año no tiene cursos abiertos. Créalos en Estructura.'
+                ? 'Este año no tiene cursos abiertos. Créalos en Cursos.'
                 : undefined
           }
           id="admission-course"

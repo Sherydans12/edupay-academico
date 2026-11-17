@@ -70,6 +70,38 @@ correction workflow exists. `ARCHIVED` retains historical data and is normally
 read-only. Historical academic years are not destructively deleted. No complex
 school-year promotion logic is introduced by this decision.
 
+### Year in context and preparing the next year
+
+The administration console works on one **year in context**, shown with its
+label, dates and status on every administration screen (Inicio, Cursos,
+Matrículas and Personas) and shared between them (kept per browser and tenant;
+an unknown or archived choice falls back to the active year). A draft year
+shows that it is being prepared and does not change the active one. The
+screens are organized by task; see
+[Administración por tarea](../design/academic-admin-by-task.md).
+
+- `GET /api/v1/academic-years/{id}/overview` (tenant administrators) returns
+  the year's courses by status and its active enrollments of active students,
+  with how many are source-managed (EduPay). Read-only.
+- `POST /api/v1/academic-years/{id}/courses/copy` with
+  `{ sourceAcademicYearId, dryRun }` prepares a year's courses from another
+  year: it creates the labels of the source's non-archived courses that the
+  target lacks (trimmed, case-insensitive match) as `DRAFT` manual courses.
+  `dryRun` only reports `toCreate` and `alreadyPresent`; repeating creates
+  nothing new. The target year must be `DRAFT` or `ACTIVE`; it is audited as
+  `ACADEMIC_YEAR_COURSES_COPIED`.
+- `GET /api/v1/students?academicYearId={id}` adds `yearEnrollment` to each
+  student of the page: `{ enrollmentId, courseId, courseLabel }` of an active
+  enrollment in a course of that year, or `null` when there is none. If a
+  student has several, the first by course label is returned. Without the
+  parameter the field is omitted; a year of another tenant is `404`. Only the
+  students of the requested page are looked up.
+
+Courses and enrollments of a `DRAFT` year are allowed: new students can be
+admitted into next year's courses before that year is activated. Activating
+the year, the annual promotion and the EduPay authority transfer (ADR-0025)
+remain separate steps.
+
 ### Closing an enrollment (authorized correction workflow)
 
 Closing a `MANUAL` CourseEnrollment (`POST /api/v1/course-enrollments/{id}/deactivate`)

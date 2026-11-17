@@ -109,6 +109,45 @@ export const updateAcademicYearSchema = z
     message: 'At least one field is required',
   });
 
+const countSchema = z.number().int().nonnegative();
+
+/** Read-only summary of one academic year for the administration overview. */
+export const academicYearOverviewSchema = z
+  .object({
+    academicYearId: opaqueIdSchema,
+    courses: z
+      .object({
+        draft: countSchema,
+        active: countSchema,
+        archived: countSchema,
+      })
+      .strict(),
+    activeEnrollments: countSchema,
+    sourceManagedActiveEnrollments: countSchema,
+  })
+  .strict();
+
+/**
+ * Prepares a year's course list from another year: creates the missing labels
+ * as DRAFT manual courses. `dryRun` only reports what would happen.
+ */
+export const copyAcademicYearCoursesSchema = z
+  .object({
+    sourceAcademicYearId: opaqueIdSchema,
+    dryRun: z.boolean().default(false),
+  })
+  .strict();
+export const copyAcademicYearCoursesResultSchema = z
+  .object({
+    sourceAcademicYearId: opaqueIdSchema,
+    targetAcademicYearId: opaqueIdSchema,
+    dryRun: z.boolean(),
+    toCreate: z.array(labelSchema),
+    alreadyPresent: z.array(labelSchema),
+    createdCount: countSchema,
+  })
+  .strict();
+
 export const courseSchema = z
   .object({
     id: opaqueIdSchema,
@@ -187,6 +226,14 @@ export const updateTeacherSchema = z
 export const personListQuerySchema = cursorQuerySchema.extend({
   search: z.string().trim().min(1).max(160).optional(),
   status: personStatusSchema.optional(),
+});
+
+/**
+ * Student list filters. With `academicYearId`, each item also carries the
+ * student's active enrollment in that year (`yearEnrollment`, or null).
+ */
+export const studentListQuerySchema = personListQuerySchema.extend({
+  academicYearId: opaqueIdSchema.optional(),
 });
 
 export const verifiedIdentityLinkSchema = z
@@ -500,8 +547,19 @@ export const coursePageSchema = z.object({
   nextCursor: opaqueIdSchema.nullable(),
   totalCount: z.number().int().nonnegative().optional(),
 });
+export const studentYearEnrollmentSchema = z
+  .object({
+    enrollmentId: opaqueIdSchema,
+    courseId: opaqueIdSchema,
+    courseLabel: labelSchema,
+  })
+  .strict();
+/** Present only when the list was requested for an academic year. */
+export const studentListItemSchema = studentSchema
+  .extend({ yearEnrollment: studentYearEnrollmentSchema.nullable().optional() })
+  .strict();
 export const studentPageSchema = z.object({
-  items: z.array(studentSchema),
+  items: z.array(studentListItemSchema),
   nextCursor: opaqueIdSchema.nullable(),
   totalCount: z.number().int().nonnegative().optional(),
 });
@@ -526,6 +584,8 @@ export type AcademicPreparationStatus = z.infer<
   typeof academicPreparationStatusSchema
 >;
 export type PersonListQuery = z.infer<typeof personListQuerySchema>;
+export type StudentListQuery = z.infer<typeof studentListQuerySchema>;
+export type StudentListItem = z.infer<typeof studentListItemSchema>;
 export type CourseListQuery = z.infer<typeof courseListQuerySchema>;
 export type SubjectListQuery = z.infer<typeof subjectListQuerySchema>;
 export type CourseSubjectListQuery = z.infer<
@@ -533,6 +593,13 @@ export type CourseSubjectListQuery = z.infer<
 >;
 export type CreateAcademicYear = z.infer<typeof createAcademicYearSchema>;
 export type UpdateAcademicYear = z.infer<typeof updateAcademicYearSchema>;
+export type AcademicYearOverview = z.infer<typeof academicYearOverviewSchema>;
+export type CopyAcademicYearCourses = z.input<
+  typeof copyAcademicYearCoursesSchema
+>;
+export type CopyAcademicYearCoursesResult = z.infer<
+  typeof copyAcademicYearCoursesResultSchema
+>;
 export type CreateCourse = z.infer<typeof createCourseSchema>;
 export type UpdateCourse = z.infer<typeof updateCourseSchema>;
 export type CreateStudent = z.infer<typeof createStudentSchema>;

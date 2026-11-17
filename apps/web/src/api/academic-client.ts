@@ -9,6 +9,10 @@ import {
 import {
   academicYearPageSchema,
   academicYearSchema,
+  academicYearOverviewSchema,
+  copyAcademicYearCoursesResultSchema,
+  copyAcademicYearCoursesSchema,
+  type CopyAcademicYearCourses,
   academicPreparationStatusSchema,
   courseEnrollmentSchema,
   courseEnrollmentPromotionResultSchema,
@@ -797,6 +801,22 @@ export class AcademicApiClient {
       body: JSON.stringify(createAcademicYearSchema.parse(input)),
     });
   }
+  getAcademicYearOverview(id: string) {
+    return this.request(
+      `academic-years/${id}/overview`,
+      academicYearOverviewSchema,
+    );
+  }
+  copyAcademicYearCourses(id: string, input: CopyAcademicYearCourses) {
+    return this.request(
+      `academic-years/${id}/courses/copy`,
+      copyAcademicYearCoursesResultSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(copyAcademicYearCoursesSchema.parse(input)),
+      },
+    );
+  }
   updateAcademicYear(id: string, input: UpdateAcademicYear) {
     return this.request(`academic-years/${id}`, academicYearSchema, {
       method: 'PATCH',
@@ -859,9 +879,16 @@ export class AcademicApiClient {
     search?: string,
     cursor?: string,
     status?: 'ACTIVE' | 'INACTIVE',
+    academicYearId?: string,
   ) {
     return this.request(
-      addQuery('students', { search, cursor, status, limit: 50 }),
+      addQuery('students', {
+        search,
+        cursor,
+        status,
+        academicYearId,
+        limit: 50,
+      }),
       studentPageSchema,
     );
   }

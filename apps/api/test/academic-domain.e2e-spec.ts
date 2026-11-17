@@ -966,6 +966,163 @@ describe.runIf(testDatabaseUrl)(
       ).toEqual({ status: 'ACTIVE' });
     });
 
+    it('summarizes a year and prepares the next one by copying its courses as drafts', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      const teacher = await token('tenant-a', 'teacher-a', ['TEACHER']);
+      const base = await createStructure(
+        admin,
+        '2026',
+        '1° Básico A',
+        'Lenguaje',
+      );
+      await post(admin, '/api/v1/courses', {
+        academicYearId: base.year.id,
+        label: '2° Básico A',
+        status: 'ACTIVE',
+      });
+      const retired = await post(admin, '/api/v1/courses', {
+        academicYearId: base.year.id,
+        label: 'Taller cerrado',
+        status: 'ACTIVE',
+      });
+      await patch(admin, `/api/v1/courses/${retired.id}`, {
+        status: 'ARCHIVED',
+      });
+      const student = await createStudent(admin, 'Ana', 'Año');
+      await post(admin, '/api/v1/course-enrollments', {
+        studentId: student.id,
+        courseId: base.course.id,
+      });
+
+      const overview = await api(admin)
+        .get(`/api/v1/academic-years/${base.year.id}/overview`)
+        .expect(200);
+      expect(overview.body).toEqual({
+        academicYearId: base.year.id,
+        courses: { draft: 0, active: 2, archived: 1 },
+        activeEnrollments: 1,
+        sourceManagedActiveEnrollments: 0,
+      });
+
+      const next = await post(admin, '/api/v1/academic-years', {
+        label: '2027',
+        startDate: '2027-03-01',
+        endDate: '2027-12-15',
+      });
+      await post(admin, '/api/v1/courses', {
+        academicYearId: next.id,
+        label: '1° básico a ',
+      });
+
+      const preview = await post(
+        admin,
+        `/api/v1/academic-years/${next.id}/courses/copy`,
+        { sourceAcademicYearId: base.year.id, dryRun: true },
+      );
+      expect(preview).toMatchObject({
+        dryRun: true,
+        toCreate: ['2° Básico A'],
+        alreadyPresent: ['1° Básico A'],
+        createdCount: 0,
+      });
+      expect(
+        await prisma.course.count({ where: { academicYearId: next.id } }),
+      ).toBe(1);
+
+      const copied = await post(
+        admin,
+        `/api/v1/academic-years/${next.id}/courses/copy`,
+        { sourceAcademicYearId: base.year.id },
+      );
+      expect(copied).toMatchObject({ dryRun: false, createdCount: 1 });
+      const repeated = await post(
+        admin,
+        `/api/v1/academic-years/${next.id}/courses/copy`,
+        { sourceAcademicYearId: base.year.id },
+      );
+      expect(repeated).toMatchObject({ toCreate: [], createdCount: 0 });
+      const nextCourses = await prisma.course.findMany({
+        where: { academicYearId: next.id },
+        orderBy: { label: 'asc' },
+        select: { label: true, status: true, source: true },
+      });
+      expect(nextCourses.map((course) => course.label)).toEqual([
+        '1° básico a',
+        '2° Básico A',
+      ]);
+      expect(
+        nextCourses.every(
+          (course) => course.status === 'DRAFT' && course.source === 'MANUAL',
+        ),
+      ).toBe(true);
+      expect(
+        audit.events.filter(
+          (event) =>
+            event.action === 'ACADEMIC_YEAR_COURSES_COPIED' &&
+            event.resourceId === next.id,
+        ),
+      ).toHaveLength(1);
+
+      await api(admin)
+        .post(`/api/v1/academic-years/${next.id}/courses/copy`)
+        .send({ sourceAcademicYearId: next.id })
+        .expect(400);
+      await api(adminB)
+        .post(`/api/v1/academic-years/${next.id}/courses/copy`)
+        .send({ sourceAcademicYearId: base.year.id })
+        .expect(404);
+      await api(adminB)
+        .get(`/api/v1/academic-years/${base.year.id}/overview`)
+        .expect(404);
+      await api(teacher)
+        .get(`/api/v1/academic-years/${base.year.id}/overview`)
+        .expect(403);
+
+      await patch(admin, `/api/v1/academic-years/${base.year.id}`, {
+        status: 'CLOSED',
+      });
+      await api(admin)
+        .post(`/api/v1/academic-years/${base.year.id}/courses/copy`)
+        .send({ sourceAcademicYearId: next.id })
+        .expect(409);
+    });
+
+    it('lists students with their enrollment of the requested academic year', async () => {
+      const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
+      const adminB = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      const base = await createStructure(admin, '2026', '3° Básico A', 'Arte');
+      const enrolled = await createStudent(admin, 'Ema', 'Matriculada');
+      await createStudent(admin, 'Ivo', 'Libre');
+      await post(admin, '/api/v1/course-enrollments', {
+        studentId: enrolled.id,
+        courseId: base.course.id,
+      });
+
+      const withYear = await api(admin)
+        .get(`/api/v1/students?academicYearId=${base.year.id}`)
+        .expect(200);
+      const byName = new Map(
+        withYear.body.items.map(
+          (item: { firstName: string; yearEnrollment: unknown }) => [
+            item.firstName,
+            item.yearEnrollment,
+          ],
+        ),
+      );
+      expect(byName.get('Ema')).toMatchObject({
+        courseId: base.course.id,
+        courseLabel: '3° Básico A',
+      });
+      expect(byName.get('Ivo')).toBeNull();
+
+      const withoutYear = await api(admin).get('/api/v1/students').expect(200);
+      expect(withoutYear.body.items[0]).not.toHaveProperty('yearEnrollment');
+      await api(adminB)
+        .get(`/api/v1/students?academicYearId=${base.year.id}`)
+        .expect(404);
+    });
+
     it('paginates large course rosters and summarizes the full course', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
       const base = await createStructure(admin, '2026', '4° Básico A', 'Lenguaje');

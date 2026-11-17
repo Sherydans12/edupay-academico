@@ -24,6 +24,9 @@ vi.mock('next/navigation', () => ({
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
+  // Matrículas keeps its section in the address; reset it between tests.
+  window.history.replaceState(null, '', '/');
 });
 
 const id = '00000000-0000-4000-8000-000000000001';
@@ -67,6 +70,15 @@ const course = {
   status: 'ACTIVE' as const,
   createdAt: timestamp,
   updatedAt: timestamp,
+};
+
+const draft2027 = {
+  ...year,
+  id: id6,
+  label: '2027',
+  startDate: '2027-03-01',
+  endDate: '2027-12-15',
+  status: 'DRAFT' as const,
 };
 
 const academicPreparation = {
@@ -175,10 +187,29 @@ function adminClient(
     listAcademicYears: vi.fn(async () => ({ items: [year], nextCursor: null })),
     listCourses: vi.fn(async () => ({ items: [course], nextCursor: null })),
     getAcademicPreparationStatus: vi.fn(async () => academicPreparation),
-    listStudents: vi.fn(async () => ({
-      items: [studentEduPay, studentManual],
-      nextCursor: null,
-    })),
+    listStudents: vi.fn(
+      async (
+        _search?: string,
+        _cursor?: string,
+        _status?: string,
+        academicYearId?: string,
+      ) => ({
+        items: academicYearId
+          ? [
+              {
+                ...studentEduPay,
+                yearEnrollment: {
+                  enrollmentId: 'synthetic-enrollment',
+                  courseId: id,
+                  courseLabel: '7º Básico A',
+                },
+              },
+              { ...studentManual, yearEnrollment: null },
+            ]
+          : [studentEduPay, studentManual],
+        nextCursor: null,
+      }),
+    ),
     listTeachers: vi.fn(async () => ({ items: [teacher1], nextCursor: null })),
     listSubjects: vi.fn(async () => ({
       items: [subject1, subject2],
@@ -201,6 +232,25 @@ function adminClient(
       operationAllowed: true,
       maxRosterCount: 10_000,
     })),
+    getAcademicYearOverview: vi.fn(async (yearId: string) => ({
+      academicYearId: yearId,
+      courses: { draft: 0, active: 12, archived: 1 },
+      activeEnrollments: 242,
+      sourceManagedActiveEnrollments: 241,
+    })),
+    copyAcademicYearCourses: vi.fn(
+      async (
+        targetId: string,
+        input: { sourceAcademicYearId: string; dryRun?: boolean },
+      ) => ({
+        sourceAcademicYearId: input.sourceAcademicYearId,
+        targetAcademicYearId: targetId,
+        dryRun: input.dryRun ?? false,
+        toCreate: ['1° Básico A', '2° Básico A'],
+        alreadyPresent: ['Kínder'],
+        createdCount: input.dryRun ? 0 : 2,
+      }),
+    ),
     listInconsistentEnrollments: vi.fn(async () => ({
       items: [],
       nextCursor: null,
@@ -401,12 +451,30 @@ function sessionContext(
 }
 
 describe('Academic admin screens', () => {
-  it('renders academic overview with sync and storage usage', async () => {
+  it('renders Inicio with what to do now and the system status', async () => {
     const client = adminClient();
     render(<AcademicAdminScreen api={client} view="overview" />);
+    expect(await screen.findByRole('heading', { name: 'Inicio' })).toBeTruthy();
     expect(
-      await screen.findByRole('heading', { name: 'Administración académica' }),
+      await screen.findByRole('heading', { name: 'Qué hacer ahora' }),
     ).toBeTruthy();
+    expect(await screen.findByText('Sin pendientes para 2026.')).toBeTruthy();
+    const frequent = screen.getByRole('navigation', {
+      name: 'Tareas frecuentes',
+    });
+    expect(
+      within(frequent)
+        .getByRole('link', { name: /Incorporar alumno nuevo/ })
+        .getAttribute('href'),
+    ).toBe('/administracion/matriculas?seccion=incorporar');
+    expect(
+      within(frequent)
+        .getByRole('link', { name: /Avance anual/ })
+        .getAttribute('href'),
+    ).toBe('/administracion/matriculas?seccion=avance');
+
+    // A ready preparation, sync and storage live in the system status.
+    expect(screen.getByText('Estado del sistema')).toBeTruthy();
     expect(
       await screen.findByRole('heading', {
         name: 'Preparación académica base',
@@ -421,6 +489,45 @@ describe('Academic admin screens', () => {
       await screen.findByRole('heading', { name: 'Almacenamiento del tenant' }),
     ).toBeTruthy();
     expect(screen.getByText('12%')).toBeTruthy();
+  });
+
+  it('lists the pending work of the year in context with links to resolve it', async () => {
+    const withoutSubjects = { ...course, id: id2, label: '8º Básico B' };
+    const draftCourse = {
+      ...course,
+      id: id3,
+      label: '8º Básico C',
+      status: 'DRAFT' as const,
+    };
+    const client = adminClient({
+      listCourses: vi.fn(async () => ({
+        items: [course, withoutSubjects, draftCourse],
+        nextCursor: null,
+      })),
+      listInconsistentEnrollments: vi.fn(async () => ({
+        items: [],
+        nextCursor: null,
+        totalCount: 3,
+      })),
+    });
+    render(<AcademicAdminScreen api={client} view="overview" />);
+
+    // Wait for the shared data first; the review count loads after it.
+    await screen.findByRole('heading', { name: 'Qué hacer ahora' });
+    expect(await screen.findByText('3 matrículas por revisar')).toBeTruthy();
+    expect(screen.getByText('2 cursos de 2026 sin asignaturas')).toBeTruthy();
+    expect(screen.getByText('1 curso de 2026 en borrador')).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Revisar matrículas' })
+        .getAttribute('href'),
+    ).toBe('/administracion/matriculas?seccion=revisar');
+    expect(
+      screen
+        .getAllByRole('link', { name: 'Revisar cursos' })[0]
+        ?.getAttribute('href'),
+    ).toBe('/administracion/estructura');
+    expect(screen.queryByText(/Sin pendientes/)).toBeNull();
   });
 
   it('does not show READY when preparation status cannot be queried', async () => {
@@ -446,18 +553,31 @@ describe('Academic admin screens', () => {
     ).toBeTruthy();
   });
 
-  it('renders structure view with years, courses and switches between tabs', async () => {
+  it('renders Cursos with the courses of the year, the years and the catalog', async () => {
     const client = adminClient();
     render(<AcademicAdminScreen api={client} view="structure" />);
     expect(
+      await screen.findByRole('heading', { name: 'Cursos de 2026' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: '7º Básico A', level: 3 }),
+    ).toBeTruthy();
+    // The detail opens on the course roster.
+    await waitFor(() => expect(client.getCourseRoster).toHaveBeenCalled());
+    expect(
+      screen
+        .getByRole('tab', { name: 'Alumnos' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Años académicos' }));
+    expect(
       await screen.findByRole('heading', { name: 'Años académicos' }),
     ).toBeTruthy();
-    expect(screen.getAllByText('2026').length).toBeGreaterThan(0);
-    expect(screen.getByRole('option', { name: '7º Básico A' })).toBeTruthy();
+    expect(screen.getByText('En contexto')).toBeTruthy();
 
-    // Switch to Subject Catalog tab
     fireEvent.click(
-      screen.getByRole('tab', { name: 'Catálogo de Asignaturas' }),
+      screen.getByRole('tab', { name: 'Catálogo de asignaturas' }),
     );
     expect(
       await screen.findByRole('heading', { name: 'Catálogo de asignaturas' }),
@@ -466,53 +586,164 @@ describe('Academic admin screens', () => {
       screen.getAllByText('Lenguaje y Comunicación').length,
     ).toBeGreaterThan(0);
     expect(screen.getByText('Matemática')).toBeTruthy();
-
-    // Switch to Course Subjects tab
-    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
-    expect(
-      await screen.findByRole('heading', { name: 'Asignaturas por curso' }),
-    ).toBeTruthy();
   });
 
-  it('moves between structure tabs with arrow keys and exposes the selected panel', async () => {
+  it('moves between Cursos tabs with arrow keys and exposes the selected panel', async () => {
     render(<AcademicAdminScreen api={adminClient()} view="structure" />);
-    const yearsTab = await screen.findByRole('tab', { name: 'Años y Cursos' });
-    yearsTab.focus();
-    fireEvent.keyDown(yearsTab, { key: 'ArrowRight' });
-
-    const subjectsTab = screen.getByRole('tab', {
-      name: 'Catálogo de Asignaturas',
+    const coursesTab = await screen.findByRole('tab', {
+      name: 'Cursos de 2026',
     });
-    expect(subjectsTab.getAttribute('aria-selected')).toBe('true');
-    expect(document.activeElement).toBe(subjectsTab);
+    coursesTab.focus();
+    fireEvent.keyDown(coursesTab, { key: 'ArrowRight' });
+
+    const yearsTab = screen.getByRole('tab', { name: 'Años académicos' });
+    expect(yearsTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(yearsTab);
+    expect(yearsTab.getAttribute('aria-controls')).toBe('admin-courses-panel');
     expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(
-      subjectsTab.id,
+      yearsTab.id,
     );
   });
 
-  it('keeps subject progress scoped to the selected year and course', async () => {
+  it('shows the year in context with its panorama on every overview', async () => {
     const client = adminClient();
+    render(<AcademicAdminScreen api={client} view="overview" />);
+
+    const context = await screen.findByRole('region', {
+      name: 'Año en contexto',
+    });
+    expect(within(context).getByText('2026')).toBeTruthy();
+    expect(within(context).getByText('Activo')).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { name: 'Panorama de 2026' }),
+    ).toBeTruthy();
+    expect(await screen.findByText('242')).toBeTruthy();
+    expect(screen.getByText('Sincronizados desde EduPay')).toBeTruthy();
+    expect(client.getAcademicYearOverview).toHaveBeenCalledWith(id);
+  });
+
+  it('offers to create the next year with its label when it does not exist', async () => {
+    const client = adminClient();
+    render(<AcademicAdminScreen api={client} view="overview" />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Preparar 2027' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: '1. Crear el año 2027' }),
+    ).toBeTruthy();
+    expect(
+      (document.getElementById('academic-year-label') as HTMLInputElement)
+        .value,
+    ).toBe('2027');
+  });
+
+  it('copies the course list into the draft next year after a preview', async () => {
+    const client = adminClient({
+      listAcademicYears: vi.fn(async () => ({
+        items: [year, draft2027],
+        nextCursor: null,
+      })),
+    });
+    render(<AcademicAdminScreen api={client} view="overview" />);
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Revisar cursos a copiar desde 2026',
+      }),
+    );
+    expect(await screen.findByText('1° Básico A')).toBeTruthy();
+    expect(screen.getByText(/Ya existen y no se tocan: Kínder/)).toBeTruthy();
+    expect(client.copyAcademicYearCourses).toHaveBeenCalledWith(id6, {
+      sourceAcademicYearId: id,
+      dryRun: true,
+    });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Crear 2 cursos en borrador' }),
+    );
+    expect(
+      await screen.findByText('Se crearon 2 cursos en borrador en 2027.'),
+    ).toBeTruthy();
+    expect(client.copyAcademicYearCourses).toHaveBeenLastCalledWith(id6, {
+      sourceAcademicYearId: id,
+      dryRun: false,
+    });
+  });
+
+  it('shares the chosen year between views and explains a draft year', async () => {
+    const client = adminClient({
+      listAcademicYears: vi.fn(async () => ({
+        items: [year, draft2027],
+        nextCursor: null,
+      })),
+    });
+    const { unmount } = render(
+      <AcademicAdminScreen api={client} view="structure" />,
+    );
+    const contextSelect = (await screen.findByLabelText(
+      'Cambiar año',
+    )) as HTMLSelectElement;
+    fireEvent.change(contextSelect, { target: { value: id6 } });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Cursos de 2027' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Cursos de 2027' })).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: 'Aún no hay cursos en 2027' }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText(
+        /Estás preparando 2027; 2026 sigue siendo el año activo/,
+      ),
+    ).toBeTruthy();
+    unmount();
+
+    render(<AcademicAdminScreen api={client} view="overview" />);
+    expect(
+      await screen.findByRole('heading', { name: 'Panorama de 2027' }),
+    ).toBeTruthy();
+  });
+
+  it('flags courses without subjects and opens the detail of the chosen course', async () => {
+    const withoutSubjects = { ...course, id: id2, label: '8º Básico B' };
+    const otherYearCourse = {
+      ...course,
+      id: id3,
+      academicYearId: id6,
+      label: '1° Básico 2027',
+      status: 'DRAFT' as const,
+    };
+    const client = adminClient({
+      listAcademicYears: vi.fn(async () => ({
+        items: [year, draft2027],
+        nextCursor: null,
+      })),
+      listCourses: vi.fn(async () => ({
+        items: [course, withoutSubjects, otherYearCourse],
+        nextCursor: null,
+      })),
+    });
     render(<AcademicAdminScreen api={client} view="structure" />);
 
-    await screen.findByRole('heading', { name: 'Contexto de configuración' });
-    const yearSelect = document.getElementById(
-      'academic-structure-scope-year',
-    ) as HTMLSelectElement;
-    const courseSelect = document.getElementById(
-      'academic-structure-scope-course',
-    ) as HTMLSelectElement;
-    expect(yearSelect.value).toBe(id);
-    expect(courseSelect.value).toBe(id);
+    expect(
+      await screen.findByText('2 cursos · 1 sin asignaturas'),
+    ).toBeTruthy();
+    const list = screen.getByRole('list', { name: 'Cursos de 2026' });
+    expect(within(list).queryByText('1° Básico 2027')).toBeNull();
+    const flagged = within(list).getByRole('button', { name: /8º Básico B/ });
+    expect(within(flagged).getByText('Sin asignaturas')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
+    fireEvent.click(flagged);
+    expect(flagged.getAttribute('aria-current')).toBe('true');
     expect(
-      await screen.findByRole('heading', { name: 'Asignaturas del año 2026' }),
+      screen.getByRole('heading', { name: '8º Básico B', level: 3 }),
     ).toBeTruthy();
-    expect(screen.getByText('Sin pendientes en este corte')).toBeTruthy();
-    expect(
-      await screen.findByRole('heading', { name: 'Asignaturas por curso' }),
-    ).toBeTruthy();
-    expect(screen.getByText('Asignaturas de 7º Básico A')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('tab', { name: 'Asignaturas y profesores' }),
+    );
+    expect(await screen.findByText('Asignaturas de 8º Básico B')).toBeTruthy();
   });
 
   it('shows a neutral state when the selected year has no courses', async () => {
@@ -521,12 +752,44 @@ describe('Academic admin screens', () => {
     });
     render(<AcademicAdminScreen api={client} view="structure" />);
 
-    await screen.findByRole('heading', { name: 'Contexto de configuración' });
-    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
     expect(
-      await screen.findByText('Sin cursos en este año.', { exact: true }),
+      await screen.findByRole('heading', { name: 'Aún no hay cursos en 2026' }),
     ).toBeTruthy();
-    expect(screen.queryByText('Sin pendientes en este corte')).toBeNull();
+    expect(screen.getByRole('button', { name: /Nuevo curso/ })).toBeTruthy();
+    expect(screen.queryByText('Sin asignaturas')).toBeNull();
+  });
+
+  it('creates a course in the year in context from a dialog', async () => {
+    const client = adminClient({
+      createCourse: vi.fn(async (input) => ({
+        ...course,
+        id: id2,
+        label: input.label,
+        status: input.status ?? ('DRAFT' as const),
+      })),
+    });
+    render(<AcademicAdminScreen api={client} view="structure" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Nuevo curso/ }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Nuevo curso en 2026',
+    });
+    expect(within(dialog).queryByLabelText('Año del nuevo curso')).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Nombre del curso'), {
+      target: { value: '8º Básico B' },
+    });
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Crear curso' }),
+    );
+
+    await waitFor(() =>
+      expect(client.createCourse).toHaveBeenCalledWith({
+        academicYearId: id,
+        label: '8º Básico B',
+        status: 'DRAFT',
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('lets an administrator close a manual enrollment from the roster after confirming', async () => {
@@ -680,7 +943,8 @@ describe('Academic admin screens', () => {
       })
       .mockResolvedValueOnce({ items: [], nextCursor: null, totalCount: 0 });
     const client = adminClient({ listInconsistentEnrollments });
-    render(<AcademicAdminScreen api={client} view="structure" />);
+    render(<AcademicAdminScreen api={client} view="enrollments" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Por revisar' }));
 
     const table = await screen.findByRole('table', {
       name: 'Matrículas por revisar',
@@ -716,7 +980,8 @@ describe('Academic admin screens', () => {
         .mockRejectedValueOnce(new Error('Servicio sintético no disponible.'))
         .mockResolvedValueOnce({ items: [], nextCursor: null, totalCount: 0 }),
     });
-    render(<AcademicAdminScreen api={client} view="structure" />);
+    render(<AcademicAdminScreen api={client} view="enrollments" />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Por revisar' }));
 
     const alert = await screen.findByText(
       'No pudimos cargar las matrículas por revisar',
@@ -775,8 +1040,9 @@ describe('Academic admin screens', () => {
         ]),
     });
     render(<AcademicAdminScreen api={client} view="structure" />);
-    await screen.findByRole('heading', { name: 'Contexto de configuración' });
-    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
+    fireEvent.click(
+      await screen.findByRole('tab', { name: 'Asignaturas y profesores' }),
+    );
 
     expect(
       await screen.findByText('No pudimos cargar las responsabilidades'),
@@ -835,19 +1101,21 @@ describe('Academic admin screens', () => {
     });
     render(<AcademicAdminScreen api={client} view="structure" />);
 
-    await screen.findByRole('heading', { name: 'Contexto de configuración' });
+    // Both courses count their subjects only after every page loaded.
+    expect(await screen.findByText('2 cursos')).toBeTruthy();
     expect(
       screen.getAllByRole('option', { name: '2027 · Borrador' }).length,
     ).toBeTruthy();
-    expect(screen.getByRole('option', { name: '8º Básico B' })).toBeTruthy();
+    expect(
+      within(screen.getByRole('list', { name: 'Cursos de 2026' })).getByRole(
+        'button',
+        { name: /8º Básico B/ },
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('Sin asignaturas')).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Asignaturas del Curso' }));
-    const summary = await screen.findByLabelText(
-      'Resumen de asignaturas del año',
-    );
-    expect(within(summary).getAllByText('2', { exact: true })).toHaveLength(3);
     fireEvent.click(
-      screen.getByRole('tab', { name: 'Catálogo de Asignaturas' }),
+      screen.getByRole('tab', { name: 'Catálogo de asignaturas' }),
     );
     expect(screen.getByText('Ciencias')).toBeTruthy();
 
@@ -878,12 +1146,13 @@ describe('Academic admin screens', () => {
         return { items: [course], nextCursor: 'courses-page-failure' };
       }),
     });
-    render(<AcademicAdminScreen api={client} view="structure" />);
+    render(<AcademicAdminScreen api={client} view="overview" />);
 
     expect(
       await screen.findByText('No pudimos completar la acción'),
     ).toBeTruthy();
-    expect(screen.queryByText('Sin pendientes en este corte')).toBeNull();
+    expect(screen.queryByText(/Sin pendientes/)).toBeNull();
+    expect(screen.queryByText(/sin asignaturas/)).toBeNull();
   });
 
   it('stops on a repeated cursor instead of requesting pages forever', async () => {
@@ -1044,8 +1313,12 @@ describe('Academic admin screens', () => {
       })),
     });
     render(<AcademicAdminScreen api={client} view="structure" />);
+    expect(
+      await screen.findByRole('heading', { name: 'Cursos de 2026' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Nuevo curso/ })).toBeNull();
     fireEvent.click(
-      await screen.findByRole('tab', { name: 'Asignaturas del Curso' }),
+      screen.getByRole('tab', { name: 'Asignaturas y profesores' }),
     );
 
     expect(
@@ -1089,30 +1362,25 @@ describe('Academic admin screens', () => {
       />,
     );
 
-    await screen.findByRole('heading', { name: 'Años académicos' });
-    const closedCourseRow = screen
-      .getByText('6º Básico B')
-      .closest('.course-readiness-row') as HTMLElement | null;
-    expect(closedCourseRow).toBeTruthy();
-    const courseRow = closedCourseRow as HTMLElement;
-    expect(within(courseRow).getByText('Solo lectura')).toBeTruthy();
+    fireEvent.change(await screen.findByLabelText('Cambiar año'), {
+      target: { value: id3 },
+    });
     expect(
-      within(courseRow).queryByRole('button', { name: 'Activar curso' }),
+      await screen.findByRole('heading', { name: '6º Básico B', level: 3 }),
+    ).toBeTruthy();
+    expect(screen.getByText('Solo lectura')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Nuevo curso/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Activar curso' })).toBeNull();
+    expect(
+      screen.queryByRole('link', { name: /Incorporar alumno nuevo/ }),
     ).toBeNull();
-    const newCourseYear = screen.getByLabelText(
-      'Año del nuevo curso',
-    ) as HTMLElement;
-    const closedYearOption = within(newCourseYear).getByRole('option', {
-      name: '2025 · Cerrado',
-    }) as HTMLOptionElement;
-    expect(closedYearOption.disabled).toBe(true);
   });
 
   it('creates and archives a subject from the Subject Catalog tab', async () => {
     const client = adminClient();
     render(<AcademicAdminScreen api={client} view="structure" />);
     fireEvent.click(
-      await screen.findByRole('tab', { name: 'Catálogo de Asignaturas' }),
+      await screen.findByRole('tab', { name: 'Catálogo de asignaturas' }),
     );
 
     const input = screen.getByLabelText(/nombre de la asignatura/i);
@@ -1139,7 +1407,7 @@ describe('Academic admin screens', () => {
     const client = adminClient();
     render(<AcademicAdminScreen api={client} view="structure" />);
     fireEvent.click(
-      await screen.findByRole('tab', { name: 'Asignaturas del Curso' }),
+      await screen.findByRole('tab', { name: 'Asignaturas y profesores' }),
     );
 
     expect(await screen.findByText('General del curso')).toBeTruthy();
@@ -1157,18 +1425,30 @@ describe('Academic admin screens', () => {
     });
   });
 
-  it('renders student list with EduPay-managed distinction and search capability', async () => {
+  it('renders students with their source, course of the year and search', async () => {
     const client = adminClient();
     render(<AcademicAdminScreen api={client} view="people" />);
     expect(
       await screen.findByRole('heading', { name: 'Alumnos' }),
     ).toBeTruthy();
     expect(screen.getByText('Claudio Arrau')).toBeTruthy();
-    expect(screen.getByText('Gestionado por EduPay')).toBeTruthy();
+    expect(screen.getByText('Sincronizado desde EduPay')).toBeTruthy();
     expect(screen.getByText('Violeta Parra')).toBeTruthy();
-    expect(screen.getByText('Registro manual')).toBeTruthy();
+    expect(screen.getByText(/Registro manual/)).toBeTruthy();
 
-    // Test search
+    // The course column shows the enrollment of the year in context.
+    expect(
+      screen.getByRole('columnheader', { name: 'Curso 2026' }),
+    ).toBeTruthy();
+    expect(await screen.findByText('7º Básico A')).toBeTruthy();
+    expect(screen.getByText('Sin matrícula')).toBeTruthy();
+    expect(client.listStudents).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      id,
+    );
+
     const searchInput = screen.getByLabelText(/buscar alumno/i);
     fireEvent.change(searchInput, { target: { value: 'Claudio' } });
 
@@ -1177,22 +1457,34 @@ describe('Academic admin screens', () => {
         'Claudio',
         undefined,
         undefined,
+        id,
       );
     });
   });
 
-  it('keeps person creation collapsed until requested and marks optional contact clearly', async () => {
-    const client = adminClient();
-    render(<AcademicAdminScreen api={client} view="people" />);
-    await screen.findByRole('heading', { name: 'Alumnos' });
+  it('admits new students from Matrículas in the year in context', async () => {
+    const client = adminClient({
+      listAcademicYears: vi.fn(async () => ({
+        items: [year, draft2027],
+        nextCursor: null,
+      })),
+    });
+    const { unmount } = render(
+      <AcademicAdminScreen api={client} view="people" />,
+    );
+    expect(
+      (
+        await screen.findByRole('link', { name: 'Incorporar alumno' })
+      ).getAttribute('href'),
+    ).toBe('/administracion/matriculas');
+    unmount();
 
-    const disclosure = document.querySelector(
-      '.admin-create-disclosure',
-    ) as HTMLDetailsElement;
-    expect(disclosure.open).toBe(false);
-    fireEvent.click(screen.getByText('Incorporar alumno'));
-    expect(disclosure.open).toBe(true);
-
+    render(<AcademicAdminScreen api={client} view="enrollments" />);
+    expect(
+      (
+        await screen.findByRole('tab', { name: 'Incorporar alumno nuevo' })
+      ).getAttribute('aria-selected'),
+    ).toBe('true');
     // ADR-0024: the student form admits with RUN/IPE and a course.
     const run = (await screen.findByLabelText('RUN')) as HTMLInputElement;
     const firstName = screen.getByLabelText('Nombres') as HTMLInputElement;
@@ -1207,6 +1499,15 @@ describe('Academic admin screens', () => {
     expect((screen.getByLabelText('Curso') as HTMLSelectElement).required).toBe(
       true,
     );
+    // The year in context (2026) wins over the draft year by default.
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText('Año académico') as HTMLSelectElement).value,
+      ).toBe(id),
+    );
+    expect(
+      screen.getByText(/La matrícula no crea la cuenta de acceso/),
+    ).toBeTruthy();
     expect(client.createStudent).not.toHaveBeenCalled();
   });
 
@@ -1357,24 +1658,91 @@ describe('Academic admin screens', () => {
     });
   });
 
-  it('renders enrollments and assignments tab with direct assignment workflows', async () => {
-    const client = adminClient();
-    render(<AcademicAdminScreen api={client} view="people" />);
-    fireEvent.click(await screen.findByRole('tab', { name: /inscripciones/i }));
+  it('enrolls an existing student only in courses of the year in context', async () => {
+    const course2027 = {
+      ...course,
+      id: id3,
+      academicYearId: id6,
+      label: '8º Básico 2027',
+      status: 'DRAFT' as const,
+    };
+    const client = adminClient({
+      listAcademicYears: vi.fn(async () => ({
+        items: [year, draft2027],
+        nextCursor: null,
+      })),
+      listCourses: vi.fn(async () => ({
+        items: [course, course2027],
+        nextCursor: null,
+      })),
+    });
+    render(<AcademicAdminScreen api={client} view="enrollments" />);
+    fireEvent.click(
+      await screen.findByRole('tab', { name: 'Matricular alumno existente' }),
+    );
+    expect(window.location.search).toBe('?seccion=matricular');
 
+    const courseSelect = (await screen.findByLabelText(
+      'Curso',
+    )) as HTMLSelectElement;
+    expect(
+      within(courseSelect).getByRole('option', { name: '7º Básico A' }),
+    ).toBeTruthy();
+    expect(
+      within(courseSelect).queryByRole('option', { name: /2027/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Guardar asignación' }),
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Matricular en el curso' }),
+    );
+    expect(
+      await screen.findByText(
+        'Claudio Arrau quedó matriculado en 7º Básico A.',
+      ),
+    ).toBeTruthy();
+    expect(client.enrollStudent).toHaveBeenCalledWith({
+      studentId: id,
+      courseId: id,
+    });
+
+    fireEvent.click(
+      screen.getByText('Excepción: habilitar solo una asignatura'),
+    );
+    fireEvent.change(screen.getByLabelText('Asignatura del curso'), {
+      target: { value: id },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Habilitar asignatura' }),
+    );
+    await waitFor(() =>
+      expect(client.directlyEnrollStudent).toHaveBeenCalledWith({
+        studentId: id,
+        courseSubjectId: id,
+      }),
+    );
+  });
+
+  it('opens the Matrículas section named in the address', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/administracion/matriculas?seccion=avance',
+    );
+    render(<AcademicAdminScreen api={adminClient()} view="enrollments" />);
+
+    const promotionTab = await screen.findByRole('tab', {
+      name: 'Avance anual',
+    });
+    await waitFor(() =>
+      expect(promotionTab.getAttribute('aria-selected')).toBe('true'),
+    );
     expect(
       await screen.findByRole('heading', {
-        name: 'Inscripciones y asignaciones directas',
+        name: 'Avanzar un curso al siguiente año',
       }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Inscribir alumno' }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Guardar asignación' }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Asignar directamente' }),
     ).toBeTruthy();
   });
 
@@ -1402,7 +1770,7 @@ describe('Academic admin screens', () => {
     expect(screen.getByText(/tu sesión está autenticada/i)).toBeTruthy();
   });
 
-  it('renders total student count in overview stat card and students pagination bar', async () => {
+  it('renders the total student count in the people tab and pagination bar', async () => {
     const client = adminClient({
       listStudents: vi.fn(async () => ({
         items: [studentEduPay, studentManual],
@@ -1410,11 +1778,10 @@ describe('Academic admin screens', () => {
         totalCount: 229,
       })),
     });
-    render(<AcademicAdminScreen api={client} view="overview" />);
-    expect(await screen.findByText('229')).toBeTruthy();
-    expect(screen.getByText('alumnos registrados')).toBeTruthy();
-
     render(<AcademicAdminScreen api={client} view="people" />);
+    expect(
+      await screen.findByRole('tab', { name: 'Alumnos (229)' }),
+    ).toBeTruthy();
     expect(await screen.findByText(/229 alumnos.*Página 1 de 5/)).toBeTruthy();
   });
 
@@ -1465,6 +1832,7 @@ describe('Academic admin screens', () => {
       undefined,
       'cursor-page-2',
       undefined,
+      id,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
@@ -1510,17 +1878,20 @@ describe('Academic admin screens', () => {
         'Claudio',
         undefined,
         undefined,
+        id,
       );
     });
     expect(client.listStudents).not.toHaveBeenCalledWith(
       'Cl',
       undefined,
       undefined,
+      id,
     );
     expect(client.listStudents).not.toHaveBeenCalledWith(
       'Cla',
       undefined,
       undefined,
+      id,
     );
   });
 
@@ -1566,6 +1937,7 @@ describe('Academic admin screens', () => {
       undefined,
       undefined,
       'INACTIVE',
+      id,
     );
   });
 

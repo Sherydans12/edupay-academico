@@ -15,6 +15,10 @@ import { ApiTags } from '@nestjs/swagger';
 import {
   academicYearPageSchema,
   academicYearSchema,
+  academicYearOverviewSchema,
+  copyAcademicYearCoursesResultSchema,
+  copyAcademicYearCoursesSchema,
+  type CopyAcademicYearCourses,
   academicPreparationStatusSchema,
   assignCourseSubjectTeachersSchema,
   courseEnrollmentSchema,
@@ -41,6 +45,8 @@ import {
   createTeacherSchema,
   cursorQuerySchema,
   personListQuerySchema,
+  studentListQuerySchema,
+  type StudentListQuery,
   studentPageSchema,
   studentSchema,
   studentSubjectEnrollmentSchema,
@@ -148,6 +154,23 @@ export class AcademicAdminController {
     return this.academics.getAcademicYear(this.context(), id);
   }
 
+  @Get('academic-years/:id/overview')
+  @ContractResponse(academicYearOverviewSchema)
+  academicYearOverview(@Param('id', uuid) id: string): Promise<object> {
+    return this.academics.academicYearOverview(this.context(), id);
+  }
+
+  @Post('academic-years/:id/courses/copy')
+  @ContractBody(copyAcademicYearCoursesSchema)
+  @ContractResponse(copyAcademicYearCoursesResultSchema)
+  copyAcademicYearCourses(
+    @Param('id', uuid) id: string,
+    @Body(new ZodValidationPipe(copyAcademicYearCoursesSchema))
+    input: CopyAcademicYearCourses,
+  ): Promise<object> {
+    return this.academics.copyAcademicYearCourses(this.context(), id, input);
+  }
+
   @Patch('academic-years/:id')
   @ContractBody(updateAcademicYearSchema)
   @ContractResponse(academicYearSchema)
@@ -204,7 +227,8 @@ export class AcademicAdminController {
   @Get('students')
   @ContractResponse(studentPageSchema)
   listStudents(
-    @Query(new ZodValidationPipe(personListQuerySchema)) query: PersonListQuery,
+    @Query(new ZodValidationPipe(studentListQuerySchema))
+    query: StudentListQuery,
   ): Promise<object> {
     return this.academics.listStudents(this.context(), query);
   }
