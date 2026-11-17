@@ -20,6 +20,9 @@ import type {
 } from '@edupay/contracts';
 import type {
   AcademicPreparationStatus,
+  AcademicYearOverview,
+  CopyAcademicYearCourses,
+  CopyAcademicYearCoursesResult,
   AssignCourseSubjectTeachers,
   CourseListQuery,
   CourseSubjectListQuery,
@@ -40,6 +43,7 @@ import type {
   InconsistentCourseEnrollmentReason,
   PersonListQuery,
   PromoteCourseEnrollments,
+  StudentListQuery,
   SubjectListQuery,
   UpdateAcademicYear,
   UpdateCourse,
@@ -260,6 +264,134 @@ export class AcademicService {
     return mapAcademicYear(await this.academicYear(scope, id));
   }
 
+  async academicYearOverview(
+    context: AcademicRequestContext,
+    id: string,
+  ): Promise<AcademicYearOverview> {
+    const scope = this.adminScope(context);
+    await this.academicYear(scope, id);
+    const [courseGroups, activeEnrollments, sourceManagedActiveEnrollments] =
+      await Promise.all([
+        this.prisma.course.groupBy({
+          by: ['status'],
+          where: { tenantId: scope.tenantId, academicYearId: id },
+          _count: { _all: true },
+        }),
+        this.prisma.courseEnrollment.count({
+          where: {
+            tenantId: scope.tenantId,
+            status: 'ACTIVE',
+            student: { status: 'ACTIVE' },
+            course: { academicYearId: id },
+          },
+        }),
+        this.prisma.courseEnrollment.count({
+          where: {
+            tenantId: scope.tenantId,
+            status: 'ACTIVE',
+            student: { status: 'ACTIVE' },
+            course: { academicYearId: id },
+            OR: [
+              { source: { not: MANUAL_SOURCE } },
+              { student: { source: EDUPAY_SOURCE } },
+            ],
+          },
+        }),
+      ]);
+    const countFor = (status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED') =>
+      courseGroups.find((group) => group.status === status)?._count._all ?? 0;
+    return {
+      academicYearId: id,
+      courses: {
+        draft: countFor('DRAFT'),
+        active: countFor('ACTIVE'),
+        archived: countFor('ARCHIVED'),
+      },
+      activeEnrollments,
+      sourceManagedActiveEnrollments,
+    };
+  }
+
+  /**
+   * Creates in the target year, as DRAFT manual courses, the labels of the
+   * source year's non-archived courses that the target does not have yet.
+   * Matching is by trimmed, case-insensitive label; repeating it creates
+   * nothing new.
+   */
+  async copyAcademicYearCourses(
+    context: AcademicRequestContext,
+    targetId: string,
+    input: CopyAcademicYearCourses,
+  ): Promise<CopyAcademicYearCoursesResult> {
+    const scope = this.adminScope(context);
+    if (input.sourceAcademicYearId === targetId) {
+      throw new BadRequestException(
+        'The source and target academic years must be different.',
+      );
+    }
+    const target = await this.academicYear(scope, targetId);
+    this.requireYearMutable(target.status);
+    await this.academicYear(scope, input.sourceAcademicYearId);
+    const [sourceCourses, targetCourses] = await Promise.all([
+      this.prisma.course.findMany({
+        where: {
+          tenantId: scope.tenantId,
+          academicYearId: input.sourceAcademicYearId,
+          status: { not: 'ARCHIVED' },
+        },
+        select: { label: true },
+        orderBy: { label: 'asc' },
+      }),
+      this.prisma.course.findMany({
+        where: { tenantId: scope.tenantId, academicYearId: targetId },
+        select: { label: true },
+      }),
+    ]);
+    const key = (label: string) => label.trim().toLocaleLowerCase('es-CL');
+    const present = new Set(targetCourses.map((course) => key(course.label)));
+    const toCreate: string[] = [];
+    const alreadyPresent: string[] = [];
+    const seen = new Set<string>();
+    for (const { label } of sourceCourses) {
+      const normalized = key(label);
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      if (present.has(normalized)) alreadyPresent.push(label.trim());
+      else toCreate.push(label.trim());
+    }
+    const dryRun = input.dryRun ?? false;
+    let createdCount = 0;
+    if (!dryRun && toCreate.length > 0) {
+      const created = await this.write(() =>
+        this.prisma.course.createMany({
+          data: toCreate.map((label) => ({
+            tenantId: scope.tenantId,
+            academicYearId: targetId,
+            source: MANUAL_SOURCE,
+            label,
+            status: 'DRAFT' as const,
+          })),
+          skipDuplicates: true,
+        }),
+      );
+      createdCount = created.count;
+      await this.recordAudit(
+        context,
+        'ACADEMIC_YEAR_COURSES_COPIED',
+        'AcademicYear',
+        targetId,
+      );
+    }
+    return {
+      sourceAcademicYearId: input.sourceAcademicYearId,
+      targetAcademicYearId: targetId,
+      dryRun,
+      toCreate,
+      alreadyPresent,
+      createdCount,
+    };
+  }
+
   async updateAcademicYear(
     context: AcademicRequestContext,
     id: string,
@@ -472,9 +604,12 @@ export class AcademicService {
 
   async listStudents(
     context: AcademicRequestContext,
-    query: PersonListQuery,
+    query: StudentListQuery,
   ): Promise<object> {
     const scope = this.adminScope(context);
+    if (query.academicYearId) {
+      await this.academicYear(scope, query.academicYearId);
+    }
     if (query.cursor) {
       await this.requireCursor(
         this.prisma.student.findFirst({
@@ -513,8 +648,45 @@ export class AcademicService {
       }),
       this.prisma.student.count({ where }),
     ]);
+    const page = this.page(records, query.limit, mapStudent);
+    if (!query.academicYearId) return { ...page, totalCount };
+    const visible = records.slice(0, query.limit);
+    const studentIds = visible.map((record) => record.id);
+    const enrollments = await this.prisma.courseEnrollment.findMany({
+      where: {
+        tenantId: scope.tenantId,
+        studentId: { in: studentIds },
+        status: 'ACTIVE',
+        course: { academicYearId: query.academicYearId },
+      },
+      select: {
+        id: true,
+        studentId: true,
+        course: { select: { id: true, label: true } },
+      },
+      orderBy: [{ course: { label: 'asc' } }, { id: 'asc' }],
+    });
+    const byStudent = new Map<string, (typeof enrollments)[number]>();
+    for (const enrollment of enrollments) {
+      if (!byStudent.has(enrollment.studentId)) {
+        byStudent.set(enrollment.studentId, enrollment);
+      }
+    }
     return {
-      ...this.page(records, query.limit, mapStudent),
+      ...page,
+      items: page.items.map((item, index) => {
+        const enrollment = byStudent.get(visible[index]!.id);
+        return {
+          ...(item as Record<string, unknown>),
+          yearEnrollment: enrollment
+            ? {
+                enrollmentId: enrollment.id,
+                courseId: enrollment.course.id,
+                courseLabel: enrollment.course.label,
+              }
+            : null,
+        };
+      }),
       totalCount,
     };
   }

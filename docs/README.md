@@ -50,6 +50,9 @@ aceptados mantienen autoridad sobre arquitectura y seguridad.
   records the accepted admission rules (RUN, or IPE without RUN) and the first
   manual-admission cut: one idempotent command creates the record and its
   enrollment. File import remains a separate follow-up.
+- [Administración académica por tarea](design/academic-admin-by-task.md)
+  records the 2026-11-16 organization of the administration console (Inicio,
+  Cursos, Matrículas, Personas) around the year in context.
 - [Primer corte de frontend académico: shell compartido y DIE](design/academic-frontend-first-cut.md)
   records the implemented visual direction, DIE changes, synthetic before
   captures, validation, and prioritized module follow-ups.

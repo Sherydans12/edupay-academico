@@ -69,11 +69,16 @@ const workspaceNavigation: Record<WorkspaceKind, NavigationItem[]> = {
     },
   ],
   'tenant-admin': [
-    { href: '/administracion', icon: 'home', label: 'Resumen', mobile: true },
+    { href: '/administracion', icon: 'home', label: 'Inicio', mobile: true },
     {
       href: '/administracion/estructura',
       icon: 'layers',
-      label: 'Estructura',
+      label: 'Cursos',
+    },
+    {
+      href: '/administracion/matriculas',
+      icon: 'clipboard',
+      label: 'Matrículas',
       mobile: true,
     },
     {
@@ -419,17 +424,25 @@ export function AppShell({
           <div aria-label="Contexto actual" className="topbar-location">
             <div className="topbar-location__crumb">
               <span className="topbar-location__tenant">
-                <span className="topbar-location__tenant-dot" aria-hidden="true" />
+                <span
+                  className="topbar-location__tenant-dot"
+                  aria-hidden="true"
+                />
                 {session.tenantDisplayName}
               </span>
-              <span className="topbar-location__sep" aria-hidden="true">/</span>
+              <span className="topbar-location__sep" aria-hidden="true">
+                /
+              </span>
               <strong className="topbar-location__page">
                 {activeNavigationItem?.label ?? 'Espacio académico'}
               </strong>
             </div>
           </div>
           <div className="topbar-actions">
-            <div className="topbar-quick-links" aria-label="Accesos rápidos de cuenta">
+            <div
+              className="topbar-quick-links"
+              aria-label="Accesos rápidos de cuenta"
+            >
               <Link
                 aria-label="Ir a mi perfil"
                 className={`topbar-quick-link ${isCurrentPath(pathname, profileHref) ? 'topbar-quick-link--active' : ''}`}
