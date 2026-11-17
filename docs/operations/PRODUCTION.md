@@ -1,6 +1,22 @@
 # Topología productiva EduPay
 
-## Estado operativo vigente — 2026-11-16 (proyección financiera v2 en sombra)
+## Estado operativo vigente — 2026-11-17 (administración por tarea)
+
+Release verificado el 2026-11-17; evidencia en
+[year-context-admin-release-2026-11-17.md](year-context-admin-release-2026-11-17.md).
+Sin migraciones ni cambios de variables: los flags, la sombra v2 y el worker
+descritos en el historial del 2026-11-16 siguen igual.
+
+| Componente | Commit integrado | Imagen activa | Recurso |
+|---|---|---|---|
+| Académico API | `1d4498c8882454c7194fd58b54eb321c88a7ffa6` | `ghcr.io/sherydans12/edupay-academico@sha256:7625ab2230936487e70070a6f7871958bc2e750a921cf9048480204e48c7b3b4` | `iobfkpujjoa2kj5urbpnjvzi` |
+| Académico FRONT | `1d4498c8882454c7194fd58b54eb321c88a7ffa6` | `ghcr.io/sherydans12/edupay-academico-web@sha256:5ceb5e634996378619e24b1f0120cc21ae5bd499428754e8b3c6fd1de9a7c1cb` (tag `main`) | `cct0rtf5iku6fkd3t9hldnv4` |
+| Académico DB | — | ledger 14/14, sin migraciones en este release | `v5w9hacwtftulf4m46l1rn2g` |
+
+Rollback: API `sha256:23dff3c8…` y FRONT `sha256:0e605123…` (ambos `bce2636`),
+juntos.
+
+## Historial — 2026-11-16 (proyección financiera v2 en sombra)
 
 Ventana ejecutada y verificada el 2026-11-15/16; evidencia completa en
 [financial-projection-shadow-activation-2026-11-15.md](financial-projection-shadow-activation-2026-11-15.md).
