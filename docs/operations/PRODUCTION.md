@@ -1,6 +1,27 @@
 # Topología productiva EduPay
 
-## Estado operativo vigente — 2026-11-20 (publicador de la proyección activo)
+## Estado operativo vigente — 2026-11-20 (autoridad EDUPAY traspasada)
+
+Ventana verificada el 2026-11-20; evidencia en
+[edupay-authority-transfer.md](edupay-authority-transfer.md) (ADR-0026).
+
+| Componente | Commit integrado | Imagen activa | Recurso |
+|---|---|---|---|
+| Académico API | `eebc058b953a03186f92d347bfba5ff786f46ecd` | `ghcr.io/sherydans12/edupay-academico@sha256:aae578d508b0511b26a1520878b9f1e9056ebbdd3ea9d96a8e0a8d695171fb79` | `iobfkpujjoa2kj5urbpnjvzi` |
+| Académico FRONT | sin cambios en esta ventana | la del release del 2026-11-17 (contenedor `…-20261117T232708`); la etiqueta "Traspasado desde EduPay" llega con su próximo redeploy | `cct0rtf5iku6fkd3t9hldnv4` |
+| Académico DB | — | ledger 15/15, última `20261120120000_edupay_authority_transfer` | `v5w9hacwtftulf4m46l1rn2g` |
+
+- Recovery point previo `20261120T132903Z` (local y R2, restauración aislada
+  verificada).
+- Las 252 fichas, 13 cursos y 242 matrículas del sync v1 son ahora `MANUAL`
+  con su referencia legada; el sync v1 quedó deshabilitado y no se puede
+  rehabilitar. El avance anual ya puede moverlas.
+- Publicador de la proyección y tarea "Auto Send" sin cambios; el payload
+  hacia BL-002 no cambió y BL-002 no registró eventos ni cambios.
+- Rollback del API: `sha256:7625ab22…` (compatible con la migración).
+  Revertir el traspaso solo restaurando el recovery point.
+
+## Historial — 2026-11-20 (publicador de la proyección activo)
 
 Activación verificada el 2026-11-20; evidencia en BL-002
 `docs/operations/projection-write-activation-2026-11-18.md` (ADR-0027 de

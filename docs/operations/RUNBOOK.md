@@ -154,6 +154,9 @@ fallaban desde al menos el 14/11 porque faltaba en el host el helper PG15
 fijado por digest en `/root/run-edupay-native-backup.sh`. Al detener o
 redeployar recursos en Coolify, **desmarca "Run Docker Cleanup"**: borra
 imágenes no usadas, incluidos ese helper, runners y digests de rollback.
+El mismo fallo se repitió del 2026-11-16 06:00 al 2026-11-20 12:00 UTC
+(18 ejecuciones) y se corrigió igual: `docker pull` del digest del helper.
+Revisa `Result` antes y después de cada redeploy.
 
 Proyección financiera (desde 2026-11-16 en sombra): el snapshot y la
 conciliación se ejecutan desde BL-002 con una sesión `SUPER_ADMIN`
