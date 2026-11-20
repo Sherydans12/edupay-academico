@@ -50,6 +50,10 @@ aceptados mantienen autoridad sobre arquitectura y seguridad.
   records the accepted admission rules (RUN, or IPE without RUN) and the first
   manual-admission cut: one idempotent command creates the record and its
   enrollment. File import remains a separate follow-up.
+- [ADR-0026: traspaso de la autoridad EDUPAY](decisions/ADR-0026-edupay-authority-transfer.md)
+  moves the sync v1 records to Académico with a one-time, dry-run-first command
+  so the annual promotion can move them; its
+  [procedure](operations/edupay-authority-transfer.md) is prepared, not run.
 - [Administración académica por tarea](design/academic-admin-by-task.md)
   records the 2026-11-16 organization of the administration console (Inicio,
   Cursos, Matrículas, Personas) around the year in context.

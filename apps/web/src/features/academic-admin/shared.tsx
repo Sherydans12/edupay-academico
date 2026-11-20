@@ -302,6 +302,19 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
 }
 
+/**
+ * Origin of a student or course: synchronized by the EduPay sync v1, transferred
+ * from it to Académico (ADR-0026, keeps its legacy reference) or created here.
+ */
+export function recordOriginLabel(record: {
+  source: string;
+  externalReference: string | null;
+}): string {
+  if (record.source === 'EDUPAY') return 'Sincronizado desde EduPay';
+  if (record.externalReference) return 'Traspasado desde EduPay';
+  return 'Registro manual';
+}
+
 export function statusLabel(status: string) {
   return status === 'ACTIVE'
     ? 'Activo'

@@ -14,6 +14,7 @@ import {
 
 import { configureApplication } from '../src/bootstrap/configure-application';
 import { PrismaService } from '../src/persistence/prisma.service';
+import { EduPayAuthorityTransferService } from '../src/sync/edupay-authority-transfer';
 import { EDUPAY_SOURCE } from '../src/sync/sync.constants';
 import {
   configureEduPaySync,
@@ -868,6 +869,205 @@ describe
         apply.mockRestore();
         clock.mockRestore();
       }
+    });
+
+    it('transfers EduPay authority to Académico once and keeps the sync from returning (ADR-0026)', async () => {
+      const synced = await sync.execute(TENANT_A, 'INCREMENTAL', 'MANUAL');
+      expect(synced.status).toBe('SUCCEEDED');
+      const otherTenantYear = await prisma.academicYear.create({
+        data: {
+          tenantId: TENANT_B,
+          label: '2026',
+          startDate: new Date('2026-03-01T00:00:00.000Z'),
+          endDate: new Date('2026-12-20T00:00:00.000Z'),
+          status: 'ACTIVE',
+        },
+      });
+      const otherTenantStudent = await prisma.student.create({
+        data: {
+          tenantId: TENANT_B,
+          source: EDUPAY_SOURCE,
+          externalReference: STUDENT_A,
+          firstName: 'Otro',
+          lastName: 'Colegio',
+        },
+      });
+      const recordSystem = vi.fn(() => Promise.resolve());
+      const transfer = new EduPayAuthorityTransferService(prisma, {
+        record: () => Promise.resolve(),
+        recordSystem,
+      });
+      const admin = await token(TENANT_A, 'admin-a', ['TENANT_ADMIN']);
+      const course = await sourceCourse(COURSE_A);
+      const student = await prisma.student.findUniqueOrThrow({
+        where: {
+          tenantId_source_externalReference: {
+            tenantId: TENANT_A,
+            source: EDUPAY_SOURCE,
+            externalReference: STUDENT_A,
+          },
+        },
+      });
+
+      const plan = await transfer.plan(TENANT_A);
+      expect(plan).toMatchObject({
+        toTransfer: { students: 1, courses: 2, enrollments: 1 },
+        activeStudents: 1,
+        activeEnrollments: 1,
+        alreadyTransferred: { students: 0, courses: 0, enrollments: 0 },
+        syncConfiguration: 'ENABLED',
+        syncLeaseHeld: false,
+        blockers: [],
+      });
+      const rosterBefore = await api(admin)
+        .get(`/api/v1/courses/${course.id}/roster`)
+        .expect(200);
+      expect(rosterBefore.body.items[0].sourceManaged).toBe(true);
+
+      await expect(
+        transfer.apply(TENANT_A, { students: 1, courses: 1, enrollments: 1 }),
+      ).rejects.toMatchObject({ code: 'TRANSFER_COUNTS_CHANGED' });
+      const heldLease = {
+        ownerRunId: randomUUID(),
+        lockedUntil: new Date(Date.now() + 60_000),
+      };
+      await prisma.syncLease.upsert({
+        where: {
+          tenantId_source: { tenantId: TENANT_A, source: EDUPAY_SOURCE },
+        },
+        create: { tenantId: TENANT_A, source: EDUPAY_SOURCE, ...heldLease },
+        update: heldLease,
+      });
+      expect((await transfer.plan(TENANT_A)).blockers).toEqual([
+        'SYNC_RUN_IN_PROGRESS',
+      ]);
+      await expect(
+        transfer.apply(TENANT_A, { students: 1, courses: 2, enrollments: 1 }),
+      ).rejects.toMatchObject({ code: 'SYNC_RUN_IN_PROGRESS' });
+      expect(
+        await prisma.student.count({
+          where: { tenantId: TENANT_A, source: EDUPAY_SOURCE },
+        }),
+      ).toBe(1);
+      await prisma.syncLease.deleteMany({ where: { tenantId: TENANT_A } });
+
+      const applied = await transfer.apply(TENANT_A, {
+        students: 1,
+        courses: 2,
+        enrollments: 1,
+      });
+      expect(applied).toMatchObject({
+        applied: true,
+        transferred: { students: 1, courses: 2, enrollments: 1 },
+        syncConfiguration: 'DISABLED',
+      });
+      expect(recordSystem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'EDUPAY_AUTHORITY_TRANSFERRED',
+          tenantId: TENANT_A,
+          summary: { students: 1, courses: 2, enrollments: 1 },
+        }),
+      );
+      for (const count of [
+        prisma.student.count({
+          where: { tenantId: TENANT_A, source: EDUPAY_SOURCE },
+        }),
+        prisma.course.count({
+          where: { tenantId: TENANT_A, source: EDUPAY_SOURCE },
+        }),
+        prisma.courseEnrollment.count({
+          where: { tenantId: TENANT_A, source: EDUPAY_SOURCE },
+        }),
+      ]) {
+        expect(await count).toBe(0);
+      }
+      await expect(
+        prisma.student.findUniqueOrThrow({
+          where: { tenantId_id: { tenantId: TENANT_A, id: student.id } },
+        }),
+      ).resolves.toMatchObject({
+        source: 'MANUAL',
+        externalReference: STUDENT_A,
+        firstName: student.firstName,
+        status: 'ACTIVE',
+      });
+      await expect(
+        prisma.student.findUniqueOrThrow({
+          where: {
+            tenantId_id: { tenantId: TENANT_B, id: otherTenantStudent.id },
+          },
+        }),
+      ).resolves.toMatchObject({ source: EDUPAY_SOURCE });
+      expect(otherTenantYear.tenantId).toBe(TENANT_B);
+      const otherStudentKey = {
+        tenantId_id: { tenantId: TENANT_B, id: otherTenantStudent.id },
+      };
+      await expect(
+        prisma.student.update({
+          where: otherStudentKey,
+          data: { source: 'MANUAL' },
+        }),
+      ).rejects.toThrow(/EDUPAY external identity is immutable/);
+      await expect(
+        prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT set_config('edupay.authority_transfer', 'on', true)`;
+          await tx.student.update({
+            where: otherStudentKey,
+            data: { source: 'MANUAL', externalReference: 'changed' },
+          });
+        }),
+      ).rejects.toThrow(/EDUPAY external identity is immutable/);
+
+      const again = await transfer.apply(TENANT_A, {
+        students: 1,
+        courses: 2,
+        enrollments: 1,
+      });
+      expect(again.transferred).toEqual({
+        students: 0,
+        courses: 0,
+        enrollments: 0,
+      });
+      expect(again.alreadyTransferred).toEqual({
+        students: 1,
+        courses: 2,
+        enrollments: 1,
+      });
+
+      const rosterAfter = await api(admin)
+        .get(`/api/v1/courses/${course.id}/roster`)
+        .expect(200);
+      expect(rosterAfter.body.items[0]).toMatchObject({
+        sourceManaged: false,
+        student: { source: 'MANUAL', externalReference: STUDENT_A },
+      });
+      await api(admin)
+        .patch(`/api/v1/students/${student.id}`)
+        .send({ firstName: 'Corregido' })
+        .expect(200);
+      await api(admin)
+        .patch(`/api/v1/courses/${course.id}`)
+        .send({ label: 'Primero A editado' })
+        .expect(200);
+
+      await expect(
+        configureEduPaySync(prisma, {
+          tenantId: TENANT_A,
+          sourceTenantId: source.sourceTenantId,
+          academicYearId,
+          enabled: true,
+        }),
+      ).rejects.toBeInstanceOf(SyncConfigurationConflictError);
+      await prisma.syncConfiguration.updateMany({
+        where: { tenantId: TENANT_A },
+        data: { enabled: true },
+      });
+      await expect(
+        sync.execute(TENANT_A, 'INCREMENTAL', 'MANUAL'),
+      ).rejects.toMatchObject({ code: 'SYNC_AUTHORITY_TRANSFERRED' });
+      expect(
+        await prisma.student.count({ where: { tenantId: TENANT_A } }),
+      ).toBe(1);
     });
 
     function setDefaultSourceRows(): void {

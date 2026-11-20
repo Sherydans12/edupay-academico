@@ -19,6 +19,7 @@ import type {
   EduPayCourseItem,
   EduPayStudentItem,
 } from './edupay-source.contract';
+import { hasTransferredEduPayAuthority } from './edupay-authority-transfer';
 import { EDUPAY_SCHEMA_VERSION, EDUPAY_SOURCE } from './sync.constants';
 import {
   safeSyncItemErrorCode,
@@ -875,6 +876,12 @@ export class EduPaySyncService {
       throw new SyncConfigurationError(
         'SYNC_CONFIGURATION_DISABLED',
         'The tenant does not have an enabled EduPay synchronization configuration.',
+      );
+    }
+    if (await hasTransferredEduPayAuthority(this.prisma, tenantId)) {
+      throw new SyncConfigurationError(
+        'SYNC_AUTHORITY_TRANSFERRED',
+        'The EduPay records of this tenant were transferred to Académico (ADR-0026).',
       );
     }
     if (configuration.academicYear.status !== 'ACTIVE') {

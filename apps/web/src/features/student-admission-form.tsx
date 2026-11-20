@@ -432,7 +432,9 @@ export function StudentAdmissionForm({
           {existing.firstName} {existing.lastName} ·{' '}
           {existing.source === 'EDUPAY'
             ? 'gestionada por EduPay'
-            : 'registro manual'}
+            : existing.externalReference
+              ? 'traspasada desde EduPay'
+              : 'registro manual'}
           . No se creó otra ficha. Si es la misma persona, puedes matricularla
           en el curso elegido.
         </Alert>

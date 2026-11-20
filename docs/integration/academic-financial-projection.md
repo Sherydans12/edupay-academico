@@ -33,9 +33,9 @@ agrega tres descriptores estrictos:
 | ------------------------------------------------------ | --------------------------- | ----------------------------------------------------------------- |
 | `student.firstName`, `student.lastName`                | `Student`                   | 1–120 caracteres.                                                 |
 | `student.nationalIdType`, `student.nationalId`         | `Student` (ADR-0024)        | `RUN`/`IPE` y valor normalizado; ambos presentes o ambos `null`.  |
-| `student.legacyIntegrationId`                          | `Student.externalReference` | Sólo si `source = EDUPAY`; si no, `null`.                         |
+| `student.legacyIntegrationId`                          | `Student.externalReference` | Referencia del sync v1, también tras el traspaso (ADR-0026).      |
 | `course.label`                                         | `Course.label`              | 1–160 caracteres.                                                 |
-| `course.legacyIntegrationId`                           | `Course.externalReference`  | Sólo si `source = EDUPAY`; si no, `null`.                         |
+| `course.legacyIntegrationId`                           | `Course.externalReference`  | Referencia del sync v1, también tras el traspaso (ADR-0026).      |
 | `academicYear.label`, `startDate`, `endDate`, `status` | `AcademicYear` del curso    | Fechas `YYYY-MM-DD`; estado `DRAFT`/`ACTIVE`/`CLOSED`/`ARCHIVED`. |
 
 Los eventos son `academic.financial-projection.enrollment.upserted.v2` y

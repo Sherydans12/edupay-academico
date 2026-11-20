@@ -115,7 +115,8 @@ completo y BL recibe las matrículas 2027 por la proyección.
    y 12/15 cursos con reporte de diferencias; luego escritura en BL.
 4. **BL por año**: esquema de cursos, matrículas y planes por año; plan 2027;
    indicador de año; retiro del alta de alumnos y cursos en BL.
-5. **Traspaso de autoridad `EDUPAY` y avance 2026 → 2027** en Académico.
+5. **Traspaso de autoridad `EDUPAY` y avance 2026 → 2027** en Académico
+   ([ADR-0026](ADR-0026-edupay-authority-transfer.md)).
 
 Cada paso con migración requiere el gate, recovery point y autorización de
 los runbooks de cada repositorio.

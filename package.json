@@ -14,6 +14,7 @@
     "sync:configure": "pnpm --filter @edupay/api sync:configure",
     "sync:run": "pnpm --filter @edupay/api sync:run",
     "sync:worker": "pnpm --filter @edupay/api sync:worker",
+    "sync:transfer-authority": "pnpm --filter @edupay/api sync:transfer-authority",
     "sync:smoke:real": "node scripts/real-edupay-source-smoke.mjs",
     "pilot:e2e": "node scripts/pilot-cross-service-smoke.mjs",
     "pilot:bootstrap:smoke": "node scripts/pilot-bootstrap-smoke.mjs",
