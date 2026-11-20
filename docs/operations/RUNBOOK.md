@@ -162,6 +162,9 @@ El sync heredado no encola eventos de proyección; una corrida manual
 (`node dist/sync/sync-run-main.js --tenant-id <uuid> --mode incremental` dentro
 del API) exige recovery point previo y medir antes los cambios pendientes en BL.
 Nunca correr `--mode full` sin autorización: aplica la lógica de ausencias.
+Tras el [traspaso de autoridad](edupay-authority-transfer.md) (ADR-0026) el
+sync v1 queda retirado para el tenant: responde `SYNC_AUTHORITY_TRANSFERRED`
+y `sync:configure` no lo rehabilita.
 
 Para ejecutar una migración aditiva de Académico con el runner publicado,
 usa [ACADEMICO-MIGRATION-RUNNER.md](ACADEMICO-MIGRATION-RUNNER.md): ensayo

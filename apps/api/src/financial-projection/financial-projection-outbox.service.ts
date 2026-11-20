@@ -10,8 +10,6 @@ import type { Prisma } from '../generated/prisma/client';
 
 type TransactionClient = Prisma.TransactionClient;
 
-const EDUPAY_SOURCE = 'EDUPAY';
-
 /**
  * Relations every projected enrollment must load. Use it in the same Prisma
  * transaction that changes the enrollment, student, course or year.
@@ -155,13 +153,12 @@ export class FinancialProjectionOutboxService {
         lastName: student.lastName,
         nationalIdType: student.nationalIdType,
         nationalId: student.nationalId,
-        legacyIntegrationId:
-          student.source === EDUPAY_SOURCE ? student.externalReference : null,
+        // ADR-0026: transferred records keep their sync v1 reference.
+        legacyIntegrationId: student.externalReference,
       },
       course: {
         label: course.label,
-        legacyIntegrationId:
-          course.source === EDUPAY_SOURCE ? course.externalReference : null,
+        legacyIntegrationId: course.externalReference,
       },
       academicYear: {
         label: course.academicYear.label,

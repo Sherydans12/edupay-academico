@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { PrismaService } from '../persistence/prisma.service';
+import { hasTransferredEduPayAuthority } from './edupay-authority-transfer';
 import { EDUPAY_SOURCE } from './sync.constants';
 
 const UUID_PATTERN =
@@ -124,6 +125,14 @@ export async function configureEduPaySync(
   if (!academicYear) {
     throw new SyncConfigurationConflictError(
       'The AcademicYear does not exist in the requested tenant.',
+    );
+  }
+  if (
+    input.enabled &&
+    (await hasTransferredEduPayAuthority(prisma, input.tenantId))
+  ) {
+    throw new SyncConfigurationConflictError(
+      'The EduPay records of this tenant were transferred to Académico; the sync cannot be enabled again (ADR-0026).',
     );
   }
   if (input.enabled && academicYear.status !== 'ACTIVE') {

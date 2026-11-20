@@ -14,7 +14,12 @@ import { useMemo, useState } from 'react';
 import type { AcademicApiClient } from '@/api/academic-client';
 import { Icon } from '@/components/icons';
 
-import { AdminTabList, statusLabel, type AdminData } from './shared';
+import {
+  AdminTabList,
+  recordOriginLabel,
+  statusLabel,
+  type AdminData,
+} from './shared';
 import {
   AcademicYearForm,
   formatYearRange,
@@ -386,7 +391,9 @@ function CourseDetail({
           <h3 id="course-detail-title">{course.label}</h3>
           <p>
             {year.label}
-            {course.source === 'EDUPAY' ? ' · Sincronizado desde EduPay' : ''}
+            {course.source === 'EDUPAY' || course.externalReference
+              ? ` · ${recordOriginLabel(course)}`
+              : ''}
             {' · '}
             {subjectCountLabel(subjectCount)}
           </p>

@@ -29,6 +29,7 @@ import {
   personCountLabel,
   studentPageSize,
   personSearchDebounceMs,
+  recordOriginLabel,
   statusLabel,
   AdminTabList,
   type AdminData,
@@ -407,9 +408,7 @@ export function StudentsView({
                       {student.firstName} {student.lastName}
                     </strong>
                     <small>
-                      {student.source === 'EDUPAY'
-                        ? 'Sincronizado desde EduPay'
-                        : 'Registro manual'}
+                      {recordOriginLabel(student)}
                       {student.email ? ` · ${student.email}` : ''}
                     </small>
                   </span>

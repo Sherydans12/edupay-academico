@@ -1770,6 +1770,20 @@ describe('Academic admin screens', () => {
     expect(screen.getByText(/tu sesión está autenticada/i)).toBeTruthy();
   });
 
+  it('labels students transferred from the EduPay sync (ADR-0026)', async () => {
+    const client = adminClient({
+      listStudents: vi.fn(async () => ({
+        items: [{ ...studentEduPay, source: 'MANUAL' }, studentManual],
+        nextCursor: null,
+        totalCount: 2,
+      })),
+    });
+    render(<AcademicAdminScreen api={client} view="people" />);
+    expect(await screen.findByText('Traspasado desde EduPay')).toBeTruthy();
+    expect(screen.getByText(/Registro manual/)).toBeTruthy();
+    expect(screen.queryByText('Sincronizado desde EduPay')).toBeNull();
+  });
+
   it('renders the total student count in the people tab and pagination bar', async () => {
     const client = adminClient({
       listStudents: vi.fn(async () => ({

@@ -4,7 +4,7 @@ import { Alert, Badge, Button, Dialog, EmptyState, Skeleton } from '@edupay/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AcademicApiClient } from '@/api/academic-client';
 
-import { errorMessage, type AdminData } from './shared';
+import { errorMessage, recordOriginLabel, type AdminData } from './shared';
 
 export type EnrollmentDeactivationTarget = {
   readonly enrollmentId: string;
@@ -270,7 +270,9 @@ export function CourseRoster({
                   {item.sourceManaged ? (
                     <Badge tone="info">Gestionado por sincronización</Badge>
                   ) : (
-                    <Badge tone="neutral">Registro manual</Badge>
+                    <Badge tone="neutral">
+                      {recordOriginLabel(item.student)}
+                    </Badge>
                   )}
                 </td>
                 <td data-label="Estado">

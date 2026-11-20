@@ -122,13 +122,35 @@ describe('FinancialProjectionOutboxService', () => {
     );
   });
 
-  it('never exposes the external reference of a manual record', () => {
+  it('keeps the legacy reference of records transferred to Académico (ADR-0026)', () => {
     const service = new FinancialProjectionOutboxService();
     const payload = service.enrollmentPayload({
       ...enrollment,
-      student: { ...enrollment.student, externalReference: 'manual-ref' },
+      student: {
+        ...enrollment.student,
+        source: 'MANUAL',
+        externalReference: 'f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0',
+      },
+      course: {
+        ...enrollment.course,
+        source: 'MANUAL',
+        externalReference: '0e0e0e0e-0e0e-40e0-80e0-0e0e0e0e0e0e',
+      },
     });
+    expect(payload.student.legacyIntegrationId).toBe(
+      'f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0',
+    );
+    expect(payload.course.legacyIntegrationId).toBe(
+      '0e0e0e0e-0e0e-40e0-80e0-0e0e0e0e0e0e',
+    );
+  });
+
+  it('sends no legacy reference for a record created in Académico', () => {
+    const service = new FinancialProjectionOutboxService();
+    const payload = service.enrollmentPayload(enrollment);
+    expect(enrollment.student.externalReference).toBeNull();
     expect(payload.student.legacyIntegrationId).toBeNull();
+    expect(payload.course.legacyIntegrationId).toBeNull();
   });
 
   it('emits a tombstone at a newer durable version', () => {
