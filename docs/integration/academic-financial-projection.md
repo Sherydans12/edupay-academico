@@ -1,10 +1,15 @@
 # Contrato Académico → Financial Projection
 
-Estado: **Fase 1A (mapeo explícito de tenant), 1B (contrato estricto) y 1C
-(producer/outbox Académico y shadow BL) están implementadas en worktrees
-aislados**. No hay activación de producción, migraciones ni backfills reales;
-el producer está desactivado por defecto y BL no toma decisiones financieras
-desde la sombra.
+Estado (2026-11-20): **activo en producción.** Producer y publisher de
+Académico encendidos; el publisher corre cada minuto como tarea programada
+(ver [PRODUCTION](../operations/PRODUCTION.md)). BL-002 consume en modo
+escritura (su ADR-0027): vincula y crea años, cursos y matrículas, y deja los
+alumnos nuevos en una bandeja hasta asignar apoderado. Los párrafos de fases
+1A–1C que siguen son historia del diseño.
+
+> Histórico: las Fases 1A (mapeo explícito de tenant), 1B (contrato estricto)
+> y 1C (producer/outbox Académico y shadow BL) se implementaron primero en
+> worktrees aislados, con el producer desactivado por defecto.
 
 Este contrato invierte la dirección futura de sincronización: EduPay
 Académico será el productor de la proyección mínima que EduPay Pagos/BL-002

@@ -1,6 +1,30 @@
 # Topología productiva EduPay
 
-## Estado operativo vigente — 2026-11-17 (administración por tarea)
+## Estado operativo vigente — 2026-11-20 (publicador de la proyección activo)
+
+Activación verificada el 2026-11-20; evidencia en BL-002
+`docs/operations/projection-write-activation-2026-11-18.md` (ADR-0027 de
+BL-002). Sin cambios de imagen ni migraciones en Académico.
+
+- API (`iobfkpujjoa2kj5urbpnjvzi`, misma imagen `sha256:7625ab22…`):
+  `ACADEMIC_FINANCIAL_PROJECTION_PUBLISHER_ENABLED=true`,
+  `BL_FINANCIAL_PROJECTION_BASE_URL=https://api-edupay.baselogic.cl` y
+  `BL_FINANCIAL_PROJECTION_SERVICE_KEY_ID`/`_TOKEN` iguales a la credencial S2S
+  del tenant (para el tenant mapeado el publicador usa
+  `ACADEMIC_FINANCIAL_PROJECTION_S2S_CREDENTIALS`).
+- Tarea programada de Coolify "Auto Send" en el servicio, contenedor
+  `academic-api`, cada minuto:
+  `node dist/financial-projection/financial-projection-publisher-main.js`
+  (drena hasta 50 eventos por ejecución). Primer drenaje manual: 1 evento
+  del 2026-11-16 publicado; BL lo recibió como ya aplicado.
+- BL-002 escribe en sus tablas los eventos recibidos (alumnos, cursos y
+  matrículas por año); los alumnos nuevos esperan su apoderado en la bandeja
+  de Pagos.
+- Rollback: deshabilitar la tarea y
+  `ACADEMIC_FINANCIAL_PROJECTION_PUBLISHER_ENABLED=false`; los eventos quedan
+  en el outbox.
+
+## Historial — 2026-11-17 (administración por tarea)
 
 Release verificado el 2026-11-17; evidencia en
 [year-context-admin-release-2026-11-17.md](year-context-admin-release-2026-11-17.md).
