@@ -1,6 +1,6 @@
 # Preparación del avance 2026 → 2027
 
-Fecha del corte: 25 de noviembre de 2026. Base revisada: `main` de Académico en `6c6756d`. Este documento propone el orden de trabajo para Administración y los criterios del ensayo con datos sintéticos.
+El 25 de noviembre de 2026 se revisó `main` de Académico en `6c6756d`. Este plan cubre el orden de trabajo para Administración y los criterios del ensayo con datos sintéticos.
 
 ## Qué existe en la base
 
@@ -23,16 +23,28 @@ El cierre de frontend del 17 de noviembre registró Administración por año. El
 ## Orden propuesto de trabajo
 
 1. **Preparar estructura y ensayar un curso primero.** Crear 2027 en borrador, revisar los cursos que se copiarían y crear **4.º medio**. Definir el destino de cada sección por su ID, empezando por **3.º medio 2026 → 4.º medio 2027**. Ensayar con alumnos sintéticos que avanzan, repiten, cambian de sección y no continúan. Verificar qué puede hacerse desde la vista previa con 2026 plenamente operativo.
-2. **Resolver la preparación segura en Administración.** Implementar primero una separación visible entre revisar y aplicar el avance. Mostrar año y curso de origen, año y curso de destino, qué matrículas 2026 se darán de baja y cuántos alumnos quedan pendientes o sin continuidad. Si se necesita preparar durante varios días, diseñar un borrador persistente por curso con validación de padrón, auditoría y aplicación explícita en la ventana de corte. La preparación debe conservar el acceso 2026 y el estado financiero hasta la aplicación. Cualquier cambio del comando vigente debe actualizar los contratos, pruebas y documentación afectados.
+2. **Implementar el borrador de avance en Administración.** Mostrar origen, destino, excepciones, pendientes y no continuidad. Permitir guardar y retomar la preparación durante varios días. Aplicar el avance con una confirmación explícita en la ventana de corte. La preparación conserva el acceso 2026 y el estado financiero hasta la aplicación.
 3. **Ensayar la rutina de padrón 2027.** Probar por separado retiro efectivo de 2026, no continuidad en 2027 y baja de una matrícula de destino ya creada. Revisar los casos de fichas históricas sin RUN/IPE y preparar una conciliación por referencia estable con reporte de conflictos. Después, probar incorporación manual de alumnos nuevos y matrícula de alumnos con ficha existente en los demás cursos.
 4. **Cierre académico y verificación con Pagos.** Revisar el mapa de secciones y los totales por curso. Una vez terminado el uso operativo de 2026, aplicar los avances con el año de origen todavía activo y comprobar los resultados. Verificar la activación de 2027, la lectura histórica de 2026 y la proyección por año en Pagos. Ejecutar el cierre formal de 2026 después de resolver los pendientes que dependan del avance.
 5. **1.º básico al final.** Preparar su curso como parte de la estructura. Tratar el listado de alumnos nuevos en una entrega posterior, con identificadores conciliados y revisión de duplicados, sin usarlo en el ensayo técnico.
 
-## Decisión de producto para el próximo corte
+## Borrador de avance acordado para el siguiente corte
 
-Si Administración necesita repartir la preparación en varios días, la propuesta es guardar un borrador por curso con su destino y decisiones individuales y aplicar el avance durante el corte. El borrador debe poder retomarse, conservar la distinción entre no continuidad y caso pendiente, y señalar cualquier cambio del padrón antes de aplicar.
+Administración necesita guardar el destino y las decisiones individuales desde ahora, retomar el trabajo en otra sesión y aplicar cuando termine el uso de 2026. El primer recorrido será **3.º medio 2026 → 4.º medio 2027**. La implementación del borrador queda para un corte de backend y frontend en Académico.
 
-Si todo se resolverá en una sola ventana, la mejora puede ser más acotada: mostrar de forma explícita cuándo se hará efectiva la baja de 2026, revisar duplicados en el destino y presentar el resultado por curso antes de cerrar el año de origen.
+### Backend
+
+- Diseñar persistencia para un borrador por tenant, curso de origen y año de destino. Guardar referencias a los cursos y matrículas, destino principal, excepciones, versión del borrador y huella del padrón. La escritura requiere la autorización de Administración del tenant.
+- Distinguir avance, repitencia, cambio de curso, **No continúa** y **Pendiente**. Al aplicar, **No continúa** queda registrado sin crear matrícula 2027. El historial de 2026 se conserva bajo las reglas de cierre del año.
+- Guardar o editar el borrador solo escribe el plan y su auditoría. Matrículas, acceso académico y outbox financiero conservan su estado. La versión permite detectar que otro administrador guardó cambios.
+- La aplicación manual revalida permisos, versión, padrón y destinos, incluidos alumnos con otra matrícula 2027. Debe reutilizar la lógica transaccional e idempotente del avance. Si el padrón cambió, se conservan las decisiones guardadas y se exige revisar las diferencias antes de aplicar. Registrar el resultado y su recibo sin exponer identificadores personales en la auditoría.
+- Documentar el contrato y la decisión de persistencia junto al comando existente. Definir en el diseño cómo se retomarán los casos pendientes después de aplicar el resto de un curso y cómo se registrará cada aplicación.
+
+### Frontend
+
+- Mantener el flujo en **Matrículas → Avance anual**. Mostrar claramente los años y cursos de origen y destino, si existe un borrador guardado y cuándo se guardó.
+- Ofrecer **Guardar borrador**, **Retomar borrador** y **Aplicar avance**. La confirmación de aplicación muestra el efecto inmediato sobre las matrículas de origen de los alumnos que avanzan, el destino y el resumen de excepciones.
+- Mantener las decisiones al paginar. Mostrar casos pendientes, no continuidad y conflictos de destino por separado. Si el padrón o el borrador cambiaron, mostrar qué debe revisarse antes de aplicar.
 
 ## Criterios de aceptación del primer ensayo integrado
 
@@ -45,6 +57,6 @@ Si todo se resolverá en una sola ventana, la mejora puede ser más acotada: mos
 
 ## Verificación de esta revisión
 
-- **Administración web:** 43 pruebas pasaron en `academic-admin.spec.tsx`.
-- **API:** 15 migraciones aplicadas desde cero en PostgreSQL 15 desechable. Pasaron 41 pruebas en `academic-domain.e2e-spec.ts`, `edupay-sync-consumer.e2e-spec.ts` y `academic-financial-projection.contract.e2e-spec.ts`. El caso de avance hacia cursos de 2027 en borrador confirma la inactivación inmediata de las matrículas de origen.
+- Pasaron 43 pruebas de Administración web en `academic-admin.spec.tsx`.
+- Se aplicaron 15 migraciones desde cero en PostgreSQL 15 desechable. Pasaron 41 pruebas de API en `academic-domain.e2e-spec.ts`, `edupay-sync-consumer.e2e-spec.ts` y `academic-financial-projection.contract.e2e-spec.ts`. El caso de avance hacia cursos de 2027 en borrador confirma la inactivación inmediata de las matrículas de origen.
 - El ensayo integrado con un padrón sintético de **3.º → 4.º medio** y un consumidor BL-002 queda como criterio del siguiente corte.
