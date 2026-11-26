@@ -42,6 +42,9 @@ aceptados mantienen autoridad sobre arquitectura y seguridad.
 
 ## Implementation notes
 
+- [Preparación del avance 2026 → 2027](proposals/academic-rollover-2027-readiness.md)
+  reúne las capacidades verificadas, los pendientes y el orden propuesto para
+  preparar los cursos, el padrón y el corte de matrículas.
 - [Primer corte de avance anual por curso](proposals/academic-course-promotion-first-cut.md)
   documents the preview, per-student exceptions, bounded roster pages, idempotent
   confirmation, and the manual-enrollment-only boundary. Merging source code
@@ -53,7 +56,8 @@ aceptados mantienen autoridad sobre arquitectura y seguridad.
 - [ADR-0026: traspaso de la autoridad EDUPAY](decisions/ADR-0026-edupay-authority-transfer.md)
   moves the sync v1 records to Académico with a one-time, dry-run-first command
   so the annual promotion can move them; its
-  [procedure](operations/edupay-authority-transfer.md) is prepared, not run.
+  [procedure and execution evidence](operations/edupay-authority-transfer.md)
+  record the transfer for the school tenant on 2026-11-20.
 - [Administración académica por tarea](design/academic-admin-by-task.md)
   records the 2026-11-16 organization of the administration console (Inicio,
   Cursos, Matrículas, Personas) around the year in context.
