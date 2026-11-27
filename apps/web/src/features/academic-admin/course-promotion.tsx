@@ -1,6 +1,9 @@
 'use client';
 
-import { courseEnrollmentPromotionOverrideLimit } from '@edupay/contracts';
+import {
+  courseEnrollmentPromotionOverrideLimit,
+  type PromoteCourseEnrollments,
+} from '@edupay/contracts';
 import { Alert, Button, Dialog, EmptyState, Select } from '@edupay/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -22,8 +25,16 @@ export function CoursePromotionPanel({
   onSaved: () => void;
 }) {
   type Decision =
-    'PROMOTE' | 'REPEAT' | 'TRANSFER' | 'DEFER' | 'SOURCE_MANAGED';
+    | 'PROMOTE'
+    | 'REPEAT'
+    | 'TRANSFER'
+    | 'DEFER'
+    | 'NO_CONTINUE'
+    | 'SOURCE_MANAGED';
   type Choice = { targetCourseId: string | null; decision: Decision };
+  type Draft = Awaited<
+    ReturnType<AcademicApiClient['getCourseRolloverDraft']>
+  >['draft'];
   type RosterItem = Awaited<
     ReturnType<AcademicApiClient['getCourseRoster']>
   >['items'][number];
@@ -92,7 +103,7 @@ export function CoursePromotionPanel({
     (course) => course.id === defaultTargetCourseId,
   )
     ? defaultTargetCourseId
-    : (targetCourses[0]?.id ?? '');
+    : '';
   const [roster, setRoster] = useState<RosterItem[]>([]);
   const [rosterCourseId, setRosterCourseId] = useState('');
   const [rosterSummary, setRosterSummary] = useState<RosterSummary | null>(
@@ -116,10 +127,55 @@ export function CoursePromotionPanel({
   const [operationSuccess, setOperationSuccess] = useState('');
   const [requiresRosterRefresh, setRequiresRosterRefresh] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [prepareOnly, setPrepareOnly] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [draftState, setDraftState] = useState<{
+    key: string;
+    draft: Draft;
+    error?: string;
+  }>();
+  const [draftRetry, setDraftRetry] = useState(0);
   const [commandKey, setCommandKey] = useState<string | null>(null);
   const rosterRequestSequence = useRef(0);
   const summaryRequestSequence = useRef(0);
+
+  const draftKey = `${sourceCourseId}:${targetAcademicYearId}`;
+  const hasLoadedDraft = draftState?.key === draftKey && !draftState.error;
+  const draft = hasLoadedDraft ? draftState.draft : null;
+
+  useEffect(() => {
+    if (!sourceCourseId || !targetAcademicYearId) return;
+    let current = true;
+    void api
+      .getCourseRolloverDraft(sourceCourseId, targetAcademicYearId)
+      .then(({ draft: saved }) => {
+        if (!current) return;
+        setDraftState({ key: draftKey, draft: saved });
+        setDefaultTargetCourseId(saved?.plan.defaultTargetCourseId ?? '');
+        setChoices(
+          Object.fromEntries(
+            (saved?.plan.overrides ?? []).map((override) => [
+              override.sourceEnrollmentId,
+              {
+                targetCourseId: override.targetCourseId,
+                decision: override.decision,
+              },
+            ]),
+          ),
+        );
+      })
+      .catch((error: unknown) => {
+        if (current)
+          setDraftState({
+            key: draftKey,
+            draft: null,
+            error: errorMessage(error).message,
+          });
+      });
+    return () => {
+      current = false;
+    };
+  }, [api, draftKey, draftRetry, sourceCourseId, targetAcademicYearId]);
 
   useEffect(() => {
     const sequence = ++rosterRequestSequence.current;
@@ -197,28 +253,20 @@ export function CoursePromotionPanel({
   const deferredCount = overrideChoices.filter(
     (choice) => choice.decision === 'DEFER',
   ).length;
+  const nonContinuingCount = overrideChoices.filter(
+    (choice) => choice.decision === 'NO_CONTINUE',
+  ).length;
+  const unassignedCount = Math.max(
+    0,
+    (rosterSummary?.totalCount ?? 0) -
+      (rosterSummary?.sourceManagedCount ?? 0) -
+      overrideChoices.length,
+  );
   const counts = {
-    promoted: selectedDefaultTargetId
-      ? Math.max(
-          0,
-          (rosterSummary?.totalCount ?? 0) -
-            (rosterSummary?.sourceManagedCount ?? 0) -
-            repeatedCount -
-            transferredCount -
-            deferredCount,
-        )
-      : 0,
+    promoted: selectedDefaultTargetId ? unassignedCount : 0,
     repeated: repeatedCount,
     transferred: transferredCount,
-    deferred:
-      deferredCount +
-      (selectedDefaultTargetId
-        ? 0
-        : Math.max(
-            0,
-            (rosterSummary?.totalCount ?? 0) -
-              (rosterSummary?.sourceManagedCount ?? 0),
-          )),
+    deferred: deferredCount + (selectedDefaultTargetId ? 0 : unassignedCount),
     sourceManaged: rosterSummary?.sourceManagedCount ?? 0,
   };
   const hasCurrentRoster =
@@ -227,7 +275,8 @@ export function CoursePromotionPanel({
     rosterSummaryCourseId === sourceCourseId;
   const rosterLoading =
     Boolean(sourceCourseId) && !hasCurrentRoster && !rosterError;
-  const cannotSubmit =
+  const cannotSave =
+    !hasLoadedDraft ||
     !sourceCourseId ||
     !targetAcademicYearId ||
     !selectedDefaultTargetId ||
@@ -239,8 +288,54 @@ export function CoursePromotionPanel({
     Boolean(rosterError) ||
     rosterTotalCount === 0 ||
     overrideChoices.length > courseEnrollmentPromotionOverrideLimit ||
-    counts.promoted + counts.repeated + counts.transferred === 0 ||
     saving;
+
+  const plan: PromoteCourseEnrollments = {
+    sourceCourseId,
+    targetAcademicYearId,
+    defaultTargetCourseId: selectedDefaultTargetId,
+    expectedRosterFingerprint: rosterSummary?.fingerprint ?? '',
+    overrides: Object.entries(choices).map(([sourceEnrollmentId, choice]) => ({
+      sourceEnrollmentId,
+      targetCourseId: choice.targetCourseId,
+      decision: choice.decision as
+        'REPEAT' | 'TRANSFER' | 'DEFER' | 'NO_CONTINUE',
+    })),
+  };
+  const savedMatches = Boolean(
+    draft && JSON.stringify(plan) === JSON.stringify(draft.plan),
+  );
+  const rosterChangedSinceDraft = Boolean(
+    draft &&
+    rosterSummary?.fingerprint &&
+    draft.plan.expectedRosterFingerprint !== rosterSummary.fingerprint,
+  );
+  const cannotSubmit =
+    cannotSave ||
+    !savedMatches ||
+    counts.promoted + counts.repeated + counts.transferred === 0;
+
+  async function saveDraft() {
+    if (cannotSave) return;
+    setSaving(true);
+    setOperationError('');
+    setOperationSuccess('');
+    try {
+      const response = await api.saveCourseRolloverDraft({
+        plan,
+        expectedRevision: draft?.revision ?? 0,
+      });
+      setDraftState({ key: draftKey, draft: response.draft });
+    } catch (error) {
+      setOperationError(errorMessage(error).message);
+      setRequiresRosterRefresh(
+        error instanceof AcademicApiError &&
+          error.code === 'COURSE_ROSTER_CHANGED',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function editChoice(item: RosterItem, next: Choice) {
     setChoices((current) => {
@@ -302,20 +397,8 @@ export function CoursePromotionPanel({
   }
 
   async function confirmPromotion() {
-    if (cannotSubmit || !sourceCourseId || !targetAcademicYearId) return;
-    const payload = {
-      sourceCourseId,
-      targetAcademicYearId,
-      defaultTargetCourseId: selectedDefaultTargetId,
-      expectedRosterFingerprint: rosterSummary?.fingerprint ?? '',
-      overrides: Object.entries(choices).map(
-        ([sourceEnrollmentId, choice]) => ({
-          sourceEnrollmentId,
-          targetCourseId: choice.targetCourseId,
-          decision: choice.decision as 'REPEAT' | 'TRANSFER' | 'DEFER',
-        }),
-      ),
-    };
+    if (cannotSubmit || !draft) return;
+    const payload = { ...plan, draftRevision: draft.revision };
     const idempotencyKey = commandKey ?? crypto.randomUUID();
     setCommandKey(idempotencyKey);
     setSaving(true);
@@ -324,12 +407,23 @@ export function CoursePromotionPanel({
     try {
       const result = await api.promoteCourseEnrollments(payload, {
         idempotencyKey,
+        prepareOnly,
       });
       setOperationSuccess(
-        `Avance completado: ${result.promotedCount} promovidos, ${result.repeatedCount} repitentes y ${result.transferredCount} con cambio de curso. ${result.deferredCount + result.sourceManagedCount} quedaron sin movimiento.`,
+        prepareOnly
+          ? `Quedaron preparadas ${result.promotedCount + result.repeatedCount + result.transferredCount} matrículas de ${targetYear?.label}. El año de origen sigue operativo.`
+          : `Avance completado: ${result.promotedCount} promovidos, ${result.repeatedCount} repitentes y ${result.transferredCount} con cambio de curso.`,
       );
       setShowConfirmation(false);
       setCommandKey(null);
+      if (prepareOnly) {
+        setDraftState({
+          key: draftKey,
+          draft: { ...draft, preparedRevision: draft.revision },
+        });
+        onSaved();
+        return;
+      }
       setChoices({});
       setRosterCourseId('');
       setRosterSummary(null);
@@ -358,10 +452,10 @@ export function CoursePromotionPanel({
     <section className="academic-panel">
       <div className="section-heading">
         <div>
-          <h2>Avanzar un curso al siguiente año</h2>
+          <h2>Preparar el padrón del próximo año</h2>
           <p>
             Revisa la matrícula vigente, define el destino de cada alumno y
-            confirma todos los cambios en una sola operación.
+            guarda el borrador para retomarlo en otra sesión.
           </p>
         </div>
       </div>
@@ -379,7 +473,10 @@ export function CoursePromotionPanel({
         </Alert>
       ) : null}
       {operationSuccess ? (
-        <Alert title="Avance de curso completado" tone="success">
+        <Alert
+          title={prepareOnly ? 'Matrículas preparadas' : 'Avance completado'}
+          tone="success"
+        >
           {operationSuccess}
         </Alert>
       ) : null}
@@ -440,13 +537,22 @@ export function CoursePromotionPanel({
           ))}
         </Select>
         <Select
-          disabled={targetCourses.length === 0 || saving}
+          disabled={targetCourses.length === 0 || saving || !hasLoadedDraft}
           id="promotion-default-course"
           label="Curso de destino predeterminado"
           value={selectedDefaultTargetId}
           onChange={(event) => {
             setDefaultTargetCourseId(event.target.value);
-            setChoices({});
+            const destinationId = event.target.value;
+            setChoices((current) =>
+              Object.fromEntries(
+                Object.entries(current).filter(
+                  ([, choice]) =>
+                    choice.decision !== 'TRANSFER' ||
+                    choice.targetCourseId !== destinationId,
+                ),
+              ),
+            );
             setCommandKey(null);
           }}
         >
@@ -459,6 +565,34 @@ export function CoursePromotionPanel({
         </Select>
       </div>
 
+      {sourceCourseId && targetAcademicYearId && !hasLoadedDraft ? (
+        draftState?.key === draftKey && draftState.error ? (
+          <Alert title="No se pudo leer el borrador" tone="error">
+            {draftState.error}{' '}
+            <Button
+              onClick={() => setDraftRetry((count) => count + 1)}
+              variant="secondary"
+            >
+              Reintentar
+            </Button>
+          </Alert>
+        ) : (
+          <p role="status" className="table-muted">
+            Buscando el borrador guardado…
+          </p>
+        )
+      ) : null}
+      {draft ? (
+        <p role="status" className="table-muted">
+          {savedMatches
+            ? draft.preparedRevision === draft.revision
+              ? `Matrículas de ${targetYear?.label} preparadas para Pagos.`
+              : 'Borrador guardado. Puedes retomar la revisión más tarde.'
+            : rosterChangedSinceDraft
+              ? 'El padrón cambió desde el último guardado. Revisa las decisiones antes de guardar nuevamente.'
+              : 'Hay cambios pendientes de guardar en este borrador.'}
+        </p>
+      ) : null}
       {!sourceOptions.length ? (
         <EmptyState
           description="Activa un curso dentro del año vigente para preparar su matrícula de destino."
@@ -520,8 +654,9 @@ export function CoursePromotionPanel({
           <p aria-live="polite" className="table-muted" role="status">
             Vista previa: {counts.promoted} avanzan al destino principal,{' '}
             {counts.repeated} repiten, {counts.transferred} cambian de curso,{' '}
-            {counts.deferred} quedan pendientes y {counts.sourceManaged} están
-            gestionados por sincronización.
+            {counts.deferred} quedan pendientes, {nonContinuingCount} no
+            continúan y {counts.sourceManaged} están gestionados por
+            sincronización.
           </p>
           {counts.sourceManaged > 0 ? (
             <Alert
@@ -592,6 +727,7 @@ export function CoursePromotionPanel({
                           disabled={
                             item.sourceManaged ||
                             saving ||
+                            !hasLoadedDraft ||
                             !targetCourses.length
                           }
                           id={`promotion-target-${item.enrollmentId}`}
@@ -609,7 +745,7 @@ export function CoursePromotionPanel({
                             });
                           }}
                         >
-                          <option value="">Dejar pendiente</option>
+                          <option value="">Sin destino</option>
                           {targetCourses.map((course) => (
                             <option key={course.id} value={course.id}>
                               {course.label}
@@ -622,7 +758,9 @@ export function CoursePromotionPanel({
                       </td>
                       <td data-label="Decisión">
                         <Select
-                          disabled={item.sourceManaged || saving}
+                          disabled={
+                            item.sourceManaged || saving || !hasLoadedDraft
+                          }
                           id={`promotion-decision-${item.enrollmentId}`}
                           label={`Decisión para ${name}`}
                           value={choice.decision}
@@ -630,7 +768,8 @@ export function CoursePromotionPanel({
                             const decision = event.target.value as Decision;
                             editChoice(item, {
                               targetCourseId:
-                                decision === 'DEFER'
+                                decision === 'DEFER' ||
+                                decision === 'NO_CONTINUE'
                                   ? null
                                   : (choice.targetCourseId ??
                                     selectedDefaultTargetId),
@@ -642,24 +781,28 @@ export function CoursePromotionPanel({
                             <option value="SOURCE_MANAGED">
                               Gestionada por sincronización
                             </option>
-                          ) : choice.targetCourseId ? (
+                          ) : (
                             <>
-                              {isDefault ? (
+                              {isDefault ||
+                              (!choice.targetCourseId &&
+                                selectedDefaultTargetId) ? (
                                 <option value="PROMOTE">
                                   Avanza al curso principal
                                 </option>
                               ) : null}
-                              <option value="REPEAT">Repite curso</option>
-                              {!isDefault ? (
+                              {choice.targetCourseId ? (
+                                <option value="REPEAT">Repite curso</option>
+                              ) : null}
+                              {choice.targetCourseId && !isDefault ? (
                                 <option value="TRANSFER">
                                   Cambio de curso
                                 </option>
                               ) : null}
+                              <option value="DEFER">
+                                Pendiente de asignación
+                              </option>
+                              <option value="NO_CONTINUE">No continúa</option>
                             </>
-                          ) : (
-                            <option value="DEFER">
-                              Pendiente de asignación
-                            </option>
                           )}
                         </Select>
                       </td>
@@ -670,19 +813,43 @@ export function CoursePromotionPanel({
             </table>
           </div>
           <p className="table-muted">
-            Antes de guardar, Académico comprobará que la matrícula no haya
-            cambiado desde esta vista previa. Los destinos se mantienen dentro
-            del año elegido; el curso anterior quedará como historial.
+            Guardar conserva tus decisiones. Preparar crea las matrículas de
+            destino para Pagos y mantiene vigente el curso de origen.
           </p>
-          <Button
-            disabled={cannotSubmit}
-            onClick={() => {
-              setOperationError('');
-              setShowConfirmation(true);
-            }}
-          >
-            Revisar y confirmar avance
-          </Button>
+          <div className="provisioning-actions">
+            <Button
+              disabled={cannotSave || savedMatches}
+              onClick={() => void saveDraft()}
+            >
+              Guardar borrador
+            </Button>
+            <Button
+              disabled={
+                cannotSubmit || draft?.preparedRevision === draft?.revision
+              }
+              variant="secondary"
+              onClick={() => {
+                setCommandKey(null);
+                setOperationError('');
+                setPrepareOnly(true);
+                setShowConfirmation(true);
+              }}
+            >
+              Preparar matrículas para Pagos
+            </Button>
+            <Button
+              disabled={cannotSubmit}
+              variant="secondary"
+              onClick={() => {
+                setCommandKey(null);
+                setOperationError('');
+                setPrepareOnly(false);
+                setShowConfirmation(true);
+              }}
+            >
+              Aplicar avance al cierre
+            </Button>
+          </div>
         </>
       ) : null}
 
@@ -690,7 +857,11 @@ export function CoursePromotionPanel({
         description="Confirma el año y el resultado por alumno antes de cambiar las matrículas."
         onOpenChange={(open) => !open && !saving && setShowConfirmation(false)}
         open={showConfirmation}
-        title="Confirmar avance del curso"
+        title={
+          prepareOnly
+            ? 'Preparar matrículas para Pagos'
+            : 'Aplicar avance al cierre'
+        }
       >
         <div className="academic-form">
           <p>
@@ -702,11 +873,13 @@ export function CoursePromotionPanel({
           <p>
             {counts.promoted} avanzan, {counts.repeated} repiten,{' '}
             {counts.transferred} cambian de curso, {counts.deferred} quedan
-            pendientes y {counts.sourceManaged} no se modifican.
+            pendientes, {nonContinuingCount} no continúan y{' '}
+            {counts.sourceManaged} no se modifican.
           </p>
           <p>
-            Las matrículas antiguas de quienes avanzan se conservarán inactivas
-            y se crearán sus nuevas matrículas en el destino seleccionado.
+            {prepareOnly
+              ? 'Pagos recibirá las matrículas de destino. El año vigente sigue operativo y las cuotas se configuran en Pagos.'
+              : 'Esta acción inactiva de inmediato las matrículas de origen de quienes avanzan. Úsala al terminar el año operativo.'}
           </p>
           {operationError ? (
             <Alert title="No se confirmó el avance" tone="error">
@@ -729,7 +902,7 @@ export function CoursePromotionPanel({
               Volver a revisar
             </Button>
             <Button loading={saving} onClick={() => void confirmPromotion()}>
-              Confirmar avance
+              {prepareOnly ? 'Confirmar preparación' : 'Confirmar avance'}
             </Button>
           </div>
         </div>

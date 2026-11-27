@@ -2,6 +2,8 @@
 
 El 25 de noviembre de 2026 se revisó `main` de Académico en `6c6756d`. Este plan cubre el orden de trabajo para Administración y los criterios del ensayo con datos sintéticos.
 
+La implementación del 27 de noviembre distingue el borrador guardado de la preparación de matrículas futuras para Pagos. El administrador puede preparar el destino sin cerrar 2026. Los detalles del contrato están en [ADR-0027](../decisions/ADR-0027-course-rollover-preparation.md).
+
 ## Qué existe en la base
 
 | Flujo                          | Implementación y alcance                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |

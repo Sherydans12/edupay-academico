@@ -23,6 +23,8 @@ import {
   assignCourseSubjectTeachersSchema,
   courseEnrollmentSchema,
   courseEnrollmentPromotionResultSchema,
+  courseRolloverDraftResponseSchema,
+  saveCourseRolloverDraftSchema,
   courseListQuerySchema,
   coursePageSchema,
   courseRosterPageSchema,
@@ -70,6 +72,7 @@ import {
   type CreateCourse,
   type CreateCourseEnrollment,
   type PromoteCourseEnrollments,
+  type SaveCourseRolloverDraft,
   type CreateCourseSubject,
   type CreateStudent,
   type CreateStudentSubjectEnrollment,
@@ -452,6 +455,53 @@ export class AcademicAdminController {
     return this.academics.promoteCourseEnrollments(
       this.context(idempotencyKey),
       input,
+    );
+  }
+
+  @Get('courses/:sourceCourseId/rollover-drafts/:targetAcademicYearId')
+  @ContractResponse(courseRolloverDraftResponseSchema)
+  getCourseRolloverDraft(
+    @Param('sourceCourseId', uuid) sourceCourseId: string,
+    @Param('targetAcademicYearId', uuid) targetAcademicYearId: string,
+  ) {
+    return this.academics.getCourseRolloverDraft(
+      this.context(),
+      sourceCourseId,
+      targetAcademicYearId,
+    );
+  }
+
+  @Put('courses/:sourceCourseId/rollover-drafts/:targetAcademicYearId')
+  @RequireCurrentIdentityStatus()
+  @ContractBody(saveCourseRolloverDraftSchema)
+  @ContractResponse(courseRolloverDraftResponseSchema)
+  saveCourseRolloverDraft(
+    @Param('sourceCourseId', uuid) sourceCourseId: string,
+    @Param('targetAcademicYearId', uuid) targetAcademicYearId: string,
+    @Body(new ZodValidationPipe(saveCourseRolloverDraftSchema))
+    input: SaveCourseRolloverDraft,
+  ) {
+    return this.academics.saveCourseRolloverDraft(
+      this.context(),
+      sourceCourseId,
+      targetAcademicYearId,
+      input,
+    );
+  }
+
+  @Post('course-enrollment-promotions/prepare')
+  @RequireCurrentIdentityStatus()
+  @ContractBody(promoteCourseEnrollmentsSchema)
+  @ContractResponse(courseEnrollmentPromotionResultSchema)
+  prepareCourseEnrollments(
+    @Body(new ZodValidationPipe(promoteCourseEnrollmentsSchema))
+    input: PromoteCourseEnrollments,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.academics.promoteCourseEnrollments(
+      this.context(idempotencyKey),
+      input,
+      true,
     );
   }
 

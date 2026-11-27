@@ -18,6 +18,7 @@ import {
   type AcademicAuditPort,
 } from '../src/academic/academic-audit.port';
 import { configureApplication } from '../src/bootstrap/configure-application';
+import { FinancialProjectionConfigService } from '../src/financial-projection/financial-projection-config.service';
 import { PrismaService } from '../src/persistence/prisma.service';
 import { IdentityInternalFixture } from './support/identity-internal.fixture';
 import { IdentityJwksFixture } from './support/identity-jwks.fixture';
@@ -68,6 +69,8 @@ describe.runIf(testDatabaseUrl)(
       identityInternal.reset();
       audit.events.length = 0;
       await prisma.commandReceipt.deleteMany();
+      await prisma.courseRolloverDraft.deleteMany();
+      await prisma.financialProjectionOutboxEvent.deleteMany();
       await prisma.inAppNotification.deleteMany();
       await prisma.notificationDelivery.deleteMany();
       await prisma.notificationEvent.deleteMany();
@@ -1125,7 +1128,12 @@ describe.runIf(testDatabaseUrl)(
 
     it('paginates large course rosters and summarizes the full course', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
-      const base = await createStructure(admin, '2026', '4° Básico A', 'Lenguaje');
+      const base = await createStructure(
+        admin,
+        '2026',
+        '4° Básico A',
+        'Lenguaje',
+      );
       const students = Array.from({ length: 51 }, (_, index) => ({
         id: randomUUID(),
         tenantId: 'tenant-a',
@@ -1226,9 +1234,7 @@ describe.runIf(testDatabaseUrl)(
         .expect(200);
       expect(searched.body).toMatchObject({ items: [], totalCount: 0 });
 
-      const otherTenant = await api(adminB)
-        .get('/api/v1/students')
-        .expect(200);
+      const otherTenant = await api(adminB).get('/api/v1/students').expect(200);
       expect(otherTenant.body.totalCount).toBe(5);
       expect(
         otherTenant.body.items.every(
@@ -1245,7 +1251,12 @@ describe.runIf(testDatabaseUrl)(
 
     it('advances a roster with exceptions, preserves source-managed rows, and replays idempotently', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
-      const source = await createStructure(admin, '2026', '6° Básico A', 'Matemática');
+      const source = await createStructure(
+        admin,
+        '2026',
+        '6° Básico A',
+        'Matemática',
+      );
       const targetYear = await post(admin, '/api/v1/academic-years', {
         label: '2027',
         startDate: '2027-03-01',
@@ -1375,6 +1386,135 @@ describe.runIf(testDatabaseUrl)(
           },
         }),
       ).toBe(3);
+    });
+
+    it('resumes a rollover draft and prepares 4th year before closing the current year', async () => {
+      const tenantId = randomUUID();
+      const admin = await token(tenantId, 'admin-a', ['TENANT_ADMIN']);
+      const teacher = await token(tenantId, 'teacher-a', ['TEACHER']);
+      const otherAdmin = await token('tenant-b', 'admin-b', ['TENANT_ADMIN']);
+      const source = await createStructure(
+        admin,
+        '2026',
+        '3° Medio A',
+        'Lenguaje',
+      );
+      const year = await post(admin, '/api/v1/academic-years', {
+        label: '2027',
+        startDate: '2027-03-01',
+        endDate: '2027-12-20',
+      });
+      const destination = await post(admin, '/api/v1/courses', {
+        academicYearId: year.id,
+        label: '4° Medio A',
+        status: 'DRAFT',
+      });
+      const continuing = await createStudent(admin, 'Alicia', 'Sintética');
+      const leaving = await createStudent(admin, 'Andrea', 'Sintética');
+      const enroll = (studentId: string) =>
+        post(admin, '/api/v1/course-enrollments', {
+          studentId,
+          courseId: source.course.id,
+        });
+      await enroll(continuing.id);
+      const leavingEnrollment = await enroll(leaving.id);
+      const preview = await api(admin)
+        .get(`/api/v1/courses/${source.course.id}/roster/summary`)
+        .expect(200);
+      const draftPath = `/api/v1/courses/${source.course.id}/rollover-drafts/${year.id}`;
+      const draft = {
+        sourceCourseId: source.course.id,
+        targetAcademicYearId: year.id,
+        defaultTargetCourseId: destination.id,
+        expectedRosterFingerprint: preview.body.fingerprint,
+        overrides: [
+          {
+            sourceEnrollmentId: leavingEnrollment.id,
+            decision: 'NO_CONTINUE',
+            targetCourseId: null,
+          },
+        ],
+      };
+      await api(teacher)
+        .put(draftPath)
+        .send({ expectedRevision: 0, plan: draft })
+        .expect(403);
+      await api(otherAdmin).get(draftPath).expect(404);
+      await api(admin).get(draftPath).expect(200, { draft: null });
+      await api(admin)
+        .put(draftPath)
+        .send({ expectedRevision: 0, plan: draft })
+        .expect(200);
+      const saved = await api(admin).get(draftPath).expect(200);
+      expect(saved.body.draft).toMatchObject({
+        revision: 1,
+        preparedRevision: null,
+        plan: draft,
+      });
+      await api(admin)
+        .put(draftPath)
+        .send({ expectedRevision: 0, plan: draft })
+        .expect(409);
+      expect(await prisma.courseEnrollment.count()).toBe(2);
+      expect(await prisma.financialProjectionOutboxEvent.count()).toBe(0);
+
+      const projection = vi
+        .spyOn(application.get(FinancialProjectionConfigService), 'enabled')
+        .mockReturnValue(true);
+      try {
+        const prepare = (draftRevision: number, key: string) =>
+          api(admin)
+            .post('/api/v1/course-enrollment-promotions/prepare')
+            .set('Idempotency-Key', key)
+            .send({ ...draft, draftRevision });
+        await prepare(2, 'prepare-stale').expect(409);
+        const prepared = await prepare(1, 'prepare-2027').expect(201);
+        expect((await prepare(1, 'prepare-2027').expect(201)).body).toEqual(
+          prepared.body,
+        );
+        const afterPreparation = await api(admin).get(draftPath).expect(200);
+        expect(afterPreparation.body.draft.preparedRevision).toBe(1);
+        expect(
+          await prisma.courseEnrollment.count({
+            where: { courseId: source.course.id, status: 'ACTIVE' },
+          }),
+        ).toBe(2);
+        const future = await prisma.courseEnrollment.findMany({
+          where: { courseId: destination.id },
+        });
+        expect(future).toHaveLength(1);
+        expect(future[0]?.studentId).toBe(continuing.id);
+        const events = await prisma.financialProjectionOutboxEvent.findMany();
+        expect(events).toHaveLength(1);
+        expect(events[0]?.aggregateId).toBe(future[0]?.id);
+        await api(admin)
+          .post('/api/v1/course-enrollment-promotions')
+          .set('Idempotency-Key', 'finish-2027')
+          .send({ ...draft, draftRevision: 1 })
+          .expect(201);
+        expect(
+          await prisma.courseEnrollment.count({
+            where: { courseId: destination.id },
+          }),
+        ).toBe(1);
+        expect(
+          await prisma.courseEnrollment.count({
+            where: { courseId: source.course.id, status: 'ACTIVE' },
+          }),
+        ).toBe(1);
+        identityInternal.sessionResponse = {
+          active: false,
+          identityUserId: 'admin-a',
+          membershipActive: false,
+          membershipId: `membership-${tenantId}-admin-a`,
+          sessionActive: false,
+          sessionId: `session-${tenantId}-admin-a`,
+          tenantId,
+        };
+        await prepare(1, 'prepare-revoked').expect(403);
+      } finally {
+        projection.mockRestore();
+      }
     });
 
     it('admits a student with RUN and enrollment idempotently without leaking the identifier', async () => {
@@ -1562,7 +1702,12 @@ describe.runIf(testDatabaseUrl)(
 
     it('rejects promotion when the roster changes after preview', async () => {
       const admin = await token('tenant-a', 'admin-a', ['TENANT_ADMIN']);
-      const source = await createStructure(admin, '2026', '5° Básico A', 'Historia');
+      const source = await createStructure(
+        admin,
+        '2026',
+        '5° Básico A',
+        'Historia',
+      );
       const targetYear = await post(admin, '/api/v1/academic-years', {
         label: '2027',
         startDate: '2027-03-01',
@@ -1573,7 +1718,11 @@ describe.runIf(testDatabaseUrl)(
         label: '6° Básico A',
         status: 'DRAFT',
       });
-      const firstStudent = await createStudent(admin, 'Francisca', 'Fuentealba');
+      const firstStudent = await createStudent(
+        admin,
+        'Francisca',
+        'Fuentealba',
+      );
       await post(admin, '/api/v1/course-enrollments', {
         studentId: firstStudent.id,
         courseId: source.course.id,
