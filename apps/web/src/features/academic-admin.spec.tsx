@@ -13,6 +13,7 @@ import {
   type AcademicApiClient,
 } from '@/api/academic-client';
 import type { TrustedCurrentSession } from '@/auth/current-session';
+import type { SaveCourseRolloverDraft } from '@edupay/contracts';
 import { IdentitySessionContext } from '@/auth/session-context';
 import type { IdentitySessionContextValue } from '@/auth/session-provider';
 import { AcademicAdminScreen } from '@/features/academic-admin';
@@ -1725,6 +1726,126 @@ describe('Academic admin screens', () => {
     );
   });
 
+  it('saves and resumes the no-continuation decision without preparing enrollments', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/administracion/matriculas?seccion=avance',
+    );
+    let draft: Awaited<
+      ReturnType<AcademicApiClient['getCourseRolloverDraft']>
+    >['draft'] = null;
+    const save = vi.fn(async (input: SaveCourseRolloverDraft) => {
+      draft = {
+        plan: input.plan,
+        revision: 1,
+        preparedRevision: null,
+        updatedAt: timestamp,
+      };
+      return { draft };
+    });
+    const prepare = vi.fn();
+    const client = adminClient({
+      listAcademicYears: vi.fn(async () => ({
+        items: [year, draft2027],
+        nextCursor: null,
+      })),
+      listCourses: vi.fn(async () => ({
+        items: [
+          course,
+          {
+            ...course,
+            id: id5,
+            label: '4° Medio A',
+            academicYearId: id6,
+            status: 'DRAFT' as const,
+          },
+        ],
+        nextCursor: null,
+      })),
+      getCourseRolloverDraft: vi.fn(async () => ({ draft })),
+      getCourseRoster: vi.fn(async () => ({
+        items: [
+          { enrollmentId: id3, sourceManaged: false, student: studentManual },
+        ],
+        nextCursor: null,
+        totalCount: 1,
+      })),
+      getCourseRosterSummary: vi.fn(async () => ({
+        sourceCourseId: id,
+        fingerprint: 'a'.repeat(64),
+        totalCount: 1,
+        sourceManagedCount: 0,
+        operationAllowed: true,
+        maxRosterCount: 10_000,
+      })),
+      saveCourseRolloverDraft: save,
+      promoteCourseEnrollments: prepare,
+    });
+    const view = render(
+      <AcademicAdminScreen api={client} view="enrollments" />,
+    );
+    const destination = await screen.findByLabelText(
+      'Curso de destino predeterminado',
+    );
+    await waitFor(() =>
+      expect((destination as HTMLSelectElement).disabled).toBe(false),
+    );
+    fireEvent.change(destination, { target: { value: id5 } });
+    fireEvent.change(await screen.findByLabelText(/Decisión para/), {
+      target: { value: 'NO_CONTINUE' },
+    });
+    fireEvent.change(screen.getByLabelText('Curso de origen'), {
+      target: { value: '' },
+    });
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Tienes decisiones sin guardar',
+    });
+    fireEvent.click(
+      within(confirmation).getByRole('button', { name: 'Volver a revisar' }),
+    );
+    expect(
+      (screen.getByLabelText(/Decisión para/) as HTMLSelectElement).value,
+    ).toBe('NO_CONTINUE');
+    fireEvent.change(screen.getByLabelText('Buscar en esta página'), {
+      target: { value: 'inexistente' },
+    });
+    expect(
+      await screen.findByText('No hay alumnos que coincidan en esta página.'),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Buscar en esta página'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }));
+    await screen.findByText(
+      'Borrador guardado. Puedes retomar la revisión más tarde.',
+    );
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: 0,
+        plan: expect.objectContaining({
+          defaultTargetCourseId: id5,
+          overrides: [
+            {
+              sourceEnrollmentId: id3,
+              targetCourseId: null,
+              decision: 'NO_CONTINUE',
+            },
+          ],
+        }),
+      }),
+    );
+    expect(prepare).not.toHaveBeenCalled();
+    view.unmount();
+    render(<AcademicAdminScreen api={client} view="enrollments" />);
+    await screen.findByText(
+      'Borrador guardado. Puedes retomar la revisión más tarde.',
+    );
+    expect(
+      (screen.getByLabelText(/Decisión para/) as HTMLSelectElement).value,
+    ).toBe('NO_CONTINUE');
+  });
+
   it('opens the Matrículas section named in the address', async () => {
     window.history.replaceState(
       null,
@@ -1741,7 +1862,7 @@ describe('Academic admin screens', () => {
     );
     expect(
       await screen.findByRole('heading', {
-        name: 'Avanzar un curso al siguiente año',
+        name: 'Preparar el padrón del próximo año',
       }),
     ).toBeTruthy();
   });

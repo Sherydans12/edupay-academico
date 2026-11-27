@@ -16,6 +16,8 @@ import {
   academicPreparationStatusSchema,
   courseEnrollmentSchema,
   courseEnrollmentPromotionResultSchema,
+  courseRolloverDraftResponseSchema,
+  saveCourseRolloverDraftSchema,
   coursePageSchema,
   courseRosterPageSchema,
   courseRosterSummarySchema,
@@ -110,6 +112,7 @@ import {
   type CreateCourse,
   type CreateCourseEnrollment,
   type PromoteCourseEnrollments,
+  type SaveCourseRolloverDraft,
   type CreateCourseSubject,
   type CreateStudent,
   type CreateStudentSubjectEnrollment,
@@ -862,15 +865,35 @@ export class AcademicApiClient {
   }
   promoteCourseEnrollments(
     input: PromoteCourseEnrollments,
-    options: { idempotencyKey: string },
+    options: { idempotencyKey: string; prepareOnly?: boolean },
   ) {
     return this.request(
-      'course-enrollment-promotions',
+      options.prepareOnly
+        ? 'course-enrollment-promotions/prepare'
+        : 'course-enrollment-promotions',
       courseEnrollmentPromotionResultSchema,
       {
         method: 'POST',
         body: JSON.stringify(promoteCourseEnrollmentsSchema.parse(input)),
         headers: { 'Idempotency-Key': options.idempotencyKey },
+      },
+    );
+  }
+
+  getCourseRolloverDraft(sourceCourseId: string, targetAcademicYearId: string) {
+    return this.request(
+      `courses/${sourceCourseId}/rollover-drafts/${targetAcademicYearId}`,
+      courseRolloverDraftResponseSchema,
+    );
+  }
+
+  saveCourseRolloverDraft(input: SaveCourseRolloverDraft) {
+    return this.request(
+      `courses/${input.plan.sourceCourseId}/rollover-drafts/${input.plan.targetAcademicYearId}`,
+      courseRolloverDraftResponseSchema,
+      {
+        method: 'PUT',
+        body: JSON.stringify(saveCourseRolloverDraftSchema.parse(input)),
       },
     );
   }

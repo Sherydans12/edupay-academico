@@ -318,6 +318,7 @@ model AcademicYear {
 
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   courses             Course[]
+  rolloverDrafts      CourseRolloverDraft[]
   syncConfigurations  SyncConfiguration[]
   dieSupportEpisodes  DieSupportEpisode[]
   dieJournalRevisions DieJournalRevision[]
@@ -349,6 +350,7 @@ model Course {
   academicYear        AcademicYear         @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
   courseSubjects      CourseSubject[]
   enrollments         CourseEnrollment[]
+  rolloverDrafts      CourseRolloverDraft[]
   dieSupportEpisodes  DieSupportEpisode[]
   dieJournalRevisions DieJournalRevision[]
 
@@ -356,6 +358,23 @@ model Course {
   @@unique([tenantId, source, externalReference])
   @@index([tenantId, academicYearId, status, label])
   @@map("courses")
+}
+
+model CourseRolloverDraft {
+  tenantId             String   @map("tenant_id") @db.VarChar(128)
+  sourceCourseId       String   @map("source_course_id") @db.Uuid
+  targetAcademicYearId String   @map("target_academic_year_id") @db.Uuid
+  plan                 Json
+  revision             Int      @default(1)
+  preparedRevision     Int?     @map("prepared_revision")
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sourceCourse Course       @relation(fields: [tenantId, sourceCourseId], references: [tenantId, id], onDelete: Restrict)
+  targetYear   AcademicYear @relation(fields: [tenantId, targetAcademicYearId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, sourceCourseId, targetAcademicYearId])
+  @@index([tenantId, targetAcademicYearId])
+  @@map("course_rollover_drafts")
 }
 
 model Student {

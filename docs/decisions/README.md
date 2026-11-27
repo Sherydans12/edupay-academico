@@ -32,6 +32,7 @@ These records capture major architectural choices from the brief and architectur
 | [0024](ADR-0024-academic-admission-and-student-identifier-proposal.md) | Academic admission and stable student identifier                                                              | Accepted (2026-11-15); amends ADR-0015 for RUN/IPE; migrations, reconciliation and projection need separate authorization |
 | [0025](ADR-0025-data-authority-and-annual-cycle.md) | Data authority and annual cycle between Académico and Payments | Accepted (2026-11-15); Académico owns years, courses, students and enrollment; BL owns guardians and billing per academic year; projection v2 pending |
 | [0026](ADR-0026-edupay-authority-transfer.md) | EduPay authority transfer to Académico | Accepted (2026-11-20); one-time command moves `EDUPAY` records to `MANUAL` keeping their reference and retires the sync v1; production run needs its own authorization |
+| [0027](ADR-0027-course-rollover-preparation.md) | Next-year roster preparation | Approved scope (2026-11-27). Saved drafts and explicit next-year preparation preserve the current year. |
 
 ## ADR workflow
 

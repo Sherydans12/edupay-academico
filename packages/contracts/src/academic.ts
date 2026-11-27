@@ -335,6 +335,7 @@ export const courseEnrollmentPromotionDecisionSchema = z.enum([
   'REPEAT',
   'TRANSFER',
   'DEFER',
+  'NO_CONTINUE',
   'SOURCE_MANAGED',
 ]);
 export const courseEnrollmentPromotionOverrideLimit = 400;
@@ -346,13 +347,14 @@ export const promoteCourseEnrollmentsSchema = z
     targetAcademicYearId: opaqueIdSchema,
     defaultTargetCourseId: opaqueIdSchema,
     expectedRosterFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    draftRevision: z.number().int().positive().optional(),
     overrides: z
       .array(
         z
           .object({
             sourceEnrollmentId: opaqueIdSchema,
             targetCourseId: opaqueIdSchema.nullable(),
-            decision: z.enum(['REPEAT', 'TRANSFER', 'DEFER']),
+            decision: z.enum(['REPEAT', 'TRANSFER', 'DEFER', 'NO_CONTINUE']),
           })
           .strict(),
       )
@@ -374,14 +376,17 @@ export const promoteCourseEnrollmentsSchema = z
 
     value.overrides.forEach((override, index) => {
       const hasTarget = override.targetCourseId !== null;
-      if (override.decision === 'DEFER' && hasTarget) {
+      const withoutTarget = ['DEFER', 'NO_CONTINUE'].includes(
+        override.decision,
+      );
+      if (withoutTarget && hasTarget) {
         context.addIssue({
           code: 'custom',
-          message: 'A deferred enrollment cannot have a target',
+          message: 'This decision cannot have a target course',
           path: ['overrides', index, 'targetCourseId'],
         });
       }
-      if (override.decision !== 'DEFER' && !hasTarget) {
+      if (!withoutTarget && !hasTarget) {
         context.addIssue({
           code: 'custom',
           message: 'A repeat or transfer decision requires a target course',
@@ -400,6 +405,30 @@ export const promoteCourseEnrollmentsSchema = z
       }
     });
   });
+
+export const saveCourseRolloverDraftSchema = z
+  .object({
+    expectedRevision: z.number().int().nonnegative(),
+    plan: promoteCourseEnrollmentsSchema,
+  })
+  .strict();
+
+export const courseRolloverDraftSchema = z
+  .object({
+    revision: z.number().int().positive(),
+    preparedRevision: z.number().int().positive().nullable(),
+    updatedAt: timestampSchema,
+    plan: promoteCourseEnrollmentsSchema,
+  })
+  .strict();
+
+export const courseRolloverDraftResponseSchema = z
+  .object({ draft: courseRolloverDraftSchema.nullable() })
+  .strict();
+
+export type SaveCourseRolloverDraft = z.infer<
+  typeof saveCourseRolloverDraftSchema
+>;
 
 export const courseEnrollmentPromotionResultSchema = z
   .object({
