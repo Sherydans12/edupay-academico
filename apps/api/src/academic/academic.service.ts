@@ -1519,16 +1519,25 @@ export class AcademicService {
         override,
       ]),
     );
-    for (const override of input.overrides) {
-      const enrollment = sourceRosterById.get(override.sourceEnrollmentId);
-      if (!enrollment) {
-        throw new ConflictException({
-          code: 'COURSE_ROSTER_CHANGED',
-          message:
-            'The source roster changed after preview. Refresh it before confirming the advancement.',
-        });
-      }
-      if (isSourceManagedEnrollment(enrollment)) {
+    const obsoleteOverrides = input.overrides.filter(
+      ({ sourceEnrollmentId }) => !sourceRosterById.has(sourceEnrollmentId),
+    );
+    if (obsoleteOverrides.length) {
+      throw new ConflictException({
+        code: 'COURSE_ROLLOVER_OVERRIDES_OBSOLETE',
+        message:
+          'Some saved decisions belong to students outside the current roster.',
+        details: obsoleteOverrides.map(({ sourceEnrollmentId }) => ({
+          field: `overrides.${sourceEnrollmentId}`,
+          message: 'The enrollment is no longer in the active roster.',
+        })),
+      });
+    }
+    for (const enrollment of sourceRoster) {
+      if (
+        overrideByEnrollmentId.has(enrollment.id) &&
+        isSourceManagedEnrollment(enrollment)
+      ) {
         this.sourceManagedEnrollmentConflict();
       }
     }

@@ -1502,6 +1502,27 @@ describe.runIf(testDatabaseUrl)(
             where: { courseId: source.course.id, status: 'ACTIVE' },
           }),
         ).toBe(1);
+        await prisma.courseEnrollment.update({
+          where: { tenantId_id: { tenantId, id: leavingEnrollment.id } },
+          data: { status: 'INACTIVE' },
+        });
+        const currentRoster = await api(admin)
+          .get(`/api/v1/courses/${source.course.id}/roster/summary`)
+          .expect(200);
+        const obsolete = await api(admin)
+          .put(draftPath)
+          .send({
+            expectedRevision: 1,
+            plan: {
+              ...draft,
+              expectedRosterFingerprint: currentRoster.body.fingerprint,
+            },
+          })
+          .expect(409);
+        expect(obsolete.body.error).toMatchObject({
+          code: 'COURSE_ROLLOVER_OVERRIDES_OBSOLETE',
+          details: [{ field: `overrides.${leavingEnrollment.id}` }],
+        });
         identityInternal.sessionResponse = {
           active: false,
           identityUserId: 'admin-a',

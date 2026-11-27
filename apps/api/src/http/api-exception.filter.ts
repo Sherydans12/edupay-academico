@@ -5,6 +5,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import type { ExceptionFilter } from '@nestjs/common';
+import { apiErrorDetailSchema } from '@edupay/contracts';
 import type { ApiErrorDetail, ApiErrorEnvelope } from '@edupay/contracts';
 import type { Request, Response } from 'express';
 
@@ -49,6 +50,16 @@ export class ApiExceptionFilter implements ExceptionFilter {
   private errorDetails(
     exceptionResponse: string | object | undefined,
   ): ApiErrorDetail[] {
+    if (
+      typeof exceptionResponse === 'object' &&
+      exceptionResponse !== null &&
+      'details' in exceptionResponse
+    ) {
+      const parsed = apiErrorDetailSchema
+        .array()
+        .safeParse(exceptionResponse.details);
+      if (parsed.success) return parsed.data;
+    }
     if (
       typeof exceptionResponse !== 'object' ||
       exceptionResponse === null ||

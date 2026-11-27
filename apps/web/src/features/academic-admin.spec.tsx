@@ -1795,6 +1795,27 @@ describe('Academic admin screens', () => {
     fireEvent.change(await screen.findByLabelText(/Decisión para/), {
       target: { value: 'NO_CONTINUE' },
     });
+    fireEvent.change(screen.getByLabelText('Curso de origen'), {
+      target: { value: '' },
+    });
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Tienes decisiones sin guardar',
+    });
+    fireEvent.click(
+      within(confirmation).getByRole('button', { name: 'Volver a revisar' }),
+    );
+    expect(
+      (screen.getByLabelText(/Decisión para/) as HTMLSelectElement).value,
+    ).toBe('NO_CONTINUE');
+    fireEvent.change(screen.getByLabelText('Buscar en esta página'), {
+      target: { value: 'inexistente' },
+    });
+    expect(
+      await screen.findByText('No hay alumnos que coincidan en esta página.'),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Buscar en esta página'), {
+      target: { value: '' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }));
     await screen.findByText(
       'Borrador guardado. Puedes retomar la revisión más tarde.',

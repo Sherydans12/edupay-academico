@@ -4,7 +4,7 @@ import {
   courseEnrollmentPromotionOverrideLimit,
   type PromoteCourseEnrollments,
 } from '@edupay/contracts';
-import { Alert, Button, Dialog, EmptyState, Select } from '@edupay/ui';
+import { Alert, Button, Dialog, EmptyState, Input, Select } from '@edupay/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AcademicApiError,
@@ -12,6 +12,16 @@ import {
 } from '@/api/academic-client';
 
 import { errorMessage, type AdminData } from './shared';
+
+type ScopeChange = { field: 'course' | 'year' | 'reload'; value?: string };
+
+function rosterSearchKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('es')
+    .trim();
+}
 
 export function CoursePromotionPanel({
   api,
@@ -123,9 +133,15 @@ export function CoursePromotionPanel({
   const [rosterError, setRosterError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
   const [choices, setChoices] = useState<Record<string, Choice>>({});
+  const [hasUnsavedEdits, setHasUnsavedEdits] = useState(false);
+  const [scopeChange, setScopeChange] = useState<ScopeChange | null>(null);
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [exceptionsOnly, setExceptionsOnly] = useState(false);
   const [operationError, setOperationError] = useState('');
   const [operationSuccess, setOperationSuccess] = useState('');
   const [requiresRosterRefresh, setRequiresRosterRefresh] = useState(false);
+  const [requiresDraftReload, setRequiresDraftReload] = useState(false);
+  const [obsoleteOverrides, setObsoleteOverrides] = useState<string[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [prepareOnly, setPrepareOnly] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -151,6 +167,7 @@ export function CoursePromotionPanel({
       .then(({ draft: saved }) => {
         if (!current) return;
         setDraftState({ key: draftKey, draft: saved });
+        setHasUnsavedEdits(false);
         setDefaultTargetCourseId(saved?.plan.defaultTargetCourseId ?? '');
         setChoices(
           Object.fromEntries(
@@ -176,6 +193,16 @@ export function CoursePromotionPanel({
       current = false;
     };
   }, [api, draftKey, draftRetry, sourceCourseId, targetAcademicYearId]);
+
+  useEffect(() => {
+    if (!hasUnsavedEdits) return;
+    function warnBeforeExit(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = true;
+    }
+    window.addEventListener('beforeunload', warnBeforeExit);
+    return () => window.removeEventListener('beforeunload', warnBeforeExit);
+  }, [hasUnsavedEdits]);
 
   useEffect(() => {
     const sequence = ++rosterRequestSequence.current;
@@ -310,10 +337,101 @@ export function CoursePromotionPanel({
     rosterSummary?.fingerprint &&
     draft.plan.expectedRosterFingerprint !== rosterSummary.fingerprint,
   );
+  const prepared = Boolean(
+    savedMatches && draft?.preparedRevision === draft?.revision,
+  );
+  const normalizedRosterSearch = rosterSearchKey(rosterSearch);
+  const visibleRoster = roster.filter(
+    (item) =>
+      rosterSearchKey(
+        `${item.student.firstName} ${item.student.lastName}`,
+      ).includes(normalizedRosterSearch) &&
+      (!exceptionsOnly || choiceFor(item).decision !== 'PROMOTE'),
+  );
   const cannotSubmit =
     cannotSave ||
     !savedMatches ||
     counts.promoted + counts.repeated + counts.transferred === 0;
+
+  function reportOperationError(error: unknown) {
+    const code = error instanceof AcademicApiError ? error.code : undefined;
+    setRequiresRosterRefresh(code === 'COURSE_ROSTER_CHANGED');
+    setRequiresDraftReload(code === 'COURSE_ROLLOVER_DRAFT_CHANGED');
+    setObsoleteOverrides([]);
+    if (code === 'COURSE_ROSTER_CHANGED') {
+      setOperationError(
+        'El padrón cambió. Actualiza la lista y revisa tus decisiones antes de continuar.',
+      );
+    } else if (code === 'COURSE_ROLLOVER_DRAFT_CHANGED') {
+      setOperationError(
+        'Otra sesión guardó una versión más reciente. Puedes seguir revisando aquí o abrir el último borrador guardado.',
+      );
+    } else if (code === 'COURSE_ROLLOVER_DESTINATION_CONFLICT') {
+      setOperationError(
+        `Hay un alumno con una matrícula incompatible en ${targetYear?.label}. Revisa Alumnos en los cursos de destino antes de preparar este borrador.`,
+      );
+    } else if (
+      code === 'COURSE_ROLLOVER_OVERRIDES_OBSOLETE' &&
+      error instanceof AcademicApiError
+    ) {
+      setObsoleteOverrides(
+        error.details.flatMap(({ field }) =>
+          field?.startsWith('overrides.')
+            ? [field.slice('overrides.'.length)]
+            : [],
+        ),
+      );
+      setOperationError(
+        'Algunos alumnos ya no figuran en el padrón. Puedes quitar únicamente sus decisiones y guardar el resto.',
+      );
+    } else {
+      setOperationError(errorMessage(error).message);
+    }
+  }
+
+  function changeReviewScope(change: ScopeChange) {
+    setShowConfirmation(false);
+    setScopeChange(null);
+    setHasUnsavedEdits(false);
+    setDraftState(undefined);
+    setDefaultTargetCourseId('');
+    setChoices({});
+    setRosterSearch('');
+    setExceptionsOnly(false);
+    setOperationError('');
+    setOperationSuccess('');
+    setRequiresDraftReload(false);
+    setRequiresRosterRefresh(false);
+    setObsoleteOverrides([]);
+    setCommandKey(null);
+    if (change.field === 'course') {
+      setSourceCourseId(change.value ?? '');
+      refreshRoster();
+    } else if (change.field === 'year') {
+      setRequestedTargetAcademicYearId(change.value ?? '');
+    } else {
+      setDraftRetry((current) => current + 1);
+    }
+  }
+
+  function requestScopeChange(change: ScopeChange) {
+    if (hasUnsavedEdits) setScopeChange(change);
+    else changeReviewScope(change);
+  }
+
+  function clearObsoleteOverrides() {
+    const obsolete = new Set(obsoleteOverrides);
+    setChoices((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([id]) => !obsolete.has(id)),
+      ),
+    );
+    setObsoleteOverrides([]);
+    setOperationError('');
+    setHasUnsavedEdits(true);
+    setShowConfirmation(false);
+    setCommandKey(null);
+  }
 
   async function saveDraft() {
     if (cannotSave) return;
@@ -326,18 +444,16 @@ export function CoursePromotionPanel({
         expectedRevision: draft?.revision ?? 0,
       });
       setDraftState({ key: draftKey, draft: response.draft });
+      setHasUnsavedEdits(false);
     } catch (error) {
-      setOperationError(errorMessage(error).message);
-      setRequiresRosterRefresh(
-        error instanceof AcademicApiError &&
-          error.code === 'COURSE_ROSTER_CHANGED',
-      );
+      reportOperationError(error);
     } finally {
       setSaving(false);
     }
   }
 
   function editChoice(item: RosterItem, next: Choice) {
+    setHasUnsavedEdits(true);
     setChoices((current) => {
       const updated = { ...current };
       if (
@@ -369,7 +485,6 @@ export function CoursePromotionPanel({
     setRosterPageLoading(false);
     setRosterNextCursor(null);
     setRosterError('');
-    setChoices({});
     setOperationError('');
     setOperationSuccess('');
     setRequiresRosterRefresh(false);
@@ -425,6 +540,7 @@ export function CoursePromotionPanel({
         return;
       }
       setChoices({});
+      setHasUnsavedEdits(false);
       setRosterCourseId('');
       setRosterSummary(null);
       setRosterSummaryCourseId('');
@@ -438,11 +554,7 @@ export function CoursePromotionPanel({
       setRetryCount((current) => current + 1);
       onSaved();
     } catch (error) {
-      setOperationError(errorMessage(error).message);
-      setRequiresRosterRefresh(
-        error instanceof AcademicApiError &&
-          error.code === 'COURSE_ROSTER_CHANGED',
-      );
+      reportOperationError(error);
     } finally {
       setSaving(false);
     }
@@ -466,9 +578,22 @@ export function CoursePromotionPanel({
           {requiresRosterRefresh ? (
             <div className="provisioning-actions">
               <Button onClick={refreshRoster} variant="secondary">
-                Actualizar vista previa
+                Actualizar padrón
               </Button>
             </div>
+          ) : null}
+          {requiresDraftReload ? (
+            <Button
+              onClick={() => requestScopeChange({ field: 'reload' })}
+              variant="secondary"
+            >
+              Abrir último borrador guardado
+            </Button>
+          ) : null}
+          {obsoleteOverrides.length ? (
+            <Button onClick={clearObsoleteOverrides} variant="secondary">
+              Quitar decisiones de alumnos fuera del padrón
+            </Button>
           ) : null}
         </Alert>
       ) : null}
@@ -487,25 +612,9 @@ export function CoursePromotionPanel({
           id="promotion-source-course"
           label="Curso de origen"
           value={sourceCourseId}
-          onChange={(event) => {
-            setSourceCourseId(event.target.value);
-            setRoster([]);
-            setRosterCourseId('');
-            setRosterSummary(null);
-            setRosterSummaryCourseId('');
-            setRosterTotalCount(0);
-            setRosterNextCursor(null);
-            setRosterPageCursor(undefined);
-            setRosterPageCursors([undefined]);
-            setRosterPageIndex(0);
-            setRosterPageLoading(false);
-            setRosterError('');
-            setChoices({});
-            setOperationError('');
-            setOperationSuccess('');
-            setRequiresRosterRefresh(false);
-            setCommandKey(null);
-          }}
+          onChange={(event) =>
+            requestScopeChange({ field: 'course', value: event.target.value })
+          }
         >
           <option value="">Selecciona un curso activo</option>
           {sourceOptions.map((course) => (
@@ -521,12 +630,9 @@ export function CoursePromotionPanel({
           id="promotion-target-year"
           label="Año de destino"
           value={targetAcademicYearId}
-          onChange={(event) => {
-            setRequestedTargetAcademicYearId(event.target.value);
-            setDefaultTargetCourseId('');
-            setChoices({});
-            setCommandKey(null);
-          }}
+          onChange={(event) =>
+            requestScopeChange({ field: 'year', value: event.target.value })
+          }
         >
           <option value="">Selecciona un año posterior</option>
           {eligibleTargetYears.map((year) => (
@@ -542,6 +648,7 @@ export function CoursePromotionPanel({
           label="Curso de destino predeterminado"
           value={selectedDefaultTargetId}
           onChange={(event) => {
+            setHasUnsavedEdits(true);
             setDefaultTargetCourseId(event.target.value);
             const destinationId = event.target.value;
             setChoices((current) =>
@@ -585,7 +692,7 @@ export function CoursePromotionPanel({
       {draft ? (
         <p role="status" className="table-muted">
           {savedMatches
-            ? draft.preparedRevision === draft.revision
+            ? prepared
               ? `Matrículas de ${targetYear?.label} preparadas para Pagos.`
               : 'Borrador guardado. Puedes retomar la revisión más tarde.'
             : rosterChangedSinceDraft
@@ -651,13 +758,23 @@ export function CoursePromotionPanel({
 
       {hasCurrentRoster && roster.length > 0 ? (
         <>
-          <p aria-live="polite" className="table-muted" role="status">
-            Vista previa: {counts.promoted} avanzan al destino principal,{' '}
-            {counts.repeated} repiten, {counts.transferred} cambian de curso,{' '}
-            {counts.deferred} quedan pendientes, {nonContinuingCount} no
-            continúan y {counts.sourceManaged} están gestionados por
-            sincronización.
-          </p>
+          <dl
+            className="rollover-summary"
+            aria-label="Resumen del curso completo"
+          >
+            <div>
+              <dt>Con destino</dt>
+              <dd>{counts.promoted + counts.repeated + counts.transferred}</dd>
+            </div>
+            <div>
+              <dt>Pendientes</dt>
+              <dd>{counts.deferred}</dd>
+            </div>
+            <div>
+              <dt>No continúan</dt>
+              <dd>{nonContinuingCount}</dd>
+            </div>
+          </dl>
           {counts.sourceManaged > 0 ? (
             <Alert
               title="Hay matrículas administradas por sincronización"
@@ -666,6 +783,28 @@ export function CoursePromotionPanel({
               Esas matrículas permanecen sin cambios en este corte. Su origen
               debe migrarse antes de poder avanzarlas desde Académico.
             </Alert>
+          ) : null}
+          <div className="rollover-roster-tools">
+            <Input
+              id="rollover-roster-search"
+              label="Buscar en esta página"
+              type="search"
+              value={rosterSearch}
+              onChange={(event) => setRosterSearch(event.target.value)}
+            />
+            <label>
+              <input
+                type="checkbox"
+                checked={exceptionsOnly}
+                onChange={(event) => setExceptionsOnly(event.target.checked)}
+              />
+              Solo decisiones especiales
+            </label>
+          </div>
+          {rosterSearch || exceptionsOnly ? (
+            <p className="table-muted" role="status">
+              {visibleRoster.length} de {roster.length} alumnos en esta página.
+            </p>
           ) : null}
           {rosterSummary && rosterSummary.totalCount > 50 ? (
             <div className="pagination-bar">
@@ -706,7 +845,7 @@ export function CoursePromotionPanel({
                 </tr>
               </thead>
               <tbody>
-                {roster.map((item) => {
+                {visibleRoster.map((item) => {
                   const choice = choiceFor(item);
                   const name = `${item.student.firstName} ${item.student.lastName}`;
                   const isDefault =
@@ -811,32 +950,50 @@ export function CoursePromotionPanel({
                 })}
               </tbody>
             </table>
+            {visibleRoster.length === 0 ? (
+              <p className="table-muted">
+                No hay alumnos que coincidan en esta página.
+              </p>
+            ) : null}
           </div>
-          <p className="table-muted">
-            Guardar conserva tus decisiones. Preparar crea las matrículas de
-            destino para Pagos y mantiene vigente el curso de origen.
-          </p>
-          <div className="provisioning-actions">
-            <Button
-              disabled={cannotSave || savedMatches}
-              onClick={() => void saveDraft()}
-            >
-              Guardar borrador
-            </Button>
-            <Button
-              disabled={
-                cannotSubmit || draft?.preparedRevision === draft?.revision
-              }
-              variant="secondary"
-              onClick={() => {
-                setCommandKey(null);
-                setOperationError('');
-                setPrepareOnly(true);
-                setShowConfirmation(true);
-              }}
-            >
-              Preparar matrículas para Pagos
-            </Button>
+          <div className="rollover-footer">
+            <p className="table-muted" role="status">
+              {prepared
+                ? 'Ya puedes seguir con el siguiente curso o revisar el padrón en Pagos.'
+                : savedMatches
+                  ? 'El borrador está guardado. Prepara las matrículas confirmadas para que aparezcan en Pagos.'
+                  : selectedDefaultTargetId
+                    ? 'Guarda la revisión antes de preparar las matrículas para Pagos.'
+                    : 'Elige un curso de destino para guardar el borrador.'}
+            </p>
+            <div className="provisioning-actions">
+              <Button
+                variant={savedMatches ? 'secondary' : 'primary'}
+                disabled={cannotSave || savedMatches}
+                onClick={() => void saveDraft()}
+              >
+                Guardar borrador
+              </Button>
+              <Button
+                disabled={cannotSubmit || prepared}
+                variant={savedMatches && !prepared ? 'primary' : 'secondary'}
+                onClick={() => {
+                  setCommandKey(null);
+                  setOperationError('');
+                  setPrepareOnly(true);
+                  setShowConfirmation(true);
+                }}
+              >
+                Preparar matrículas para Pagos
+              </Button>
+            </div>
+          </div>
+          <details className="rollover-year-close">
+            <summary>Cierre del año de origen</summary>
+            <p className="table-muted">
+              Al terminar el año operativo puedes aplicar el avance e inactivar
+              las matrículas de origen de quienes avanzan.
+            </p>
             <Button
               disabled={cannotSubmit}
               variant="secondary"
@@ -849,7 +1006,7 @@ export function CoursePromotionPanel({
             >
               Aplicar avance al cierre
             </Button>
-          </div>
+          </details>
         </>
       ) : null}
 
@@ -886,10 +1043,29 @@ export function CoursePromotionPanel({
               {operationError}
               {requiresRosterRefresh ? (
                 <div className="provisioning-actions">
-                  <Button onClick={refreshRoster} variant="secondary">
-                    Actualizar vista previa
+                  <Button
+                    onClick={() => {
+                      setShowConfirmation(false);
+                      refreshRoster();
+                    }}
+                    variant="secondary"
+                  >
+                    Actualizar padrón
                   </Button>
                 </div>
+              ) : null}
+              {requiresDraftReload ? (
+                <Button
+                  onClick={() => requestScopeChange({ field: 'reload' })}
+                  variant="secondary"
+                >
+                  Abrir último borrador guardado
+                </Button>
+              ) : null}
+              {obsoleteOverrides.length ? (
+                <Button onClick={clearObsoleteOverrides} variant="secondary">
+                  Quitar decisiones de alumnos fuera del padrón
+                </Button>
               ) : null}
             </Alert>
           ) : null}
@@ -901,10 +1077,39 @@ export function CoursePromotionPanel({
             >
               Volver a revisar
             </Button>
-            <Button loading={saving} onClick={() => void confirmPromotion()}>
+            <Button
+              disabled={
+                cannotSubmit ||
+                requiresRosterRefresh ||
+                requiresDraftReload ||
+                obsoleteOverrides.length > 0
+              }
+              loading={saving}
+              onClick={() => void confirmPromotion()}
+            >
               {prepareOnly ? 'Confirmar preparación' : 'Confirmar avance'}
             </Button>
           </div>
+        </div>
+      </Dialog>
+      <Dialog
+        open={scopeChange !== null}
+        onOpenChange={(open) => {
+          if (!open) setScopeChange(null);
+        }}
+        title="Tienes decisiones sin guardar"
+        description="Para conservarlas, vuelve a la revisión y guarda el borrador de este curso."
+      >
+        <div className="provisioning-actions">
+          <Button onClick={() => setScopeChange(null)}>Volver a revisar</Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              if (scopeChange) changeReviewScope(scopeChange);
+            }}
+          >
+            Continuar sin guardar
+          </Button>
         </div>
       </Dialog>
     </section>

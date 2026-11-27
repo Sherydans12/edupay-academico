@@ -4036,6 +4036,63 @@ a.submission-row:hover {
   gap: 0.8rem;
   margin-top: 1rem;
 }
+.rollover-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 0.85rem;
+  border-block: 1px solid var(--border-default);
+}
+.rollover-summary dt {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+.rollover-summary dd {
+  margin: 0.2rem 0 0;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rollover-roster-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: end;
+  margin: 0.9rem 0;
+}
+.rollover-roster-tools .ui-field {
+  flex: 1 1 14rem;
+  max-width: 24rem;
+}
+.rollover-roster-tools > label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.75rem;
+  font-size: 0.8rem;
+}
+.rollover-footer,
+.rollover-year-close {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border-default);
+}
+.rollover-year-close summary {
+  width: fit-content;
+  min-height: 2.75rem;
+  line-height: 2.75rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+.rollover-footer .table-muted,
+.rollover-year-close .table-muted {
+  margin: 0 0 0.55rem;
+  font-size: 0.8rem;
+}
 .academic-context-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
